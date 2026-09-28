@@ -1,10 +1,9 @@
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 
 /// <summary>
-/// 보드의 모든 도시 칸 목록을 들고, 칸 번호로 찾아준다.
-/// 칸 상태를 바꾸는 건 PropertyTile이 한다.
+/// 보드의 모든 도시 칸을 땅 번호(propertyId)로 들고, 찾아주고, 비주얼 갱신을 전달한다.
+/// 상태 변경은 GameManager가 GameState에서 한다.
 /// </summary>
 public class PropertyManager : MonoBehaviour
 {
@@ -28,16 +27,16 @@ public class PropertyManager : MonoBehaviour
 
     // ───────────── 등록 ─────────────
 
-    /// <summary>씬에 있는 PropertyTile을 칸 번호로 등록.</summary>
+    /// <summary>씬에 있는 PropertyTile을 땅 번호로 등록.</summary>
     private void RegisterAllTiles()
     {
         tiles.Clear();
 
         foreach (var tile in FindObjectsByType<PropertyTile>(FindObjectsSortMode.None))
         {
-            if (!tiles.TryAdd(tile.TileIndex, tile))
+            if (!tiles.TryAdd(tile.PropertyId, tile))
             {
-                Debug.LogWarning($"[PropertyManager] 칸 번호 중복: {tile.TileIndex} ({tile.name})");
+                Debug.LogWarning($"[PropertyManager] 땅 번호 중복: {tile.PropertyId} ({tile.name})");
             }
         }
 
@@ -46,18 +45,32 @@ public class PropertyManager : MonoBehaviour
 
     // ───────────── 조회 ─────────────
 
-    public bool IsPropertyTile(int tileIndex)
+    public bool IsProperty(int propertyId)
     {
-        return tiles.ContainsKey(tileIndex);
+        return tiles.ContainsKey(propertyId);
     }
 
-    public bool TryGetTile(int tileIndex, out PropertyTile tile)
+    public bool TryGetTile(int propertyId, out PropertyTile tile)
     {
-        return tiles.TryGetValue(tileIndex, out tile);
+        return tiles.TryGetValue(propertyId, out tile);
     }
 
-    public List<PropertyTile> GetTilesOwnedBy(IEconomyPlayer player)
+    /// <summary>땅의 가격표. 없으면 null.</summary>
+    public PropertyData GetData(int propertyId)
     {
-        return tiles.Values.Where(t => t.State.Owner == player).ToList();
+        return tiles.TryGetValue(propertyId, out var tile) ? tile.Data : null;
+    }
+
+    // ───────────── 비주얼 갱신 ─────────────
+
+    /// <summary>GameState가 바뀐 뒤 GameManager가 호출. 해당 칸 비주얼 갱신.</summary>
+    public void Refresh(PropertyState state, Color ownerColor)
+    {
+        if (!tiles.TryGetValue(state.PropertyId, out var tile))
+        {
+            Debug.LogWarning($"[PropertyManager] {state.PropertyId}번 땅 없음");
+            return;
+        }
+        tile.Refresh(state, ownerColor);
     }
 }
