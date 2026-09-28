@@ -98,6 +98,11 @@ public class BoardControllerEditor : Editor
         Undo.RegisterCreatedObjectUndo(corners, "Create Corner Tiles");
         corners.transform.SetParent(generatedRoot.transform, false);
 
+        CreateCorner(corners.transform, "CornerTile_Bottom", cornerPrefab,
+            new Vector3(0f, -cornerDistance * spacing.y), createdTiles);
+        CreateSide(generatedRoot.transform, "LeftBottom", (GameObject)leftBottomTilePrefab.objectReferenceValue,
+            count, index => new Vector3(-(cornerSpacing + index) * spacing.x,
+                -(sideEndDistance - index) * spacing.y), createdTiles);
         CreateCorner(corners.transform, "CornerTile_Left", cornerPrefab,
             new Vector3(-cornerDistance * spacing.x, 0f), createdTiles);
         CreateSide(generatedRoot.transform, "LeftTop", (GameObject)leftTopTilePrefab.objectReferenceValue,
@@ -113,11 +118,6 @@ public class BoardControllerEditor : Editor
         CreateSide(generatedRoot.transform, "RightBottom", (GameObject)rightBottomTilePrefab.objectReferenceValue,
             count, index => new Vector3((sideEndDistance - index) * spacing.x,
                 -(cornerSpacing + index) * spacing.y), createdTiles);
-        CreateCorner(corners.transform, "CornerTile_Bottom", cornerPrefab,
-            new Vector3(0f, -cornerDistance * spacing.y), createdTiles);
-        CreateSide(generatedRoot.transform, "LeftBottom", (GameObject)leftBottomTilePrefab.objectReferenceValue,
-            count, index => new Vector3(-(cornerSpacing + index) * spacing.x,
-                -(sideEndDistance - index) * spacing.y), createdTiles);
 
         SetSortingOrders(createdTiles);
 

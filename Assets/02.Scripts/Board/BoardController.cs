@@ -18,11 +18,48 @@ public class BoardController : MonoBehaviour
     [Header("Board Tiles")]
     [SerializeField] private List<BoardTile> boardTiles = new();
 
+    [Header("Player Pawns")]
+    [SerializeField] private List<PlayerPawn> playerPawns = new();
+
     [Header("Colors")]
     [SerializeField] private Color defaultColor = Color.beige;
     [SerializeField] private Color defaultTextColor = Color.brown;
     [SerializeField] private Color cornerColor = Color.aliceBlue;
     public IReadOnlyList<BoardTile> BoardTiles => boardTiles;
+    public IReadOnlyList<PlayerPawn> PlayerPawns => playerPawns;
+
+    public void MoveToPlayerPawn(PlayerPawn pawn, int tileIndex)
+    {
+        if (pawn == null)
+        {
+            return;
+        }
+
+        if (tileIndex < 0 || tileIndex >= boardTiles.Count)
+        {
+            Debug.LogError($"BoardTile index is out of range: {tileIndex}", this);
+            return;
+        }
+
+        pawn.Move(tileIndex, boardTiles[tileIndex].transform.position);
+    }
+
+    public void GoForwardPlayerPawn(PlayerPawn pawn, int count)
+    {
+        if (pawn == null)
+        {
+            return;
+        }
+
+        int currTileIndex = pawn.CurrentTileIndex;
+        MoveToPlayerPawn(pawn, (currTileIndex + count) % boardTiles.Count);
+    }
+
+    [ContextMenu("PlayerPawnMoveTest")]
+    public void PlayerPawnMoveTest()
+    {
+        GoForwardPlayerPawn(playerPawns[0], 1);
+    }
 
     public void SetBoardTileColor(int tileIndex, Color color, Color textColor)
     {
