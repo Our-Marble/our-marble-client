@@ -35,15 +35,16 @@ public class CardManager : MonoBehaviour
             switch (o.type)
             {
                 case CardOutcomeType.MoneyGained:
-                    ChangeMoney(o.playerId, o.amount);
+                    // 은행에서 받기. 돈 처리는 GameManager에서
+                    gameManager.HandleCardMoneyChanged(o.playerId, o.amount);
                     break;
 
                 case CardOutcomeType.MoneyPaid:
-                    // TODO: 현금이 부족할 때 매각/파산 처리 (경제 담당과 협의)
+                    // 돈 처리(부족 시 매각/파산 포함)는 GameManager에서
                     if (o.toFestivalPool)
-                        gameManager.HandleDonationPaid(o.playerId, o.amount); // 적립금으로
+                        gameManager.HandleDonationPaid(o.playerId, o.amount);       // 적립금으로
                     else
-                        ChangeMoney(o.playerId, -o.amount);                   // 은행으로
+                        gameManager.HandleCardMoneyChanged(o.playerId, -o.amount); // 은행으로
                     break;
 
                 case CardOutcomeType.Moved:
@@ -57,28 +58,5 @@ public class CardManager : MonoBehaviour
                     break;
             }
         }
-    }
-
-    // 은행과의 돈 거래 (보너스, 은행행 벌금)
-    void ChangeMoney(long playerId, long delta)
-    {
-        PlayerState player = FindPlayer(playerId);
-        if (player == null) return;
-
-        long before = player.Money;
-        player.Money += delta;
-        EconomyManager.NotifyMoneyChanged(playerId, before, player.Money); // UI 갱신 알림
-    }
-
-    PlayerState FindPlayer(long playerId)
-    {
-        foreach (PlayerState player in gameManager.gameState.PlayerStates)
-        {
-            if (player.PlayerId == playerId)
-                return player;
-        }
-
-        Debug.LogError($"[CardManager] 플레이어 {playerId} 없음");
-        return null;
     }
 }

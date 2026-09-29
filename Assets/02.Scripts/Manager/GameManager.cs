@@ -299,6 +299,29 @@ public class GameManager : MonoBehaviour
         // 무인도 이동 연출을 재생합니다. (순간이동, 월급 없음)
     }
 
+    /// <summary>
+    /// 황금 열쇠 카드로 은행과 돈을 주고받는다. (보너스는 +, 은행행 벌금은 -)
+    /// 적립금으로 가는 벌금은 HandleDonationPaid를 사용한다.
+    /// </summary>
+    public void HandleCardMoneyChanged(long playerId, long delta)
+    {
+        // GameState를 갱신합니다. (플레이어 현금 증감)
+        // var player = GetPlayerState(playerId);
+        // if (player == null)
+        // {
+        //     Debug.LogError($"[GameManager] 카드 재화 변경 실패: 플레이어 {playerId} 없음");
+        //     return;
+        // }
+        //
+        // long before = player.Money;
+        // player.Money += delta;
+        // EconomyManager.NotifyMoneyChanged(playerId, before, player.Money);
+
+        // TODO: 벌금(delta < 0)이 현금보다 클 때 매각/파산 처리 (경제 담당과 협의)
+
+        // 재화 획득/손실 연출을 재생합니다.
+    }
+
 
     // ────────────────────────── 토지 구매 ──────────────────────────
     public void HandlePurchasePropertyPrompt(long playerId, int propertyId, long amount)
