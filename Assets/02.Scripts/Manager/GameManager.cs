@@ -575,7 +575,7 @@ public class GameManager : MonoBehaviour
     /// <summary>땅값. PurchaseProperty의 amount.</summary>
     public long GetLandPrice(int propertyId)
     {
-        var data = PropertyManager.Instance.GetData(propertyId);
+        var data = PropertyTable.Instance.GetData(propertyId);
         return data != null ? data.LandPrice : 0;
     }
 
@@ -606,7 +606,7 @@ public class GameManager : MonoBehaviour
     {
         if (!state.OwnerId.HasValue) return 0;
 
-        var data = PropertyManager.Instance.GetData(state.PropertyId);
+        var data = PropertyTable.Instance.GetData(state.PropertyId);
         if (data == null) return 0;
 
         return data.GetToll(state.BuildingLevel);

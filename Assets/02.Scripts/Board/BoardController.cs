@@ -3,6 +3,7 @@ using UnityEngine;
 
 public class BoardController : MonoBehaviour
 {
+#if UNITY_EDITOR
     [Header("Board Layout")]
     [SerializeField, Min(1)] private int tilesPerSide = 7;
     [SerializeField] private Vector2 tileSpacing = new(0.8f, 0.45f);
@@ -14,6 +15,7 @@ public class BoardController : MonoBehaviour
     [SerializeField] private GameObject rightTopTilePrefab;
     [SerializeField] private GameObject rightBottomTilePrefab;
     [SerializeField] private GameObject leftBottomTilePrefab;
+#endif
 
     [Header("Board Tiles")]
     [SerializeField] private List<BoardTile> boardTiles = new();
