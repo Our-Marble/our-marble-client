@@ -61,6 +61,28 @@ public class PropertyManager : MonoBehaviour
         return tiles.TryGetValue(propertyId, out var tile) ? tile.Data : null;
     }
 
+    /// <summary>칸 정보. 칸 클릭 시 UI가 사용. 땅이 아니면 null.</summary>
+    public TileInfo GetTileInfo(PropertyState state)
+    {
+        var data = GetData(state.PropertyId);
+        if (data == null) return null;
+
+        return new TileInfo
+        {
+            CityName = data.CityName,
+            OwnerId = state.OwnerId,
+            Level = state.BuildingLevel,
+            CurrentToll = state.OwnerId.HasValue ? data.GetToll(state.BuildingLevel) : 0,
+            LandPrice = data.LandPrice,
+            BuildCosts = new[]
+            {
+                data.GetBuildCost(BuildingLevel.Villa),
+                data.GetBuildCost(BuildingLevel.Building),
+                data.GetBuildCost(BuildingLevel.Hotel)
+            }
+        };
+    }
+
     // ───────────── 비주얼 갱신 ─────────────
 
     /// <summary>GameState가 바뀐 뒤 GameManager가 호출. 해당 칸 비주얼 갱신.</summary>
@@ -73,4 +95,15 @@ public class PropertyManager : MonoBehaviour
         }
         tile.Refresh(state, ownerColor);
     }
+}
+
+/// <summary>GetTileInfo 결과. 칸 클릭 시 보여줄 정보.</summary>
+public class TileInfo
+{
+    public string CityName;
+    public long? OwnerId;
+    public BuildingLevel Level;
+    public long CurrentToll;
+    public long LandPrice;
+    public long[] BuildCosts; // 별장, 빌딩, 호텔 순서
 }

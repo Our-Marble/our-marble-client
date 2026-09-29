@@ -36,7 +36,24 @@ public class BoardControllerEditor : Editor
     {
         serializedObject.Update();
 
-        DrawPropertiesExcluding(serializedObject, "boardTiles");
+        if (EditorApplication.isPlayingOrWillChangePlaymode)
+        {
+            DrawPropertiesExcluding(
+                serializedObject,
+                "boardTiles",
+                "tilesPerSide",
+                "tileSpacing",
+                "cornerSpacingMultiplier",
+                "cornerTilePrefab",
+                "leftTopTilePrefab",
+                "rightTopTilePrefab",
+                "rightBottomTilePrefab",
+                "leftBottomTilePrefab");
+        }
+        else
+        {
+            DrawPropertiesExcluding(serializedObject, "boardTiles");
+        }
 
         EditorGUILayout.Space();
         using (new EditorGUI.DisabledScope(true))
@@ -45,6 +62,11 @@ public class BoardControllerEditor : Editor
         }
 
         serializedObject.ApplyModifiedProperties();
+
+        if (EditorApplication.isPlayingOrWillChangePlaymode)
+        {
+            return;
+        }
 
         bool hasAllPrefabs =
             cornerTilePrefab.objectReferenceValue != null &&
