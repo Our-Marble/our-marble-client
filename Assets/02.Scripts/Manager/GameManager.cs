@@ -97,6 +97,8 @@ public class GameManager : MonoBehaviour
     /// </summary>
     public void RollDice()
     {
+        long playerId = gameState.CurrentPlayerId;
+        
         // 주사위 굴림 결과를 생성합니다.
         int dice1 = random.Next(1, 7);
         int dice2 = random.Next(1, 7);
@@ -126,10 +128,10 @@ public class GameManager : MonoBehaviour
         // 이때, toPosition < fromPosition 인 경우, 출발지점을 지나쳤다고 판단하여 ShouldReceiveSalary == true 가 됩니다.
         // '월급 획득 여부'를 이동 처리 함수의 매개변수로 추가한 이유는, 월급 획득 연출 타이밍이 출발 지점을 지날 때와 일치해야하기 때문입니다.
 
-        //ProcessArrival(toPosition);
+        // ProcessArrival(playerId, toPosition);
     }
 
-    private void ProcessArrival(int toPosition)
+    private void ProcessArrival(long playerId, int toPosition)
     {
         /*
         if(toPosition이 시작지점)
@@ -171,20 +173,40 @@ public class GameManager : MonoBehaviour
         {
             if(주인없는 땅)
             {
-                // HandlePurchasePropertyPrompt 호출합니다. ( 호출에 필요한 매개변수는 GameState 와 Data를 조회하여 얻습니다. )
+                if(돈 충분)
+                {
+                    // HandlePurchasePropertyPrompt 호출
+                }
+                else
+                {
+                    ProcessEndTurn();
+                }
             }
             else if(내 땅)
             {
-                if(건설 가능)
-                // HandleBuildPrompt 호출합니다. ( 호출에 필요한 매개변수는 GameState 와 Data를 조회하여 얻습니다. )
+                if(건설 가능한 땅 && 건설 레벨 최대 아님 && 돈 충분함)
+                {
+                    // HandleBuildPrompt 호출 ( 호출에 필요한 매개변수는 GameState 와 Data를 조회하여 얻습니다. )
+                }
+                else
+                {
+                    ProcessEndTurn();
+                }
             }
             else if(남의 땅)
             {
-                if(현금으로 통행료 지불 가능)
+                if(통행료 낼 돈 충분)
                 {
                     // HandleTollPaid 호출합니다. ( 호출에 필요한 매개변수는 GameState 와 Data를 조회하여 얻습니다. )
 
-                    ProcessEndTurn();
+                    if(통행료 내고도 인수할 돈 충분)
+                    {
+                        
+                    }
+                    else
+                    {
+                        ProcessEndTurn();
+                    }
                 }
                 else if(자산 팔아서 지불 가능)
                 {
@@ -217,7 +239,14 @@ public class GameManager : MonoBehaviour
 
     private long GetNextPlayerId()
     {
-        return 0; // 컴파일 에러를 막기 위해 임시로 0을 적어뒀습니다. GameState와 playerOrder를 참조하여 다음 차례인 플레이어의 playerId를 찾아 리턴하면 됩니다.
+        return 0; // 컴파일 에러를 막기 위해 임시로 0을 적어뒀습니다. GameState와 playerOrder를 참조하여 다음 차례인 플레이어의 playerId를 찾아 리턴하면 됩니다. 파산한 플레이어는 건너뜁니다.
+    }
+
+    public void ProcessBankruptcy(long playerId)
+    {
+        // playerId에 해당하는 GameState.PlayerStates의 PlayerState.IsBankrupt 값을 true로 갱신합니다.
+        
+        // 남은 플레이어 수가 1이라면 게임 종료 함수를 호출합니다. (팀전의 경우 조건이 바뀔 수 있음.)
     }
 
     public void HandleDiceRolled(int dice1, int dice2)
@@ -233,7 +262,7 @@ public class GameManager : MonoBehaviour
     }
 
 
-
+    // ────────────────────────── 토지 구매 ──────────────────────────
     public void HandlePurchasePropertyPrompt(long playerId, int propertyId, long amount)
     {
         // 플레이어의 경우, 땅을 구매할 것인지 선택 가능한 UI를 표시합니다.
@@ -269,7 +298,7 @@ public class GameManager : MonoBehaviour
     }
 
 
-
+    // ────────────────────────── 건물 건설 ──────────────────────────
     public void HandleBuildPrompt(long playerId, int propertyId, long amount)
     {
         // 플레이어의 경우, 건설할 것인지 선택 가능한 UI를 표시합니다.
@@ -305,7 +334,43 @@ public class GameManager : MonoBehaviour
     }
 
 
+    // ────────────────────────── 자산 인수 ──────────────────────────
+    public void HandleAcquirePropertyPrompt(long acquirerId, int propertyId, long amount)
+    {
+        // 플레이어의 경우, 인수할 것인지 선택 가능한 UI를 표시합니다.
+        
+        // 봇의 경우, 돈이 있다면 무조건 인수합니다.
+    }
 
+    /// <summary>
+    /// 화면의 '인수하기' 버튼을 누르면 이 함수가 호출됩니다.
+    /// </summary>
+    public void AcquireProperty(long playerId, int propertyId)
+    {
+        long amount = 0; // 컴파일 에러를 막기 위해 임시로 0을 적어뒀습니다. PropertyData의 건설비용이나 통행료 등을 통해 가치를 산정합니다.
+        HandlePropertyAcquired(playerId, propertyId, amount);
+    }
+
+    /// <summary>
+    /// 화면의 '인수하지 않기' 버튼을 누르면 이 함수가 호출됩니다.
+    /// </summary>
+    public void DeclineAcquireProperty(long playerId, int propertyId)
+    {
+        ProcessEndTurn();
+    }
+    
+    public void HandlePropertyAcquired(long playerId, int propertyId, long amount)
+    {
+        // GameState를 갱신합니다. (플레이어 현금 차감, 건설 레벨 갱신)
+        
+        // 건설 연출을 재생합니다.
+
+        // 턴을 종료합니다.
+        ProcessEndTurn();
+    }
+    
+    
+    // ────────────────────────── 자산 매각 ──────────────────────────
     public void HandleSellPropertiesPrompt(long payerId, long receiverId, List<int> propertyId, long requiredAmount)
     {
         // 플레이어의 경우, 청산할 자산들을 선택 가능한 UI를 표시합니다.
@@ -418,30 +483,30 @@ public class GameManager : MonoBehaviour
         var data = PropertyTable.Instance.GetData(state.PropertyId);
         if (data == null) return 0;
 
-        return data.GetToll((BuildingLevel)state.BuildingLevel);
+        return data.GetToll(state.BuildingLevel);
     }
 
     /// <summary>
     /// 지금 돈으로 지을 수 있는 단계 목록. Cost는 누적 비용.
     /// 비어 있으면 건설 불가.
     /// </summary>
-    //public List<BuildOption> GetBuildOptions(PropertyState state, long money)
-    //{
-    //    var options = new List<BuildOption>();
-    //    if (!state.OwnerId.HasValue) return options;
+    public List<BuildOption> GetBuildOptions(PropertyState state, long money)
+    {
+        var options = new List<BuildOption>();
+        if (!state.OwnerId.HasValue) return options;
 
-    //    var data = PropertyManager.Instance.GetData(state.PropertyId);
-    //    if (data == null) return options;
+        var data = PropertyManager.Instance.GetData(state.PropertyId);
+        if (data == null) return options;
 
-    //    long totalCost = 0;
-    //    for (int lv = state.BuildingLevel + 1; lv <= (int)BuildingLevel.Hotel; lv++)
-    //    {
-    //        var level = (BuildingLevel)lv;
-    //        totalCost += data.GetBuildCost(level);
-    //        if (totalCost > money) break;
+        long totalCost = 0;
+        for (int lv = (int)state.BuildingLevel + 1; lv <= (int)BuildingLevel.Hotel; lv++)
+        {
+            var level = (BuildingLevel)lv;
+            totalCost += data.GetBuildCost(level);
+            if (totalCost > money) break;
 
-    //        options.Add(new BuildOption { Level = level, Cost = totalCost });
-    //    }
-    //    return options;
-    //}
+            options.Add(new BuildOption { Level = level, Cost = totalCost });
+        }
+        return options;
+    }
 }
