@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using UnityEngine;
 
 public class BonusEffect : ICardEffect
 {
@@ -67,7 +66,8 @@ public class GoToInspectionEffect : ICardEffect
             fromTileId = ctx.GetPosition(playerId),
             toTileId = ctx.InspectionTileId,
         });
-        // 무인도행은 턴을 넘기므로 칸 효과를 다시 처리하지 않음
+
+        result.sentToInspection = true; // 무인도행은 턴을 넘기므로 칸 효과를 다시 처리하지 않음
     }
 }
 

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using UnityEngine;
 
 // 카드 더미, 뽑을 카드가 없으면 버린 더미를 섞어서 다시 사용
 public class CardDeck

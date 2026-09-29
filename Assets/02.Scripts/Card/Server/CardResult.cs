@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using UnityEngine;
 
 public enum CardOutcomeType
 {
@@ -33,9 +32,12 @@ public class CardResult
     public List<CardOutcome> outcomes = new List<CardOutcome>();
 
     // 이동 카드처럼 새 칸에 도착한 경우 true
-    // 이 값이 true면 ProcessArrival(landedTileId)로 도착 칸을 처리
+    // 이 값이 true면 GameManager가 ProcessArrival(playerId, landedTileId)로 도착 칸을 처리
     public bool requiresTileResolve;
     public int landedTileId = -1;
+
+    // 무인도행 카드면 true. GameManager가 이 값을 보고 턴을 넘김
+    public bool sentToInspection;
 
     public CardResult(long playerId, int cardId)
     {

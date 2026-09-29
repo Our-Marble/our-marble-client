@@ -1,4 +1,3 @@
-using UnityEngine;
 using System;
 
 // 카드 한 장의 규칙

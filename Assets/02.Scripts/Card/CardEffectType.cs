@@ -1,5 +1,3 @@
-using UnityEngine;
-
 public enum CardEffectType
 {
     Bonus,              // 돈 받는 카드

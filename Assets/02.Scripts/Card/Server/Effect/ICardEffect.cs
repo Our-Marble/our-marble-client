@@ -1,5 +1,3 @@
-using UnityEngine;
-
 // 카드 효과 하나
 public interface ICardEffect
 {

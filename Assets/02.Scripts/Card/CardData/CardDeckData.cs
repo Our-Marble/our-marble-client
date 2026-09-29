@@ -33,16 +33,15 @@ public class CardDeckData : ScriptableObject
         return list;
     }
 
-    // public CardData FindById(int id)
-    // {
-    //     foreach (var entry in entries)
-    //     {
-    //         if (entry.card != null && entry.card.id == id)
-    //         {
-    //             return entry.card;    
-    //         }
-            
-    //         return null;
-    //     }
-    // }
+    // cardId로 표시용 데이터(이름, 설명, 아이콘) 찾기. UI 매니저가 카드 연출할 때 사용
+    public CardData FindById(int id)
+    {
+        foreach (var entry in entries)
+        {
+            if (entry.card != null && entry.card.id == id)
+                return entry.card;
+        }
+
+        return null;
+    }
 }
