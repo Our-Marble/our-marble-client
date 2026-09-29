@@ -6,7 +6,9 @@ using UnityEngine;
 [CreateAssetMenu(fileName = "NewProperty", menuName = "Property/PropertyData")]
 public class PropertyData : ScriptableObject
 {
+    [SerializeField] private long id;
     [SerializeField] private string cityName;
+    [SerializeField] private bool canBuild;
     [SerializeField] private long landPrice;
 
     [Tooltip("별장, 빌딩, 호텔 순서 (3개)")]
@@ -14,6 +16,9 @@ public class PropertyData : ScriptableObject
 
     [Tooltip("땅, 별장, 빌딩, 호텔 순서 (4개)")]
     [SerializeField] private long[] tolls = new long[4];
+
+    public long Id => id;
+    public bool CanBuild => canBuild;
 
     public string CityName => cityName;
     public long LandPrice => landPrice;
