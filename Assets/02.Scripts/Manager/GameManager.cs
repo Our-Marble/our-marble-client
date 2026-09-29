@@ -246,11 +246,7 @@ public class GameManager : MonoBehaviour
     {
         // playerId에 해당하는 GameState.PlayerStates의 PlayerState.IsBankrupt 값을 true로 갱신합니다.
         var player = GetPlayerState(playerId);
-        if (player == null)
-        {
-            Debug.LogError($"[GameManager] 파산 처리 실패: 플레이어 {playerId} 없음");
-            return;
-        }
+        if (player == null) return;
         player.IsBankrupt = true;
 
         // 남은 플레이어 수가 1이라면 게임 종료 함수를 호출합니다. (팀전의 경우 조건이 바뀔 수 있음.)
@@ -353,11 +349,7 @@ public class GameManager : MonoBehaviour
         // GameState를 갱신합니다. (플레이어 현금 차감, 자산 주인 갱신)
         var player = GetPlayerState(playerId); //사는 사람
         var property = GetPropertyState(propertyId); //사는 땅
-        if (player == null || property == null)
-        {
-            Debug.LogError($"[GameManager] 구매 실패: 플레이어 {playerId} 또는 땅 {propertyId} 없음");
-            return;
-        }
+        if (player == null || property == null)  return;
 
         player.Money -= amount;
         property.OwnerId = playerId;
@@ -384,7 +376,7 @@ public class GameManager : MonoBehaviour
     public void Build(long playerId, int propertyId)
     {
         var property = GetPropertyState(propertyId); //땅 상태(현재단계)
-        var data = PropertyManager.Instance.GetData(propertyId); //가격표(건설비)
+        var data = PropertyTable.Instance.GetData(propertyId); //가격표(건설비)
         if (property == null || data == null || property.BuildingLevel >= BuildingLevel.Hotel)
         {
             Debug.LogError($"[GameManager] 건설 실패: 땅 {propertyId} 없음 또는 건설 레벨 최대");
@@ -408,11 +400,7 @@ public class GameManager : MonoBehaviour
         // GameState를 갱신합니다. (플레이어 현금 차감, 건설 레벨 갱신)
         var player = GetPlayerState(playerId); //짓는 사람
         var property = GetPropertyState(propertyId); //짓는 땅
-        if (player == null || property == null)
-        {
-            Debug.LogError($"[GameManager] 건설 실패: 플레이어 {playerId} 또는 땅 {propertyId} 없음");
-            return;
-        }
+        if (player == null || property == null) return;
 
         player.Money -= amount; //건설비 차감
         property.BuildingLevel += 1; // 건설 레벨 증가
@@ -456,11 +444,7 @@ public class GameManager : MonoBehaviour
         var acquirer = GetPlayerState(playerId); //인수하는 사람
         var property = GetPropertyState(propertyId); //인수할 땅
         var owner = property != null && property.OwnerId.HasValue ? GetPlayerState(property.OwnerId.Value) : null; //인수당하는 사람
-        if (acquirer == null || property == null || owner == null)
-        {
-            Debug.LogError($"[GameManager] 인수 실패: 플레이어 {playerId}, 땅 {propertyId}, 소유자 {property?.OwnerId} 없음");
-            return;
-        }
+        if (acquirer == null || property == null || owner == null)  return;
 
         acquirer.Money -= amount; //인수자 돈 차감
         owner.Money += amount; //소유자 돈 증가
@@ -509,11 +493,7 @@ public class GameManager : MonoBehaviour
         // GameState를 갱신합니다. (payer 현금 갱신, 자산 소유주 갱신, receiver 현금 갱신)
         var payer = GetPlayerState(payerId); // 청산하는 사람
         var receiver = GetPlayerState(receiverId); // 통행료 받는 사람
-        if (payer == null || receiver == null)
-        {
-            Debug.LogError($"[GameManager] 자산 매각 실패: 플레이어 {payerId} 또는 {receiverId} 없음");
-            return;
-        }
+        if (payer == null || receiver == null) return;
 
         foreach (var id in propertyIds)
         {
@@ -543,11 +523,7 @@ public class GameManager : MonoBehaviour
         // GameState를 갱신합니다. (납부자 재산 현금화, 수납자 현금 증가, 납부자 파산)
         var payer = GetPlayerState(payerId); // 파산하는 사람
         var receiver = GetPlayerState(receiverId); // 통행료 받는 사람
-        if (payer == null || receiver == null)
-        {
-            Debug.LogError($"[GameManager] 파산 처리 실패: 플레이어 {payerId} 또는 {receiverId} 없음");
-            return;
-        }
+        if (payer == null || receiver == null) return;
 
         long liquidated = 0; //땅을 전부 판 금액
         foreach (var state in gameState.PropertyStates)
@@ -572,11 +548,7 @@ public class GameManager : MonoBehaviour
         // GameState를 갱신합니다.
         var payer = GetPlayerState(payerId); // 통행료 내는 사람
         var receiver = GetPlayerState(receiverId); // 통행료 받는 사람
-        if (payer == null || receiver == null)
-        {
-            Debug.LogError($"[GameManager] 통행료 실패: 플레이어 {payerId} 또는 {receiverId} 없음");
-            return;
-        }
+        if (payer == null || receiver == null) return;
 
         payer.Money -= amount; // 통행료 차감
         receiver.Money += amount; // 통행료 수령
@@ -617,8 +589,6 @@ public class GameManager : MonoBehaviour
         // (즉시 발동되는 카드의 경우)cardId에 맞는 효과를 연출합니다.
     }
 
-
-
     // ───────────── 부동산 계산 ─────────────
 
     /// <summary>땅값. PurchaseProperty의 amount.</summary>
@@ -626,28 +596,6 @@ public class GameManager : MonoBehaviour
     {
         var data = PropertyTable.Instance.GetData(propertyId);
         return data != null ? data.LandPrice : 0;
-    }
-
-    /// <summary>칸 정보. 칸 클릭 시 UI가 사용. 땅이 아니면 null.</summary>
-    public TileInfo GetTileInfo(PropertyState state)
-    {
-        var data = PropertyManager.Instance.GetData(state.PropertyId);
-        if (data == null) return null;
-
-        return new TileInfo
-        {
-            CityName = data.CityName,
-            OwnerId = state.OwnerId,
-            Level = state.BuildingLevel,
-            CurrentToll = GetToll(state),
-            LandPrice = data.LandPrice,
-            BuildCosts = new[]
-            {
-                data.GetBuildCost(BuildingLevel.Villa),
-                data.GetBuildCost(BuildingLevel.Building),
-                data.GetBuildCost(BuildingLevel.Hotel)
-            }
-        };
     }
 
     /// <summary>통행료. 주인 없는 땅이면 0.</summary>
@@ -670,7 +618,7 @@ public class GameManager : MonoBehaviour
         var options = new List<BuildOption>();
         if (!state.OwnerId.HasValue) return options;
 
-        var data = PropertyManager.Instance.GetData(state.PropertyId);
+        var data = PropertyTable.Instance.GetData(state.PropertyId);
         if (data == null) return options;
 
         long totalCost = 0;
@@ -695,7 +643,7 @@ public class GameManager : MonoBehaviour
     /// 투자금. 가격표가 없는 땅이면 0.
     public long GetInvestedAmount(PropertyState state)
     {
-        var data = PropertyManager.Instance.GetData(state.PropertyId);
+        var data = PropertyTable.Instance.GetData(state.PropertyId);
         if (data == null) return 0;
 
         long invested = data.LandPrice;
