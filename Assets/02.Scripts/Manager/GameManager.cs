@@ -331,7 +331,7 @@ public class GameManager : MonoBehaviour
     public void Build(long playerId, int propertyId)
     {
         var property = GetPropertyState(propertyId); //땅 상태(현재단계)
-        var data = PropertyManager.Instance.GetData(propertyId); //가격표(건설비)
+        var data = PropertyTable.Instance.GetData(propertyId); //가격표(건설비)
         if (property == null || data == null || property.BuildingLevel >= BuildingLevel.Hotel)
         {
             Debug.LogError($"[GameManager] 건설 실패: 땅 {propertyId} 없음 또는 건설 레벨 최대");
@@ -569,7 +569,7 @@ public class GameManager : MonoBehaviour
         var options = new List<BuildOption>();
         if (!state.OwnerId.HasValue) return options;
 
-        var data = PropertyManager.Instance.GetData(state.PropertyId);
+        var data = PropertyTable.Instance.GetData(state.PropertyId);
         if (data == null) return options;
 
         long totalCost = 0;
@@ -594,7 +594,7 @@ public class GameManager : MonoBehaviour
     /// 투자금. 가격표가 없는 땅이면 0.
     public long GetInvestedAmount(PropertyState state)
     {
-        var data = PropertyManager.Instance.GetData(state.PropertyId);
+        var data = PropertyTable.Instance.GetData(state.PropertyId);
         if (data == null) return 0;
 
         long invested = data.LandPrice;
