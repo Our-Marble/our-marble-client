@@ -126,7 +126,7 @@ public class GameManager : MonoBehaviour
         // 이때, toPosition < fromPosition 인 경우, 출발지점을 지나쳤다고 판단하여 ShouldReceiveSalary == true 가 됩니다.
         // '월급 획득 여부'를 이동 처리 함수의 매개변수로 추가한 이유는, 월급 획득 연출 타이밍이 출발 지점을 지날 때와 일치해야하기 때문입니다.
 
-        ProcessArrival(toPosition);
+        //ProcessArrival(toPosition);
     }
 
     private void ProcessArrival(int toPosition)
@@ -384,38 +384,38 @@ public class GameManager : MonoBehaviour
     /// <summary>땅값. PurchaseProperty의 amount.</summary>
     public long GetLandPrice(int propertyId)
     {
-        var data = PropertyManager.Instance.GetData(propertyId);
+        var data = PropertyTable.Instance.GetData(propertyId);
         return data != null ? data.LandPrice : 0;
     }
 
     /// <summary>칸 정보. 칸 클릭 시 UI가 사용. 땅이 아니면 null.</summary>
-    public TileInfo GetTileInfo(PropertyState state)
-    {
-        var data = PropertyManager.Instance.GetData(state.PropertyId);
-        if (data == null) return null;
+    //public TileInfo GetTileInfo(PropertyState state)
+    //{
+    //    var data = PropertyManager.Instance.GetData(state.PropertyId);
+    //    if (data == null) return null;
 
-        return new TileInfo
-        {
-            CityName = data.CityName,
-            OwnerId = state.OwnerId,
-            Level = (BuildingLevel)state.BuildingLevel,
-            CurrentToll = GetToll(state),
-            LandPrice = data.LandPrice,
-            BuildCosts = new[]
-            {
-                data.GetBuildCost(BuildingLevel.Villa),
-                data.GetBuildCost(BuildingLevel.Building),
-                data.GetBuildCost(BuildingLevel.Hotel)
-            }
-        };
-    }
+    //    return new TileInfo
+    //    {
+    //        CityName = data.CityName,
+    //        OwnerId = state.OwnerId,
+    //        Level = (BuildingLevel)state.BuildingLevel,
+    //        CurrentToll = GetToll(state),
+    //        LandPrice = data.LandPrice,
+    //        BuildCosts = new[]
+    //        {
+    //            data.GetBuildCost(BuildingLevel.Villa),
+    //            data.GetBuildCost(BuildingLevel.Building),
+    //            data.GetBuildCost(BuildingLevel.Hotel)
+    //        }
+    //    };
+    //}
 
     /// <summary>통행료. 주인 없는 땅이면 0.</summary>
     public long GetToll(PropertyState state)
     {
         if (!state.OwnerId.HasValue) return 0;
 
-        var data = PropertyManager.Instance.GetData(state.PropertyId);
+        var data = PropertyTable.Instance.GetData(state.PropertyId);
         if (data == null) return 0;
 
         return data.GetToll((BuildingLevel)state.BuildingLevel);
@@ -425,23 +425,23 @@ public class GameManager : MonoBehaviour
     /// 지금 돈으로 지을 수 있는 단계 목록. Cost는 누적 비용.
     /// 비어 있으면 건설 불가.
     /// </summary>
-    public List<BuildOption> GetBuildOptions(PropertyState state, long money)
-    {
-        var options = new List<BuildOption>();
-        if (!state.OwnerId.HasValue) return options;
+    //public List<BuildOption> GetBuildOptions(PropertyState state, long money)
+    //{
+    //    var options = new List<BuildOption>();
+    //    if (!state.OwnerId.HasValue) return options;
 
-        var data = PropertyManager.Instance.GetData(state.PropertyId);
-        if (data == null) return options;
+    //    var data = PropertyManager.Instance.GetData(state.PropertyId);
+    //    if (data == null) return options;
 
-        long totalCost = 0;
-        for (int lv = state.BuildingLevel + 1; lv <= (int)BuildingLevel.Hotel; lv++)
-        {
-            var level = (BuildingLevel)lv;
-            totalCost += data.GetBuildCost(level);
-            if (totalCost > money) break;
+    //    long totalCost = 0;
+    //    for (int lv = state.BuildingLevel + 1; lv <= (int)BuildingLevel.Hotel; lv++)
+    //    {
+    //        var level = (BuildingLevel)lv;
+    //        totalCost += data.GetBuildCost(level);
+    //        if (totalCost > money) break;
 
-            options.Add(new BuildOption { Level = level, Cost = totalCost });
-        }
-        return options;
-    }
+    //        options.Add(new BuildOption { Level = level, Cost = totalCost });
+    //    }
+    //    return options;
+    //}
 }

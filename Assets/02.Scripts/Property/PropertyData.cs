@@ -1,12 +1,14 @@
+using System;
 using UnityEngine;
 
 /// <summary>
 /// 도시별 고정 데이터(가격표) 틀. 게임 중 바뀌지 않는다.
 /// </summary>
-[CreateAssetMenu(fileName = "NewProperty", menuName = "Property/PropertyData")]
-public class PropertyData : ScriptableObject
+[Serializable]
+public class PropertyData
 {
-    [SerializeField] private long id;
+    [SerializeField] private int id;
+    [SerializeField] private int boardIndex;
     [SerializeField] private string cityName;
     [SerializeField] private bool canBuild;
     [SerializeField] private long landPrice;
@@ -17,9 +19,9 @@ public class PropertyData : ScriptableObject
     [Tooltip("땅, 별장, 빌딩, 호텔 순서 (4개)")]
     [SerializeField] private long[] tolls = new long[4];
 
-    public long Id => id;
+    public int Id => id;
+    public int BoardIndex => boardIndex;
     public bool CanBuild => canBuild;
-
     public string CityName => cityName;
     public long LandPrice => landPrice;
 
