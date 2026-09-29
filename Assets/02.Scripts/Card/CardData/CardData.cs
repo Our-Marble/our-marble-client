@@ -19,7 +19,7 @@ public class CardData : ScriptableObject
 
     public CardDefinition ToDefinition()
     {
-        return new CardDafinition
+        return new CardDefinition
         {
             id = id,
             name = cardName,

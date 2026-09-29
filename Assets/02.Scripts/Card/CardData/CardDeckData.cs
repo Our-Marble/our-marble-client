@@ -33,14 +33,16 @@ public class CardDeckData : ScriptableObject
         return list;
     }
 
-    public CardDeckData FindById(int id)
-    {
-        foreach (avr entry in entries)
-        {
-            if (entry.card != null && entry.card.id == id)
-                return entry.card;
-
-            return null;
-        }
-    }
+    // public CardData FindById(int id)
+    // {
+    //     foreach (var entry in entries)
+    //     {
+    //         if (entry.card != null && entry.card.id == id)
+    //         {
+    //             return entry.card;    
+    //         }
+            
+    //         return null;
+    //     }
+    // }
 }
