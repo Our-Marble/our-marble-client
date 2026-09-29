@@ -3,12 +3,12 @@ using UnityEngine;
 /// <summary>
 /// 보드의 도시 칸에 붙이는 컴포넌트.
 /// 상태는 GameState가 들고, 이 칸은 받은 상태를 화면에 보여주기만 한다.
+/// 데이터는 PropertyManager에서 조회한다.
 /// </summary>
 public class PropertyTile : MonoBehaviour
 {
     [Header("칸 정보")]
     [SerializeField] private int propertyId;
-    [SerializeField] private PropertyData data;
 
     [Header("비주얼")]
     [Tooltip("별장, 빌딩, 호텔 순서 (3개)")]
@@ -18,9 +18,12 @@ public class PropertyTile : MonoBehaviour
     [SerializeField] private Renderer ownerMarker;
 
     public int PropertyId => propertyId;
-    public PropertyData Data => data;
 
-    private string CityName => data != null ? data.CityName : name;
+    private PropertyData Data => PropertyManager.Instance != null
+        ? PropertyManager.Instance.GetData(propertyId)
+        : null;
+
+    private string CityName => Data != null ? Data.CityName : name;
 
     private void Start()
     {
@@ -34,7 +37,9 @@ public class PropertyTile : MonoBehaviour
     /// <summary>GameState의 PropertyState를 받아 비주얼 갱신.</summary>
     public void Refresh(PropertyState state, Color ownerColor)
     {
-        var level = (BuildingLevel)state.BuildingLevel;
+        var level = state.BuildingLevel;
+
+        // TODO: 건설 불가 칸(Data.CanBuild == false)이면 건물 모델 표시 안 하기
         ShowLevel(level);
 
         if (state.OwnerId.HasValue) ShowOwner(ownerColor);
