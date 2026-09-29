@@ -37,44 +37,50 @@ public class GameManager : MonoBehaviour
 
     void StartGame()
     {
-        // 선턴 정하기 이벤트 발생
+        // 선턴 정하기 이벤트 발생. MVP에서는 생략합니다.
 
-        // 결과를 playerOrder 에 저장
+        // 결과를 playerOrder 에 저장. MVP에서는 플레이어가 무조건 선턴입니다. 플레이어의 playerId는 123, 봇의 playerId는 456 입니다.
+        playerOrder.Add(123);
+        playerOrder.Add(456);
 
         // 첫 번째 순서부터 턴 시작
-        // HandleTurnChanged(playerOrder[0]);
+        HandleTurnChanged(playerOrder[0]);
     }
 
     public void HandleTurnChanged(long playerId)
     {
-        // gameState.CurrentPlayerId 를 playerId로 갱신합니다.
-
+        PlayerState playerState = GetPlayerState(playerId);
+        
+        // gameState.CurrentPlayerId 를 playerId로 갱신합니다. gameState.TurnNumber를 1 증가시킵니다.
+        gameState.CurrentPlayerId = playerId;
+        gameState.TurnNumber += 1;
+        
         // 'OO의 턴'이라는 UI를 표시합니다.
+        Debug.Log($"playerId : {playerId} 의 차례"); // 추후 UI띄우는 함수 호출로 변경. 일단은 로그만 찍는다.
 
         // 필드 변수를 갱신합니다.
         isDouble = false;
         consecutiveDoubleCount = 0;
 
-        /*
-        if(현재 위치가 자유 여행 타일)
+        int playerPosition = playerState.Position;
+        
+        if(false) // <- 보드매니저에서 제공하는 함수를 통해 보드의 'playerPosition'번째 칸의 type이 '자유여행'인지 확인합니다.
         {
-            // HandleChooseDestinationPrompt 호출합니다.
+            HandleChooseDestinationPrompt();
         }
         else
         {
-            // HandleRollDicePrompt를 호출합니다.
+            HandleRollDicePrompt();
         }
-        */
-
     }
 
     public void HandleChooseDestinationPrompt()
     {
+        // 봇의 경우, 시작타일(0)을 목적지로 HandleDestinationChosen를 호출합니다. (빈 땅을 우선적으로 선택하는 등의 지능은 추후 개발)
+        HandleDestinationChosen(0);
+
         // 플레이어의 경우, 자유 여행할 타일을 선택하는 UI를 표시합니다.
-
-        // 봇의 경우, 랜덤한 타일을 선택하여 HandleDestinationChosen를 호출합니다. (빈 땅을 우선적으로 선택하는 등의 지능은 추후 개발)
-
-        // ProcessArrival(toPosition);
+        
     }
 
     /// <summary>
@@ -368,7 +374,7 @@ public class GameManager : MonoBehaviour
 
 
     // ────────────────────────── 자산 인수 ──────────────────────────
-    public void HandleAcquirePropertyPrompt(long acquirerId, int propertyId, long amount)
+    public void HandleAcquirePropertyPrompt(long playerId, int propertyId)
     {
         // 플레이어의 경우, 인수할 것인지 선택 가능한 UI를 표시합니다.
         
@@ -381,8 +387,7 @@ public class GameManager : MonoBehaviour
     public void AcquireProperty(long playerId, int propertyId)
     {
         var property = GetPropertyState(propertyId); //인수할 땅
-        long amount = property != null ? GetAcquireValue(property) : 0; //인수가 조회
-        HandlePropertyAcquired(playerId, propertyId, amount);
+        HandlePropertyAcquired(playerId, propertyId);
     }
 
     /// <summary>
@@ -393,7 +398,7 @@ public class GameManager : MonoBehaviour
         ProcessEndTurn();
     }
     
-    public void HandlePropertyAcquired(long playerId, int propertyId, long amount)
+    public void HandlePropertyAcquired(long playerId, int propertyId)
     {
         // GameState를 갱신합니다. (인수자 현금 차감, 인수당하는 사람 현금 증가, 자산 주인 갱신)
         var acquirer = GetPlayerState(playerId); //인수하는 사람
@@ -401,6 +406,8 @@ public class GameManager : MonoBehaviour
         var owner = property != null && property.OwnerId.HasValue ? GetPlayerState(property.OwnerId.Value) : null; //인수당하는 사람
         if (acquirer == null || property == null || owner == null)  return;
 
+        long amount = property != null ? GetAcquireValue(property) : 0; //인수가 조회
+        
         acquirer.Money -= amount; //인수자 돈 차감
         owner.Money += amount; //소유자 돈 증가
         property.OwnerId = playerId; //소유권 이전
@@ -413,7 +420,7 @@ public class GameManager : MonoBehaviour
     
     
     // ────────────────────────── 자산 매각 ──────────────────────────
-    public void HandleSellPropertiesPrompt(long payerId, long receiverId, List<int> propertyId, long requiredAmount)
+    public void HandleSellPropertiesPrompt(long payerId, long receiverId, long requiredAmount)
     {
         // 플레이어의 경우, 청산할 자산들을 선택 가능한 UI를 표시합니다.
 
@@ -425,7 +432,7 @@ public class GameManager : MonoBehaviour
     /// </summary>
     public void SellProperties(long payerId, long receiverId, List<int> propertyIds, long requiredAmount)
     {
-        long totalAmount = 0; 
+        long totalAmount = 0;
         foreach (var id in propertyIds)
         {
             var property = GetPropertyState(id);
@@ -433,14 +440,19 @@ public class GameManager : MonoBehaviour
                 totalAmount += GetSellValue(property);
         }
 
-        // 선택한 자산 가치 총합이 요구치보다 낮을 경우
-        if (totalAmount < requiredAmount)
+        // 플레이어 현금 + 선택한 자산 가치 총합이 요구치보다 낮을 경우
+        PlayerState payer = GetPlayerState(payerId);
+        if (payer.Money + totalAmount < requiredAmount)
         {
-            // 다시 청산할 자산들을 선택 가능한 UI를 표시합니다.
-            return;
+            // 매각 자산 선택창을 다시 띄웁니다.
+            HandleSellPropertiesPrompt(payerId, receiverId, requiredAmount);
         }
-
-        HandlePropertiesSold(payerId, receiverId, propertyIds, requiredAmount, totalAmount);
+        // 매각해서 통행료 지불이 가능해진 경우
+        else
+        {
+            // 매각 결과를 반영하는 함수를 호출합니다.
+            HandlePropertiesSold(payerId, receiverId, propertyIds, requiredAmount, totalAmount);
+        }
     }
 
     public void HandlePropertiesSold(long payerId, long receiverId, List<int> propertyIds, long requiredAmount, long totalAmount)
