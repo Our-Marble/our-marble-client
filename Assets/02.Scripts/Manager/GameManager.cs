@@ -388,28 +388,6 @@ public class GameManager : MonoBehaviour
         return data != null ? data.LandPrice : 0;
     }
 
-    /// <summary>칸 정보. 칸 클릭 시 UI가 사용. 땅이 아니면 null.</summary>
-    public TileInfo GetTileInfo(PropertyState state)
-    {
-        var data = PropertyManager.Instance.GetData(state.PropertyId);
-        if (data == null) return null;
-
-        return new TileInfo
-        {
-            CityName = data.CityName,
-            OwnerId = state.OwnerId,
-            Level = (BuildingLevel)state.BuildingLevel,
-            CurrentToll = GetToll(state),
-            LandPrice = data.LandPrice,
-            BuildCosts = new[]
-            {
-                data.GetBuildCost(BuildingLevel.Villa),
-                data.GetBuildCost(BuildingLevel.Building),
-                data.GetBuildCost(BuildingLevel.Hotel)
-            }
-        };
-    }
-
     /// <summary>통행료. 주인 없는 땅이면 0.</summary>
     public long GetToll(PropertyState state)
     {
@@ -418,7 +396,7 @@ public class GameManager : MonoBehaviour
         var data = PropertyManager.Instance.GetData(state.PropertyId);
         if (data == null) return 0;
 
-        return data.GetToll((BuildingLevel)state.BuildingLevel);
+        return data.GetToll(state.BuildingLevel);
     }
 
     /// <summary>
@@ -434,7 +412,7 @@ public class GameManager : MonoBehaviour
         if (data == null) return options;
 
         long totalCost = 0;
-        for (int lv = state.BuildingLevel + 1; lv <= (int)BuildingLevel.Hotel; lv++)
+        for (int lv = (int)state.BuildingLevel + 1; lv <= (int)BuildingLevel.Hotel; lv++)
         {
             var level = (BuildingLevel)lv;
             totalCost += data.GetBuildCost(level);

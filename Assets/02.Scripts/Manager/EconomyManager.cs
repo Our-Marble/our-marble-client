@@ -31,3 +31,10 @@ public class EconomyManager : MonoBehaviour
         OnMoneyChanged?.Invoke(playerId, before, after);
     }
 }
+
+/// <summary>건설 선택지 하나. Cost는 현재 단계부터 해당 단계까지의 누적 비용. GameManager.GetBuildOptions 결과.</summary>
+public class BuildOption
+{
+    public BuildingLevel Level;
+    public long Cost;
+}
