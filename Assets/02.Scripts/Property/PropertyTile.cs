@@ -34,7 +34,7 @@ public class PropertyTile : MonoBehaviour
     /// <summary>GameState의 PropertyState를 받아 비주얼 갱신.</summary>
     public void Refresh(PropertyState state, Color ownerColor)
     {
-        var level = (BuildingLevel)state.BuildingLevel;
+        var level = state.BuildingLevel;
         ShowLevel(level);
 
         if (state.OwnerId.HasValue) ShowOwner(ownerColor);
