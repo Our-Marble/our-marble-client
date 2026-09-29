@@ -10,6 +10,8 @@ public class GameManager : MonoBehaviour
 
     public List<long> playerOrder;
 
+    [SerializeField] private CardManager cardManager; // 황금 열쇠 카드 처리
+
     private bool isDouble; // 추가 턴 진행 여부를 결정하는데 사용됩니다.
     private int consecutiveDoubleCount; // 추후 3연속 더블시 무인도행을 판정할 때 사용합니다.
 
@@ -165,9 +167,7 @@ public class GameManager : MonoBehaviour
         else if(toPosition이 황금 열쇠)
         {
             // 황금 열쇠 카드 드로우
-            // DrawCard();
-
-            ProcessEndTurn();
+            // DrawCard(playerId); // 카드 효과 적용과 턴 처리까지 DrawCard 안에서 끝남 (ProcessEndTurn 호출 금지)
         }
         else if(toPosition이 땅)
         {
@@ -275,6 +275,28 @@ public class GameManager : MonoBehaviour
         // GameState를 갱신합니다.
 
         // 말 이동 연출을 재생합니다.
+    }
+
+    private const int IslandTurns = 3; // 무인도 영업정지 턴 수
+
+    /// <summary>
+    /// 플레이어를 무인도로 바로 보낸다. (황금 열쇠 무인도 카드, 3연속 더블)
+    /// 걸어서 이동하는 것이 아니므로 출발지를 지나도 월급이 없다.
+    /// </summary>
+    public void HandleSentToIsland(long playerId, int fromPosition, int islandPosition)
+    {
+        // GameState를 갱신합니다. (위치를 무인도로, 영업정지 턴 설정)
+        var player = GetPlayerState(playerId);
+        if (player == null)
+        {
+            Debug.LogError($"[GameManager] 무인도 이동 실패: 플레이어 {playerId} 없음");
+            return;
+        }
+
+        player.Position = islandPosition;
+        player.IslandTurnsRemaining = IslandTurns;
+
+        // 무인도 이동 연출을 재생합니다. (순간이동, 월급 없음)
     }
 
 
@@ -555,10 +577,14 @@ public class GameManager : MonoBehaviour
 
     public void DrawCard(long playerId)
     {
-        // 랜덤한 카드 데이터를 선택합니다.
-        int cardId = random.Next(0,10); // 황금 열쇠 카드의 cardId 규칙이 어떻게 될지 몰라서 일단 0~9까지 랜덤 정수로 작성했습니다. cardId 형식이 정해지면 그에 맞게 데이터 타입이나 계산 방식을 수정해주시길 바랍니다.
+        CardResult result = cardManager.Draw(playerId); // 카드 뽑기 + 효과 적용
 
-        HandleCardDrawn(cardId);
+        if (result.requiresTileResolve)
+            ProcessArrival(playerId, result.landedTileId); // 이동 카드: 도착 칸 처리
+        else if (result.sentToInspection)
+            HandleTurnChanged(GetNextPlayerId());          // 무인도행: 추가 턴 없이 턴 넘김
+        else
+            ProcessEndTurn();                              // 그 외: 턴 종료
     }
 
     public void HandleCardDrawn(int cardId)
@@ -707,7 +733,7 @@ public class GameManager : MonoBehaviour
     /// 플레이어 상태, 없으면 null. (호출한 쪽에서 null 확인 필요)
     private PlayerState GetPlayerState(long playerId)
     {
-        PlayerState playerState = PlayerStates.Find(p => p.PlayerId == playerId);
+        PlayerState playerState = gameState.PlayerStates.Find(p => p.PlayerId == playerId);
 
         if(playerState == null)
             Debug.LogError($"GameState - PlayerState not found: {playerId}");
@@ -723,7 +749,7 @@ public class GameManager : MonoBehaviour
 
     private PropertyState GetPropertyState(long propertyId)
     {
-        PropertyState propertyState = PropertyStates.Find(p => p.PropertyId == propertyId);
+        PropertyState propertyState = gameState.PropertyStates.Find(p => p.PropertyId == propertyId);
 
         if(propertyState == null)
             Debug.LogError($"GameState - PropertyState not found: {propertyId}");
