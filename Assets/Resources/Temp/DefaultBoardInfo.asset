@@ -24,5 +24,89 @@ MonoBehaviour:
     type: 1
     propertyId: 102
   - index: 3
+    type: 1
+    propertyId: 103
+  - index: 4
+    type: 1
+    propertyId: 104
+  - index: 5
+    type: 1
+    propertyId: 105
+  - index: 6
+    type: 1
+    propertyId: 106
+  - index: 7
+    type: 1
+    propertyId: 107
+  - index: 8
+    type: 3
+    propertyId: 0
+  - index: 9
+    type: 1
+    propertyId: 109
+  - index: 10
+    type: 1
+    propertyId: 110
+  - index: 11
     type: 2
     propertyId: 0
+  - index: 12
+    type: 1
+    propertyId: 112
+  - index: 13
+    type: 1
+    propertyId: 113
+  - index: 14
+    type: 1
+    propertyId: 114
+  - index: 15
+    type: 1
+    propertyId: 115
+  - index: 16
+    type: 5
+    propertyId: 104
+  - index: 17
+    type: 1
+    propertyId: 117
+  - index: 18
+    type: 1
+    propertyId: 118
+  - index: 19
+    type: 1
+    propertyId: 119
+  - index: 20
+    type: 2
+    propertyId: 120
+  - index: 21
+    type: 1
+    propertyId: 121
+  - index: 22
+    type: 1
+    propertyId: 122
+  - index: 23
+    type: 1
+    propertyId: 123
+  - index: 24
+    type: 6
+    propertyId: 124
+  - index: 25
+    type: 1
+    propertyId: 125
+  - index: 26
+    type: 1
+    propertyId: 126
+  - index: 27
+    type: 1
+    propertyId: 127
+  - index: 28
+    type: 2
+    propertyId: 0
+  - index: 29
+    type: 1
+    propertyId: 129
+  - index: 30
+    type: 4
+    propertyId: 0
+  - index: 31
+    type: 1
+    propertyId: 131
