@@ -15,5 +15,14 @@ public class PlayerState
 
     // 파산 여부
     public bool IsBankrupt { get; set; }
-    
+
+    public PlayerState(long playerId)
+    {
+        PlayerId = playerId;
+        Position = 0;
+        Money = 0;
+        IslandTurnsRemaining = 0;
+        CardIds = new List<int>();
+        IsBankrupt = false;
+    }
 }
