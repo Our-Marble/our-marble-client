@@ -4,6 +4,8 @@ using UnityEngine;
 
 public class GameManager : MonoBehaviour
 {
+    public static GameManager Instance { get; private set; }
+    
     public GameState gameState;
 
     private System.Random random; // 선턴 정하기나 랜덤 주사위 값을 계산할 때 사용합니다.
@@ -15,8 +17,29 @@ public class GameManager : MonoBehaviour
 
     private void Awake()
     {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+        Instance = this;
+        
         // gameState 초기화
-
+        gameState = new  GameState();
+        gameState.TurnNumber = 0;
+        gameState.CurrentPlayerId = 0;
+        gameState.WelfareFund = 0;
+        
+        gameState.PlayerStates = new List<PlayerState>();
+        gameState.PlayerStates.Add(new  PlayerState(123));
+        gameState.PlayerStates.Add(new  PlayerState(456));
+        
+        gameState.PropertyStates = new List<PropertyState>();
+        foreach (PropertyData propertyData in  PropertyManager.Instance.GetAllDataByMapId(1))
+        {
+            gameState.PropertyStates.Add(new PropertyState(propertyData.Id));
+        }
+        
 
         // 그 외 필드 변수 초기화
         random = new System.Random();
@@ -37,44 +60,56 @@ public class GameManager : MonoBehaviour
 
     void StartGame()
     {
-        // 선턴 정하기 이벤트 발생
+        // 선턴 정하기 이벤트 발생. MVP에서는 생략합니다.
 
-        // 결과를 playerOrder 에 저장
+        // 결과를 playerOrder 에 저장. MVP에서는 플레이어가 무조건 선턴입니다. 플레이어의 playerId는 123, 봇의 playerId는 456 입니다.
+        playerOrder.Add(123);
+        playerOrder.Add(456);
 
+        // 모든 플레이어에게 초기자금 지급
+        foreach (PlayerState playerState in gameState.PlayerStates)
+        {
+            playerState.Money += 10000;
+        }
+        
         // 첫 번째 순서부터 턴 시작
-        // HandleTurnChanged(playerOrder[0]);
+        HandleTurnChanged(playerOrder[0]);
     }
 
     public void HandleTurnChanged(long playerId)
     {
-        // gameState.CurrentPlayerId 를 playerId로 갱신합니다.
-
+        PlayerState playerState = GetPlayerState(playerId);
+        
+        // gameState.CurrentPlayerId 를 playerId로 갱신합니다. gameState.TurnNumber를 1 증가시킵니다.
+        gameState.CurrentPlayerId = playerId;
+        gameState.TurnNumber += 1;
+        
         // 'OO의 턴'이라는 UI를 표시합니다.
+        Debug.Log($"playerId : {playerId} 의 차례"); // 추후 UI띄우는 함수 호출로 변경. 일단은 로그만 찍는다.
 
         // 필드 변수를 갱신합니다.
         isDouble = false;
         consecutiveDoubleCount = 0;
 
-        /*
-        if(현재 위치가 자유 여행 타일)
+        int playerPosition = playerState.Position;
+        
+        if(false) // <- 보드매니저에서 제공하는 함수를 통해 보드의 'playerPosition'번째 칸의 type이 '자유여행'인지 확인합니다.
         {
-            // HandleChooseDestinationPrompt 호출합니다.
+            HandleChooseDestinationPrompt();
         }
         else
         {
-            // HandleRollDicePrompt를 호출합니다.
+            HandleRollDicePrompt();
         }
-        */
-
     }
 
     public void HandleChooseDestinationPrompt()
     {
+        // 봇의 경우, 시작타일(0)을 목적지로 HandleDestinationChosen를 호출합니다. (빈 땅을 우선적으로 선택하는 등의 지능은 추후 개발)
+        HandleDestinationChosen(0);
+
         // 플레이어의 경우, 자유 여행할 타일을 선택하는 UI를 표시합니다.
-
-        // 봇의 경우, 랜덤한 타일을 선택하여 HandleDestinationChosen를 호출합니다. (빈 땅을 우선적으로 선택하는 등의 지능은 추후 개발)
-
-        // ProcessArrival(toPosition);
+        
     }
 
     /// <summary>
@@ -133,99 +168,106 @@ public class GameManager : MonoBehaviour
 
     private void ProcessArrival(long playerId, int toPosition)
     {
-        /*
-        if(toPosition이 시작지점)
-        {
-            // 아무것도 안합니다.
+        PlayerState player = GetPlayerState(playerId);
+        TileData arrivalTile = BoardManager.Instance.GetTileData(toPosition);
 
-            ProcessEndTurn();
-        }
-        else if(toPosition이 무인도)
-        {
-            // 강제로 턴을 넘깁니다.
-            HandleTurnChanged(GetNextPlayerId());
-        }
-        else if(toPosition이 기부금 수령)
-        {
-            // HandleWelfareFundReceived 호출 ( 호출에 필요한 매개변수는 GameState 와 Data를 조회하여 얻습니다. )
+        switch (arrivalTile.Type) 
+        { 
+            case TileType.START: // 시작지점에 도착
+                ProcessEndTurn(); // 턴을 종료합니다. 
+                break;
 
-            ProcessEndTurn();
-        }
-        else if(toPosition이 기부)
-        {
-            // HandleDonationPaid 호출 ( 호출에 필요한 매개변수는 GameState 와 Data를 조회하여 얻습니다. )
+            case TileType.ISLAND: // 무인도에 도착
+                HandleTurnChanged(GetNextPlayerId()); // 강제로 턴을 넘깁니다.
+                break;
 
-            ProcessEndTurn();
-        }
-        else if(toPosition이 자유 여행)
-        {
-            // 강제로 턴을 넘깁니다.
-            HandleTurnChanged(GetNextPlayerId());
-        }
-        else if(toPosition이 황금 열쇠)
-        {
-            // 황금 열쇠 카드 드로우
-            // DrawCard();
+            case TileType.CHARITY: // 기부금수령에 도착
+                // HandleWelfareFundReceived 호출 ( 호출에 필요한 매개변수는 GameState 와 Data를 조회하여 얻습니다. )
+                ProcessEndTurn();
+                break;
 
-            ProcessEndTurn();
-        }
-        else if(toPosition이 땅)
-        {
-            if(주인없는 땅)
-            {
-                if(돈 충분)
-                {
-                    // HandlePurchasePropertyPrompt 호출
-                }
-                else
-                {
-                    ProcessEndTurn();
-                }
-            }
-            else if(내 땅)
-            {
-                if(건설 가능한 땅 && 건설 레벨 최대 아님 && 돈 충분함)
-                {
-                    // HandleBuildPrompt 호출 ( 호출에 필요한 매개변수는 GameState 와 Data를 조회하여 얻습니다. )
-                }
-                else
-                {
-                    ProcessEndTurn();
-                }
-            }
-            else if(남의 땅)
-            {
-                if(통행료 낼 돈 충분)
-                {
-                    // HandleTollPaid 호출합니다. ( 호출에 필요한 매개변수는 GameState 와 Data를 조회하여 얻습니다. )
+            case TileType.DONATION: // 기부금납부에 도착
+                // HandleDonationPaid 호출 ( 호출에 필요한 매개변수는 GameState 와 Data를 조회하여 얻습니다. )
+                ProcessEndTurn();
+                break;
 
-                    if(통행료 내고도 인수할 돈 충분)
+            case TileType.WORLD_TRAVEL: // 자유여행에 도착
+                // 강제로 턴을 넘깁니다.
+                HandleTurnChanged(GetNextPlayerId());
+                break;
+
+            case TileType.GOLDEN_KEY: // 황금열쇠에 도착
+                // 황금 열쇠 카드 드로우
+                // DrawCard();
+                ProcessEndTurn();
+                break;
+
+            case TileType.PROPERTY: // 자산 유형의 타일에 도착
+                int propertyId = arrivalTile.PropertyId;
+                PropertyState propertyState = GetPropertyState(propertyId);
+                PropertyData propertyData = PropertyManager.Instance.GetData(propertyId);
+                
+                if (propertyState.OwnerId == null) // 주인 없는 땅인 경우
+                {
+                    bool canAffordToPurchase = (player.Money >= PropertyManager.Instance.GetLandPrice(propertyState.PropertyId));
+                    if (canAffordToPurchase) // 땅 구매할 돈이 충분하면
                     {
-                        
+                        // HandlePurchasePropertyPrompt 호출
                     }
                     else
                     {
                         ProcessEndTurn();
                     }
                 }
-                else if(자산 팔아서 지불 가능)
+                else if (propertyState.OwnerId.Value == playerId) // 본인 소유의 땅인 경우
                 {
-                    // HandleSellPropertiesPrompt 호출합니다. ( 호출에 필요한 매개변수는 GameState 와 Data를 조회하여 얻습니다. )
+                    BuildingLevel currentLevel = propertyState.BuildingLevel;
+                    bool canAffordToBuild = (player.Money >= PropertyManager.Instance.GetBuildCost(propertyId, (BuildingLevel)(currentLevel + 1)));
+                    if (propertyData.CanBuild && propertyState.BuildingLevel != BuildingLevel.Hotel  && canAffordToBuild) // 건설할 수 있으면
+                    {
+                        // HandleBuildPrompt 호출 ( 호출에 필요한 매개변수는 GameState 와 Data를 조회하여 얻습니다. )
+                    }
+                    else
+                    {
+                        ProcessEndTurn();
+                    }
                 }
-                else if(지불 불가)
+                else // 타인 소유의 땅인 경우
                 {
-                    // 납부자의 모든 재산을 현금화하여 수납자에게 줍니다.
+                    if (통행료 낼 돈 충분) // 통행료 납부 가능하면
+                    {
+                        // HandleTollPaid 호출합니다. ( 호출에 필요한 매개변수는 GameState 와 Data를 조회하여 얻습니다. )
 
-                    // 납부자를 파산 처리합니다.
+                        if (통행료 내고도 인수할 돈 충분) // 납부하고도 인수할 돈이 있다면 (앞선 HandleTollPaid로 Money -= 통행료 반영된 상태에서 계산하는 것이다.)
+                        {
 
-                    // 강제로 턴을 넘깁니다.
-                    HandleTurnChanged(GetNextPlayerId());
+                        }
+                        else
+                        {
+                            ProcessEndTurn();
+                        }
+                    }
+                    else if (자산 팔아서 지불 가능)
+                    {
+                        // HandleSellPropertiesPrompt 호출합니다. ( 호출에 필요한 매개변수는 GameState 와 Data를 조회하여 얻습니다. )
+                    }
+                    else if (지불 불가)
+                    {
+                        // 납부자의 모든 재산을 현금화하여 수납자에게 줍니다.
+                        // 납부자를 파산 처리합니다.
+                        // 강제로 턴을 넘깁니다.
+                        HandleTurnChanged(GetNextPlayerId());
+                    }
                 }
-            }
+                
+                break;
         }
-        */
+        
     }
 
+    /// <summary>
+    /// 턴을 종료하는 함수입니다. 무조건 턴을 넘기는게 아닙니다! 추가턴 진행 조건(isDouble == true)를 만족하면 추가턴을 진행합니다.
+    /// </summary>
     private void ProcessEndTurn()
     {
         // isDouble인 경우 추가턴을 진행합니다.
@@ -287,7 +329,7 @@ public class GameManager : MonoBehaviour
     /// </summary>
     public void PurchaseProperty(long playerId, int propertyId)
     {
-        long amount = GetLandPrice(propertyId); // 땅값 조회
+        long amount = PropertyManager.Instance.GetLandPrice(propertyId); // 땅값 조회
         HandlePropertyPurchased(playerId, propertyId, amount);
     }
 
@@ -331,7 +373,7 @@ public class GameManager : MonoBehaviour
     public void Build(long playerId, int propertyId)
     {
         var property = GetPropertyState(propertyId); //땅 상태(현재단계)
-        var data = PropertyTable.Instance.GetData(propertyId); //가격표(건설비)
+        var data = PropertyManager.Instance.GetData(propertyId); //가격표(건설비)
         if (property == null || data == null || property.BuildingLevel >= BuildingLevel.Hotel)
         {
             Debug.LogError($"[GameManager] 건설 실패: 땅 {propertyId} 없음 또는 건설 레벨 최대");
@@ -368,7 +410,7 @@ public class GameManager : MonoBehaviour
 
 
     // ────────────────────────── 자산 인수 ──────────────────────────
-    public void HandleAcquirePropertyPrompt(long acquirerId, int propertyId, long amount)
+    public void HandleAcquirePropertyPrompt(long playerId, int propertyId)
     {
         // 플레이어의 경우, 인수할 것인지 선택 가능한 UI를 표시합니다.
         
@@ -381,8 +423,7 @@ public class GameManager : MonoBehaviour
     public void AcquireProperty(long playerId, int propertyId)
     {
         var property = GetPropertyState(propertyId); //인수할 땅
-        long amount = property != null ? GetAcquireValue(property) : 0; //인수가 조회
-        HandlePropertyAcquired(playerId, propertyId, amount);
+        HandlePropertyAcquired(playerId, propertyId);
     }
 
     /// <summary>
@@ -393,7 +434,7 @@ public class GameManager : MonoBehaviour
         ProcessEndTurn();
     }
     
-    public void HandlePropertyAcquired(long playerId, int propertyId, long amount)
+    public void HandlePropertyAcquired(long playerId, int propertyId)
     {
         // GameState를 갱신합니다. (인수자 현금 차감, 인수당하는 사람 현금 증가, 자산 주인 갱신)
         var acquirer = GetPlayerState(playerId); //인수하는 사람
@@ -401,6 +442,8 @@ public class GameManager : MonoBehaviour
         var owner = property != null && property.OwnerId.HasValue ? GetPlayerState(property.OwnerId.Value) : null; //인수당하는 사람
         if (acquirer == null || property == null || owner == null)  return;
 
+        long amount = property != null ? PropertyManager.Instance.GetAcquireValue(property) : 0; //인수가 조회
+        
         acquirer.Money -= amount; //인수자 돈 차감
         owner.Money += amount; //소유자 돈 증가
         property.OwnerId = playerId; //소유권 이전
@@ -413,7 +456,7 @@ public class GameManager : MonoBehaviour
     
     
     // ────────────────────────── 자산 매각 ──────────────────────────
-    public void HandleSellPropertiesPrompt(long payerId, long receiverId, List<int> propertyId, long requiredAmount)
+    public void HandleSellPropertiesPrompt(long payerId, long receiverId, long requiredAmount)
     {
         // 플레이어의 경우, 청산할 자산들을 선택 가능한 UI를 표시합니다.
 
@@ -425,22 +468,27 @@ public class GameManager : MonoBehaviour
     /// </summary>
     public void SellProperties(long payerId, long receiverId, List<int> propertyIds, long requiredAmount)
     {
-        long totalAmount = 0; 
+        long totalAmount = 0;
         foreach (var id in propertyIds)
         {
             var property = GetPropertyState(id);
             if (property != null && property.OwnerId == payerId) // 소유자가 맞는지 확인
-                totalAmount += GetSellValue(property);
+                totalAmount += PropertyManager.Instance.GetSellValue(property);
         }
 
-        // 선택한 자산 가치 총합이 요구치보다 낮을 경우
-        if (totalAmount < requiredAmount)
+        // 플레이어 현금 + 선택한 자산 가치 총합이 요구치보다 낮을 경우
+        PlayerState payer = GetPlayerState(payerId);
+        if (payer.Money + totalAmount < requiredAmount)
         {
-            // 다시 청산할 자산들을 선택 가능한 UI를 표시합니다.
-            return;
+            // 매각 자산 선택창을 다시 띄웁니다.
+            HandleSellPropertiesPrompt(payerId, receiverId, requiredAmount);
         }
-
-        HandlePropertiesSold(payerId, receiverId, propertyIds, requiredAmount, totalAmount);
+        // 매각해서 통행료 지불이 가능해진 경우
+        else
+        {
+            // 매각 결과를 반영하는 함수를 호출합니다.
+            HandlePropertiesSold(payerId, receiverId, propertyIds, requiredAmount, totalAmount);
+        }
     }
 
     public void HandlePropertiesSold(long payerId, long receiverId, List<int> propertyIds, long requiredAmount, long totalAmount)
@@ -485,7 +533,7 @@ public class GameManager : MonoBehaviour
         {
             if (state.OwnerId != payerId) continue;
 
-            liquidated += GetSellValue(state); // 매각가 합산
+            liquidated += PropertyManager.Instance.GetSellValue(state); // 매각가 합산
             state.OwnerId = null; // 주인 없는 땅으로
             state.BuildingLevel = BuildingLevel.Land; // 건설 레벨 초기화
         }
@@ -538,105 +586,6 @@ public class GameManager : MonoBehaviour
         // (보관 가능한 카드의 경우)GameState를 갱신합니다.
 
         // (즉시 발동되는 카드의 경우)cardId에 맞는 효과를 연출합니다.
-    }
-
-    // ───────────── 부동산 계산 ─────────────
-
-    /// <summary>땅값. PurchaseProperty의 amount.</summary>
-    public long GetLandPrice(int propertyId)
-    {
-        var data = PropertyTable.Instance.GetData(propertyId);
-        return data != null ? data.LandPrice : 0;
-    }
-
-    /// <summary>통행료. 주인 없는 땅이면 0.</summary>
-    public long GetToll(PropertyState state)
-    {
-        if (!state.OwnerId.HasValue) return 0;
-
-        var data = PropertyTable.Instance.GetData(state.PropertyId);
-        if (data == null) return 0;
-
-        return data.GetToll(state.BuildingLevel);
-    }
-
-    /// <summary>
-    /// 다음 단계 하나의 건설비. 이미 호텔이거나 가격표가 없으면 false.
-    /// ProcessArrival의 "건설 가능 && 돈 충분" 판단과 HandleBuildPrompt의 amount에 사용.
-    /// </summary>
-    public bool TryGetNextBuildCost(PropertyState state, out long cost)
-    {
-        cost = 0;
-        if (state.BuildingLevel >= BuildingLevel.Hotel) return false;
-
-        var data = PropertyTable.Instance.GetData(state.PropertyId);
-        if (data == null) return false;
-
-        cost = data.GetBuildCost(state.BuildingLevel + 1);
-        return true;
-    }
-
-    private const float SellRate = 0.5f; //매각가 = 투자금의 50%로 계산. 추후 밸런스 조정 필요.
-    private const float AcquireRate = 2f; //인수가 = 투자금의 200%로 계산. 추후 밸런스 조정 필요.
-
-    /// <summary>
-    /// 투자금 = 땅값 + 지금 단계까지 지은 건물 비용 합계.
-    /// 매각가(GetSellValue)와 인수가(GetAcquireValue) 계산에 사용됨.
-    /// </summary>
-    /// 투자금. 가격표가 없는 땅이면 0.
-    public long GetInvestedAmount(PropertyState state)
-    {
-        var data = PropertyTable.Instance.GetData(state.PropertyId);
-        if (data == null) return 0;
-
-        long invested = data.LandPrice;
-        for (int lv = 1; lv <= (int)state.BuildingLevel; lv++)
-        {
-            invested += data.GetBuildCost((BuildingLevel)lv);
-        }
-        return invested;
-    }
-
-    ///<summary>땅 하나의 매각가: 투자금 x SellRate(50%).</summary>
-    /// 사용처
-    ///   - SellProperties: 선택한 땅의 매각가 합계 계산
-    ///   - GetTotalSellValue: 가진 땅 전부의 매각가 합계
-    ///   - 파산 처리: 모든 재산 현금화 (매각과 같은 기준이어야 분기 판단과 실제 금액이 일치)
-    /// 
-    /// 매각가. 가격표가 없는 땅이면 0.
-    public long GetSellValue(PropertyState state)
-    {
-        return (long)(GetInvestedAmount(state) * SellRate);
-    }
-    
-    /// <summary>플레이어가 가진 땅을 전부 팔면 받는 금액의 합계</summary>
-    /// 사용처
-    ///   - ProcessArrival: 통행료를 현금으로 못 낼 때 분기 판단
-    ///       현금 + GetTotalSellValue ≥ 통행료 → 매각 (HandleSellPropertiesPrompt)
-    ///       현금 + GetTotalSellValue < 통행료 → 파산
-    /// 실제로 땅을 팔지는 않고 금액만 계산한다.
-    /// 
-    /// 매각가 합계. 가진 땅이 없으면 0.
-    public long GetTotalSellValue(long playerId)
-    {
-        long total = 0;
-        foreach (var state in gameState.PropertyStates)
-        {
-            if (state.OwnerId == playerId)  total += GetSellValue(state);
-        }
-        return total;
-    }
-
-    /// <summary>땅 하나의 인수가: 투자금 x AcquireRate(200%).</summary>
-    /// 사용처
-    ///   - ProcessArrival: 통행료를 낸 뒤 인수할 돈이 충분한지 판단
-    ///   - HandleAcquirePropertyPrompt: 인수 팝업에 보여줄 금액
-    ///   - AcquireProperty: 실제로 차감할 금액
-    /// 
-    /// 인수가. 가격표가 없는 땅이면 0.
-    public long GetAcquireValue(PropertyState state)
-    {
-        return (long)(GetInvestedAmount(state) * AcquireRate);
     }
 
     /// <summary>

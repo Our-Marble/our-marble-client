@@ -7,7 +7,7 @@ using UnityEngine;
 [Serializable]
 public class PropertyData
 {
-    [SerializeField] private int id;
+    [SerializeField] private int id; // PropertyData의 id 값의 백의 자리 수는 mapId와 일치해야합니다.
     [SerializeField] private int boardIndex;
     [SerializeField] private string cityName;
     [SerializeField] private bool canBuild;
@@ -25,9 +25,15 @@ public class PropertyData
     public string CityName => cityName;
     public long LandPrice => landPrice;
 
+
+    public int MapId => (int)(id / 100);
+    
+
     /// <summary>해당 단계 하나를 짓는 비용. 땅은 0.</summary>
     public long GetBuildCost(BuildingLevel level)
     {
+        if (level > BuildingLevel.Hotel) return 0;
+        
         if (level == BuildingLevel.Land) return 0;
         return buildCosts[(int)level - 1];
     }
