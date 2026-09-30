@@ -21,8 +21,8 @@ MonoBehaviour:
     type: 1
     propertyId: 101
   - index: 2
-    type: 1
-    propertyId: 102
+    type: 2
+    propertyId: 0
   - index: 3
     type: 1
     propertyId: 103
@@ -88,7 +88,7 @@ MonoBehaviour:
     propertyId: 123
   - index: 24
     type: 6
-    propertyId: 124
+    propertyId: 0
   - index: 25
     type: 1
     propertyId: 125
