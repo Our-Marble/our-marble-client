@@ -140,27 +140,19 @@ public class PropertyManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 지금 돈으로 지을 수 있는 단계 목록. Cost는 누적 비용.
-    /// 비어 있으면 건설 불가.
+    /// 다음 단계 하나의 건설비. 이미 호텔이거나 가격표가 없으면 false.
+    /// ProcessArrival의 "건설 가능 && 돈 충분" 판단과 HandleBuildPrompt의 amount에 사용.
     /// </summary>
-    public List<BuildOption> GetBuildOptions(PropertyState state, long money)
+    public bool TryGetNextBuildCost(PropertyState state, out long cost)
     {
-        var options = new List<BuildOption>();
-        if (!state.OwnerId.HasValue) return options;
+        cost = 0;
+        if (state.BuildingLevel >= BuildingLevel.Hotel) return false;
 
-        var data = GetData(state.PropertyId);
-        if (data == null) return options;
+        var data = PropertyTable.Instance.GetData(state.PropertyId);
+        if (data == null) return false;
 
-        long totalCost = 0;
-        for (int lv = (int)state.BuildingLevel + 1; lv <= (int)BuildingLevel.Hotel; lv++)
-        {
-            var level = (BuildingLevel)lv;
-            totalCost += data.GetBuildCost(level);
-            if (totalCost > money) break;
-
-            options.Add(new BuildOption { Level = level, Cost = totalCost });
-        }
-        return options;
+        cost = data.GetBuildCost(state.BuildingLevel + 1);
+        return true;
     }
 
     /// <summary>
