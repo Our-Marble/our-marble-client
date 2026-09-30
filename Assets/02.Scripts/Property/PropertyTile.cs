@@ -3,7 +3,7 @@ using UnityEngine;
 /// <summary>
 /// 보드의 도시 칸에 붙이는 컴포넌트.
 /// 상태는 GameState가 들고, 이 칸은 받은 상태를 화면에 보여주기만 한다.
-/// 가격표 데이터는 PropertyTable에서 조회한다.
+/// 가격표 데이터는 PropertyManager에서 조회한다.
 /// </summary>
 public class PropertyTile : MonoBehaviour
 {
@@ -23,7 +23,7 @@ public class PropertyTile : MonoBehaviour
     {
         get
         {
-            var data = PropertyTable.Instance != null ? PropertyTable.Instance.GetData(propertyId) : null;
+            var data = PropertyManager.Instance != null ? PropertyManager.Instance.GetData(propertyId) : null;
             return data != null ? data.CityName : name;
         }
     }
