@@ -222,8 +222,9 @@ public class GameManager : MonoBehaviour
                 else if (propertyState.OwnerId.Value == playerId) // 본인 소유의 땅인 경우
                 {
                     BuildingLevel currentLevel = propertyState.BuildingLevel;
-                    bool canAffordToBuild = (player.Money >= PropertyManager.Instance.GetBuildCost(propertyId, (BuildingLevel)(currentLevel + 1)));
-                    if (propertyData.CanBuild && propertyState.BuildingLevel != BuildingLevel.Hotel  && canAffordToBuild) // 건설할 수 있으면
+                    bool canBuild = propertyData.CanBuild && currentLevel != BuildingLevel.Hotel;
+                    bool canAffordToBuild = canBuild && player.Money >= PropertyManager.Instance.GetBuildCost(propertyId, (BuildingLevel)(currentLevel + 1));
+                    if (canAffordToBuild) // 건설할 수 있으면
                     {
                         // HandleBuildPrompt 호출 ( 호출에 필요한 매개변수는 GameState 와 Data를 조회하여 얻습니다. )
                     }
@@ -234,29 +235,30 @@ public class GameManager : MonoBehaviour
                 }
                 else // 타인 소유의 땅인 경우
                 {
-                    if (통행료 낼 돈 충분) // 통행료 납부 가능하면
+                    long ownerId = propertyState.OwnerId.Value;
+                    long toll =PropertyManager.Instance.GetToll(propertyState);
+                    if (player.Money >= toll) // 통행료 납부 가능하면
                     {
-                        // HandleTollPaid 호출합니다. ( 호출에 필요한 매개변수는 GameState 와 Data를 조회하여 얻습니다. )
-
-                        if (통행료 내고도 인수할 돈 충분) // 납부하고도 인수할 돈이 있다면 (앞선 HandleTollPaid로 Money -= 통행료 반영된 상태에서 계산하는 것이다.)
+                        HandleTollPaid(playerId, ownerId, toll); // 통행료 납부 처리. GameState를 갱신합니다.
+                    
+                        long acquireValue = PropertyManager.Instance.GetAcquireValue(propertyState);
+                        if (player.Money >= acquireValue) // 납부하고도 인수할 돈이 있다면 
                         {
-
+                            HandleAcquirePropertyPrompt(playerId, propertyId); // 인수 선택지 UI를 표시합니다. ( 호출에 필요한 매개변수는 GameState 와 Data를 조회하여 얻습니다. )
                         }
                         else
                         {
                             ProcessEndTurn();
                         }
                     }
-                    else if (자산 팔아서 지불 가능)
+                    else if (player.Money + PropertyManager.Instance.GetTotalSellValue(playerId, gameState.PropertyStates) >= toll) // 통행료 납부 불가지만, 자산을 팔면 납부 가능하면
                     {
-                        // HandleSellPropertiesPrompt 호출합니다. ( 호출에 필요한 매개변수는 GameState 와 Data를 조회하여 얻습니다. )
+                        HandleSellPropertiesPrompt(playerId, ownerId, toll); // 자산 매각 선택지 UI를 표시합니다. ( 호출에 필요한 매개변수는 GameState 와 Data를 조회하여 얻습니다. )
                     }
-                    else if (지불 불가)
+                    else 
                     {
-                        // 납부자의 모든 재산을 현금화하여 수납자에게 줍니다.
-                        // 납부자를 파산 처리합니다.
-                        // 강제로 턴을 넘깁니다.
-                        HandleTurnChanged(GetNextPlayerId());
+                        HandleBankruptcy(playerId, ownerId); // 재산 현금화 -> 수납자 지급 -> 파산 처리. GameState를 갱신합니다.                  
+                        HandleTurnChanged(GetNextPlayerId()); // 강제로 턴을 넘깁니다.
                     }
                 }
                 
@@ -422,7 +424,7 @@ public class GameManager : MonoBehaviour
     /// </summary>
     public void AcquireProperty(long playerId, int propertyId)
     {
-        var property = GetPropertyState(propertyId); //인수할 땅
+   
         HandlePropertyAcquired(playerId, propertyId);
     }
 
@@ -508,7 +510,7 @@ public class GameManager : MonoBehaviour
             
         }
 
-        long toll = payer.Money + requiredAmount; // 통행료 전액 = 현금 전부 + 부족분
+        long toll = requiredAmount; // 통행료 전액 
         payer.Money = payer.Money + totalAmount - toll; // 판 돈 받고 통행료 냄
         receiver.Money += toll; //통행료 전액 지급
 
