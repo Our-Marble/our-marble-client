@@ -3,7 +3,7 @@ using UnityEngine;
 
 /// <summary>
 /// 보드의 모든 도시 칸(PropertyTile)을 땅 번호(propertyId)로 들고, 찾아주고, 비주얼 갱신을 전달한다.
-/// 가격표 데이터는 PropertyTable이 관리한다.
+/// 가격표 데이터는 PropertyManager가 관리한다.
 /// 상태 변경은 GameManager가 GameState에서 한다.
 /// </summary>
 public class PropertyManager : MonoBehaviour
@@ -80,6 +80,7 @@ public class PropertyManager : MonoBehaviour
     public TileInfo GetTileInfo(PropertyState state)
     {
         PropertyData data = GetData(state.PropertyId);
+        if(data == null) return null;
 
         return new TileInfo
         {
@@ -140,30 +141,6 @@ public class PropertyManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 지금 돈으로 지을 수 있는 단계 목록. Cost는 누적 비용.
-    /// 비어 있으면 건설 불가.
-    /// </summary>
-    public List<BuildOption> GetBuildOptions(PropertyState state, long money)
-    {
-        var options = new List<BuildOption>();
-        if (!state.OwnerId.HasValue) return options;
-
-        var data = GetData(state.PropertyId);
-        if (data == null) return options;
-
-        long totalCost = 0;
-        for (int lv = (int)state.BuildingLevel + 1; lv <= (int)BuildingLevel.Hotel; lv++)
-        {
-            var level = (BuildingLevel)lv;
-            totalCost += data.GetBuildCost(level);
-            if (totalCost > money) break;
-
-            options.Add(new BuildOption { Level = level, Cost = totalCost });
-        }
-        return options;
-    }
-
-    /// <summary>
     /// 투자금 = 땅값 + 지금 단계까지 지은 건물 비용 합계.
     /// 매각가(GetSellValue)와 인수가(GetAcquireValue) 계산에 사용됨.
     /// </summary>
@@ -201,10 +178,10 @@ public class PropertyManager : MonoBehaviour
     /// 실제로 땅을 팔지는 않고 금액만 계산한다.
     /// 
     /// 매각가 합계. 가진 땅이 없으면 0.
-    public long GetTotalSellValue(long playerId)
+    public long GetTotalSellValue(long playerId, List<PropertyState> propertyStates)
     {
         long total = 0;
-        foreach (var state in GameManager.Instance.gameState.PropertyStates)
+        foreach (var state in propertyStates)
         {
             if (state.OwnerId == playerId)  total += GetSellValue(state);
         }
