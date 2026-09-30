@@ -2,10 +2,8 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class GameManager : MonoBehaviour
+public class GameManager : Singleton<GameManager>
 {
-    public static GameManager Instance { get; private set; }
-    
     public GameState gameState;
 
     private System.Random random; // 선턴 정하기나 랜덤 주사위 값을 계산할 때 사용합니다.
@@ -16,16 +14,9 @@ public class GameManager : MonoBehaviour
     private int consecutiveDoubleCount; // 추후 3연속 더블시 무인도행을 판정할 때 사용합니다.
 
     private const int IslandTurns = 3; // 무인도 영업정지 턴 수
-
-    private void Awake()
+    
+    protected override void Awake()
     {
-        if (Instance != null && Instance != this)
-        {
-            Destroy(gameObject);
-            return;
-        }
-        Instance = this;
-        
         // gameState 초기화
         gameState = new  GameState();
         gameState.TurnNumber = 0;

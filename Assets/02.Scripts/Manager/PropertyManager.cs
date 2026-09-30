@@ -6,48 +6,60 @@ using UnityEngine;
 /// 가격표 데이터는 PropertyManager가 관리한다.
 /// 상태 변경은 GameManager가 GameState에서 한다.
 /// </summary>
-public class PropertyManager : MonoBehaviour
+public class PropertyManager : Singleton<PropertyManager>
 {
-    private static PropertyManager _instance;
-    public static PropertyManager Instance
-    {
-        get
-        {
-            if (_instance == null)
-            {
-                _instance = FindFirstObjectByType<PropertyManager>(); // 씬에 이미 존재하는지 검색
-                
-                if (_instance == null) // 없으면 동적으로 생성 (선택 사항)
-                {
-                    GameObject go = new GameObject("PropertyManager");
-                    _instance = go.AddComponent<PropertyManager>();
-                }
-            }
-            return _instance;
-        }
-    }
-
     private readonly Dictionary<int, PropertyTile> tiles = new Dictionary<int, PropertyTile>();
     public IEnumerable<PropertyTile> AllTiles => tiles.Values;
 
     private const float SellRate = 0.5f; //매각가 = 투자금의 50%로 계산. 추후 밸런스 조정 필요.
     private const float AcquireRate = 2f; //인수가 = 투자금의 200%로 계산. 추후 밸런스 조정 필요.
 
+    [Header("JSON 데이터가 있다면 자동으로 채워집니다.")]
     [SerializeField] private List<PropertyData> properties = new();
     private Dictionary<int, PropertyData> propertiesById;
 
-    private void Awake()
+    // ───────────── JSON 불러오기 (에디터용) ─────────────
+
+    [Header("JSON Import")]
+    [SerializeField] private TextAsset propertiesJson;
+
+    [System.Serializable]
+    private class PropertyDataListWrapper
     {
-        if (_instance != null && _instance != this)
+        public List<PropertyData> properties;
+    }
+
+    /// <summary>propertiesJson의 내용을 properties 리스트에 채웁니다. (에디터에서 우클릭 메뉴로 실행)</summary>
+    [ContextMenu("Load Properties From JSON")]
+    private void LoadPropertiesFromJson()
+    {
+        if (propertiesJson == null)
         {
-            Destroy(gameObject);
+            Debug.LogError("[PropertyManager] propertiesJson이 연결되지 않았습니다.", this);
             return;
         }
-        _instance = this;
 
-        if(propertiesById == null)
-            RebuildLookup();
+        var wrapper = JsonUtility.FromJson<PropertyDataListWrapper>(propertiesJson.text);
+        if (wrapper == null || wrapper.properties == null || wrapper.properties.Count == 0)
+        {
+            Debug.LogError("[PropertyManager] JSON 파싱 실패 또는 데이터가 비어 있습니다.", this);
+            return;
+        }
 
+        properties = wrapper.properties;
+        propertiesById = null;   // 조회용 캐시 초기화
+
+#if UNITY_EDITOR
+        UnityEditor.EditorUtility.SetDirty(this);
+#endif
+
+        Debug.Log($"[PropertyManager] JSON에서 {properties.Count}개 로드 완료", this);
+    }
+    
+    protected override void OnAwake()
+    {
+        LoadPropertiesFromJson();
+        
         RegisterAllTiles();
     }
 

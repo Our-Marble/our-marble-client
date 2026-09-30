@@ -10,15 +10,6 @@
       "tolls": [2000, 10000, 30000, 90000]
     },
     {
-      "id": 102,
-      "boardIndex": 2,
-      "cityName": "싱가포르",
-      "canBuild": true,
-      "landPrice": 60000,
-      "buildCosts": [50000, 100000, 150000],
-      "tolls": [3000, 15000, 45000, 135000]
-    },
-    {
       "id": 103,
       "boardIndex": 3,
       "cityName": "베이징",
