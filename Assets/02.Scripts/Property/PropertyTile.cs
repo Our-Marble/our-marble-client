@@ -3,12 +3,12 @@ using UnityEngine;
 /// <summary>
 /// 보드의 도시 칸에 붙이는 컴포넌트.
 /// 상태는 GameState가 들고, 이 칸은 받은 상태를 화면에 보여주기만 한다.
+/// 가격표 데이터는 PropertyManager에서 조회한다.
 /// </summary>
 public class PropertyTile : MonoBehaviour
 {
     [Header("칸 정보")]
     [SerializeField] private int propertyId;
-    [SerializeField] private PropertyData data;
 
     [Header("비주얼")]
     [Tooltip("별장, 빌딩, 호텔 순서 (3개)")]
@@ -18,9 +18,15 @@ public class PropertyTile : MonoBehaviour
     [SerializeField] private Renderer ownerMarker;
 
     public int PropertyId => propertyId;
-    public PropertyData Data => data;
 
-    private string CityName => data != null ? data.CityName : name;
+    private string CityName
+    {
+        get
+        {
+            var data = PropertyManager.Instance != null ? PropertyManager.Instance.GetData(propertyId) : null;
+            return data != null ? data.CityName : name;
+        }
+    }
 
     private void Start()
     {
