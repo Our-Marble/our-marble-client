@@ -343,39 +343,39 @@ private void RollDiceTest() => RollDice();
     }
 
     public void HandlePlayerMoved(long playerId, int fromPosition, int toPosition, bool shouldReceiveSalary)
-{
-    PlayerState player = GetPlayerState(playerId);
-    if (player == null) return;
-
-    int tileCount = BoardManager.Instance.TileCount;
-    int steps = (toPosition - fromPosition + tileCount) % tileCount;
-
-    // 1) GameState는 즉시 갱신
-    player.Position = toPosition;
-    if (shouldReceiveSalary)
     {
-        long before = player.Money;
-        player.Money += salaryAmount;
-        EconomyManager.NotifyMoneyChanged(playerId, before, player.Money);
-    }
+        PlayerState player = GetPlayerState(playerId);
+        if (player == null) return;
 
-    // 2) 말 이동 연출 → 끝나면 도착 처리
-    isMoving = true;
-    playerManager.MoveBySteps(
-        playerId, steps,
-        onTileReached: tileIndex =>
+        int tileCount = BoardManager.Instance.TileCount;
+        int steps = (toPosition - fromPosition + tileCount) % tileCount;
+
+        // 1) GameState는 즉시 갱신
+        player.Position = toPosition;
+        if (shouldReceiveSalary)
         {
-            if (shouldReceiveSalary && tileIndex == 0)
+            long before = player.Money;
+            player.Money += salaryAmount;
+            EconomyManager.NotifyMoneyChanged(playerId, before, player.Money);
+        }
+
+        // 2) 말 이동 연출 → 끝나면 도착 처리
+        isMoving = true;
+        playerManager.MoveBySteps(
+            playerId, steps,
+            onTileReached: tileIndex =>
             {
-                // 월급 획득 연출
-            }
-        },
-        onCompleted: () =>
-        {
-            isMoving = false;
-            ProcessArrival(playerId, toPosition);
-        });
-}
+                if (shouldReceiveSalary && tileIndex == 0)
+                {
+                    // 월급 획득 연출
+                }
+            },
+            onCompleted: () =>
+            {
+                isMoving = false;
+                ProcessArrival(playerId, toPosition);
+            });
+    }
 
 
 
