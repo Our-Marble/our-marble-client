@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 559fcc47cbf3a0046b7488e7db05272e, type: 3}
+  m_Name: Card Deck SO
+  m_EditorClassIdentifier: Assembly-CSharp::CardDeckData
+  entries:
+  - card: {fileID: 11400000, guid: a26d3be61e79be048bb85d70f7810d5f, type: 2}
+    count: 1
+  - card: {fileID: 11400000, guid: 308c1a6ff5f4d4244b30b1e4f119a081, type: 2}
+    count: 1
+  - card: {fileID: 11400000, guid: b08cfcbc93a9d854b8250a7f9f259ed9, type: 2}
+    count: 1
+  - card: {fileID: 11400000, guid: a58bf213e613e814483f454ff6e8a686, type: 2}
+    count: 1
+  - card: {fileID: 11400000, guid: 60d76f491a100ae4a91b410bab72bd52, type: 2}
+    count: 1

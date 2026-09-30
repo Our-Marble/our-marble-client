@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0ded43c9fb85c65468f822ecd36f3b34, type: 3}
+  m_Name: Island
+  m_EditorClassIdentifier: Assembly-CSharp::CardData
+  id: 0
+  cardName: "\uBB34\uC778\uB3C4"
+  description: "\uBB34\uC778\uB3C4\uB85C \uAC00\uB77C"
+  icon: {fileID: 0}
+  effectType: 4
+  amount: 0
+  targetTileId: 0
+  steps: 0
+  penaltyToFestivalPool: 1
