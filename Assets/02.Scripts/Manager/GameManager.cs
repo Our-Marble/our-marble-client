@@ -338,6 +338,8 @@ public class GameManager : MonoBehaviour
         // 무인도 이동 연출을 재생합니다. (순간이동, 월급 없음)
     }
 
+
+#region Card Effect
     // ────────────────────────── 황금 열쇠 CardEffect 실행 ──────────────────────────
     // CardManager가 카드의 EffectType을 확인한 뒤 호출합니다.
     // 대상은 현재 턴 플레이어(gameState.CurrentPlayerId)이며, 게임 상태 변경 후 다음 흐름(턴 종료, 도착 칸 처리)까지 진행합니다.
@@ -448,6 +450,7 @@ public class GameManager : MonoBehaviour
 
         return -1;
     }
+#endregion
 
 
     // ────────────────────────── 토지 구매 ──────────────────────────
