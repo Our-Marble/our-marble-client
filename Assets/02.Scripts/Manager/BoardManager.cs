@@ -11,7 +11,7 @@ public class BoardManager : MonoBehaviour
             if (_instance == null)
             {
                 _instance = FindFirstObjectByType<BoardManager>(); // 씬에 이미 존재하는지 검색
-                
+
                 if (_instance == null) // 없으면 동적으로 생성 (선택 사항)
                 {
                     GameObject go = new GameObject("BoardManager");
@@ -21,13 +21,16 @@ public class BoardManager : MonoBehaviour
             return _instance;
         }
     }
-    
+
     [SerializeField] private BoardController boardController;
     [SerializeField] private BoardData boardData;
 
     public BoardController BoardController => boardController;
     public BoardData BoardData => boardData;
-    
+
+    /// <summary>보드의 전체 칸 수. (BoardData 기준)</summary>
+    public int TileCount => boardData != null ? boardData.Tiles.Count : 0;
+
     private Dictionary<int, TileData> tilesByIndex;
 
     private void Awake()
@@ -42,10 +45,16 @@ public class BoardManager : MonoBehaviour
         if(tilesByIndex == null)
             RebuildLookup();
     }
-    
+
     private void RebuildLookup()
     {
         tilesByIndex = new Dictionary<int, TileData>();
+
+        if (boardData == null)
+        {
+            Debug.LogError("[BoardManager] BoardData가 연결되지 않았습니다.", this);
+            return;
+        }
 
         if (boardData.Tiles == null || boardData.Tiles.Count == 0)
         {
@@ -67,7 +76,7 @@ public class BoardManager : MonoBehaviour
             }
         }
     }
-    
+
     public TileData GetTileData(int index)
     {
         if (tilesByIndex == null)

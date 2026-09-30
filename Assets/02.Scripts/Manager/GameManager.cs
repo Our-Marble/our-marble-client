@@ -17,6 +17,10 @@ public class GameManager : MonoBehaviour
 
     private const int IslandTurns = 3; // 무인도 영업정지 턴 수
 
+    [SerializeField] private PlayerManager playerManager;
+    [SerializeField] private long salaryAmount = 20000;   // TODO: 월급 금액 확정 필요
+    private bool isMoving;
+
     private void Awake()
     {
         if (Instance != null && Instance != this)
@@ -67,6 +71,8 @@ public class GameManager : MonoBehaviour
         // 결과를 playerOrder 에 저장. MVP에서는 플레이어가 무조건 선턴입니다. 플레이어의 playerId는 123, 봇의 playerId는 456 입니다.
         playerOrder.Add(123);
         playerOrder.Add(456);
+
+        playerManager.Initialize(playerOrder);
 
         // 모든 플레이어에게 초기자금 지급
         foreach (PlayerState playerState in gameState.PlayerStates)
@@ -119,7 +125,7 @@ public class GameManager : MonoBehaviour
     /// </summary>
     public void HandleDestinationChosen(int destinationPosition)
     {
-        // 말이 목적지로 이동하는 것을 연출합니다. (주사위 굴림으로 이동하는것과 연출이 다를 수 있음.)
+        MovePlayerDirectly(gameState.CurrentPlayerId, destinationPosition);
     }
 
     public void HandleRollDicePrompt()
@@ -134,16 +140,14 @@ public class GameManager : MonoBehaviour
     /// </summary>
     public void RollDice()
     {
+        if (isMoving) return;   // 이동 중 연타 방지
+
         long playerId = gameState.CurrentPlayerId;
-        
-        // 주사위 굴림 결과를 생성합니다.
+
         int dice1 = random.Next(1, 7);
         int dice2 = random.Next(1, 7);
-
-        // HandleRollDice를 호출합니다.
         HandleDiceRolled(dice1, dice2);
 
-        // 더블 처리
         if (dice1 == dice2)
         {
             isDouble = true;
@@ -155,18 +159,17 @@ public class GameManager : MonoBehaviour
             consecutiveDoubleCount = 0;
         }
 
-        // if (현재 위치가 무인도 && PlayerStates.IslandTurnsRemaining > 0 && !isDouble )  무인도 탈출 실패 판정.
+        PlayerState player = GetPlayerState(playerId);
+        int tileCount = BoardManager.Instance.TileCount;
+        int fromPosition = player.Position;
+        int toPosition = (fromPosition + dice1 + dice2) % tileCount;
+        bool shouldReceiveSalary = toPosition < fromPosition;   // 출발 지점을 지나침
 
-        // 플레이어 이동을 계산합니다. gameState.PlayerStates로부터 플레이어의 현재위치 fromPosition을 조회하고, 주사위 결과를 더하여 toPosition값을 계산합니다.
-        // gameState.PlayerStates에서 playerId에 해당하는 원소를 찾기 위해 매번 foreach문을 도는것은 비효율적이기 때문에, 실제 서버측 구현을 할 때에는 Map자료구조를 사용할 수 있습니다.
-        // 하지만, GameState는 재접속시 상태 동기화를 위한 DTO로도 사용되기 때문에, Json 변환이 가능한 List구조체를 PlayerStates 프로퍼티의 데이터타입으로 사용했습니다.
-
-        // HandlePlayerMoved를 호출합니다.
-        // 이때, toPosition < fromPosition 인 경우, 출발지점을 지나쳤다고 판단하여 ShouldReceiveSalary == true 가 됩니다.
-        // '월급 획득 여부'를 이동 처리 함수의 매개변수로 추가한 이유는, 월급 획득 연출 타이밍이 출발 지점을 지날 때와 일치해야하기 때문입니다.
-
-        // ProcessArrival(playerId, toPosition);
+        HandlePlayerMoved(playerId, fromPosition, toPosition, shouldReceiveSalary);
     }
+
+[ContextMenu("RollDiceTest")]   // 플레이 모드에서 우클릭으로 테스트
+private void RollDiceTest() => RollDice();
 
     private void ProcessArrival(long playerId, int toPosition)
     {
@@ -268,6 +271,22 @@ public class GameManager : MonoBehaviour
         
     }
 
+
+    // 새 함수 추가
+    private void MovePlayerDirectly(long playerId, int toPosition)
+    {
+        PlayerState player = GetPlayerState(playerId);
+        if (player == null) return;
+
+        player.Position = toPosition;
+        isMoving = true;
+        playerManager.MoveToTile(playerId, toPosition, () =>
+        {
+            isMoving = false;
+            ProcessArrival(playerId, toPosition);
+        });
+    }
+
     /// <summary>
     /// 턴을 종료하는 함수입니다. 무조건 턴을 넘기는게 아닙니다! 추가턴 진행 조건(isDouble == true)를 만족하면 추가턴을 진행합니다.
     /// </summary>
@@ -284,7 +303,19 @@ public class GameManager : MonoBehaviour
 
     private long GetNextPlayerId()
     {
-        return 0; // 컴파일 에러를 막기 위해 임시로 0을 적어뒀습니다. GameState와 playerOrder를 참조하여 다음 차례인 플레이어의 playerId를 찾아 리턴하면 됩니다. 파산한 플레이어는 건너뜁니다.
+        int currentIndex = playerOrder.IndexOf(gameState.CurrentPlayerId);
+
+        // 현재 플레이어 다음 순서부터 한 바퀴 돌면서, 파산하지 않은 플레이어를 찾습니다.
+        for (int i = 1; i <= playerOrder.Count; i++)
+        {
+            long candidateId = playerOrder[(currentIndex + i) % playerOrder.Count];
+            PlayerState candidate = GetPlayerState(candidateId);
+
+            if (candidate != null && !candidate.IsBankrupt)
+                return candidateId;
+        }
+
+        return gameState.CurrentPlayerId;   // 모두 파산한 경우 (게임 종료 상황)
     }
 
     public void ProcessBankruptcy(long playerId)
@@ -312,11 +343,39 @@ public class GameManager : MonoBehaviour
     }
 
     public void HandlePlayerMoved(long playerId, int fromPosition, int toPosition, bool shouldReceiveSalary)
-    {
-        // GameState를 갱신합니다.
+{
+    PlayerState player = GetPlayerState(playerId);
+    if (player == null) return;
 
-        // 말 이동 연출을 재생합니다.
+    int tileCount = BoardManager.Instance.TileCount;
+    int steps = (toPosition - fromPosition + tileCount) % tileCount;
+
+    // 1) GameState는 즉시 갱신
+    player.Position = toPosition;
+    if (shouldReceiveSalary)
+    {
+        long before = player.Money;
+        player.Money += salaryAmount;
+        EconomyManager.NotifyMoneyChanged(playerId, before, player.Money);
     }
+
+    // 2) 말 이동 연출 → 끝나면 도착 처리
+    isMoving = true;
+    playerManager.MoveBySteps(
+        playerId, steps,
+        onTileReached: tileIndex =>
+        {
+            if (shouldReceiveSalary && tileIndex == 0)
+            {
+                // 월급 획득 연출
+            }
+        },
+        onCompleted: () =>
+        {
+            isMoving = false;
+            ProcessArrival(playerId, toPosition);
+        });
+}
 
 
 
@@ -324,9 +383,8 @@ public class GameManager : MonoBehaviour
     /// 플레이어를 무인도로 바로 보낸다. (황금 열쇠 무인도 카드, 3연속 더블)
     /// 걸어서 이동하는 것이 아니므로 출발지를 지나도 월급이 없다.
     /// </summary>
-    public void HandleSentToIsland(long playerId, int fromPosition, int islandPosition)
+    public void HandleSentToIsland(long playerId, int fromPosition, int islandPosition, Action onCompleted = null)
     {
-        // GameState를 갱신합니다. (위치를 무인도로, 영업정지 턴 설정)
         var player = GetPlayerState(playerId);
         if (player == null)
         {
@@ -337,9 +395,13 @@ public class GameManager : MonoBehaviour
         player.Position = islandPosition;
         player.IslandTurnsRemaining = IslandTurns;
 
-        // 무인도 이동 연출을 재생합니다. (순간이동, 월급 없음)
+        isMoving = true;
+        playerManager.MoveToTile(playerId, islandPosition, () =>
+        {
+            isMoving = false;
+            onCompleted?.Invoke();
+        });
     }
-
 
 #region Card Effect
     // ────────────────────────── 황금 열쇠 CardEffect 실행 ──────────────────────────
@@ -401,8 +463,8 @@ public class GameManager : MonoBehaviour
         int toPosition = targetTileId;
         bool shouldReceiveSalary = toPosition < fromPosition; // RollDice와 같은 규칙: toPosition < fromPosition 이면 출발지 통과
 
+        // 이동이 끝나면 HandlePlayerMoved가 알아서 ProcessArrival을 호출합니다.
         HandlePlayerMoved(player.PlayerId, fromPosition, toPosition, shouldReceiveSalary);
-        ProcessArrival(player.PlayerId, toPosition); // 도착한 칸 효과 처리
     }
 
     // CardEffect: MoveBy - N칸 이동한다 (음수면 뒤로, 뒤로 갈 때는 월급 없음)
@@ -421,8 +483,11 @@ public class GameManager : MonoBehaviour
         int toPosition = ((fromPosition + steps) % boardSize + boardSize) % boardSize;
         bool shouldReceiveSalary = steps > 0 && fromPosition + steps >= boardSize;
 
-        HandlePlayerMoved(player.PlayerId, fromPosition, toPosition, shouldReceiveSalary);
-        ProcessArrival(player.PlayerId, toPosition); // 도착한 칸 효과 처리
+        // 이동이 끝나면 두 함수 모두 알아서 ProcessArrival을 호출합니다.
+        if (steps > 0)
+            HandlePlayerMoved(player.PlayerId, fromPosition, toPosition, shouldReceiveSalary);
+        else
+            MovePlayerDirectly(player.PlayerId, toPosition);   // 뒤로 이동
     }
 
     // CardEffect: GoToInspection - 무인도로 바로 이동한다 (월급 없음, 더블이어도 추가 턴 없음)
@@ -437,8 +502,9 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        HandleSentToIsland(player.PlayerId, player.Position, islandPosition);
-        HandleTurnChanged(GetNextPlayerId()); // 추가 턴 없이 턴을 넘깁니다.
+        // 말이 이동을 끝낸 뒤에 추가 턴 없이 턴을 넘깁니다.
+        HandleSentToIsland(player.PlayerId, player.Position, islandPosition,
+            () => HandleTurnChanged(GetNextPlayerId()));
     }
 
     // 보드에서 무인도(ISLAND) 칸 번호를 찾는다. 없으면 -1
@@ -453,7 +519,6 @@ public class GameManager : MonoBehaviour
         return -1;
     }
 #endregion
-
 
     // ────────────────────────── 토지 구매 ──────────────────────────
     public void HandlePurchasePropertyPrompt(long playerId, int propertyId, long amount)
