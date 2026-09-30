@@ -999,7 +999,19 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::GameManager
   playerOrder: 
   playerManager: {fileID: 1503842745}
-  salaryAmount: 20000
+  salaryAmount: 100000
+  startMoney: 500000
+  autoPlayAllPlayers: 1
+  botActionDelay: 3
+  playerSetups:
+  - playerId: 12
+    isBot: 0
+  - playerId: 34
+    isBot: 1
+  - playerId: 56
+    isBot: 1
+  - playerId: 78
+    isBot: 1
 --- !u!4 &442611470
 Transform:
   m_ObjectHideFlags: 0
