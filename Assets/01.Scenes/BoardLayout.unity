@@ -351,6 +351,56 @@ SortingGroup:
   m_SortingOrder: 19
   m_SortAtRoot: 0
   m_Sort3DAs2D: 0
+--- !u!1 &45369951
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 45369953}
+  - component: {fileID: 45369952}
+  m_Layer: 0
+  m_Name: PlayerManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &45369952
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 45369951}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a595899d8f9f9824381f3ec7aca96211, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerManager
+  boardController: {fileID: 839385234}
+  pawns:
+  - {fileID: 959385828}
+  - {fileID: 747579192}
+  hopDuration: 0.25
+  slideDuration: 0.6
+--- !u!4 &45369953
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 45369951}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0.39096, y: -0.09748, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &105661225
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -545,6 +595,51 @@ SortingGroup:
   m_SortingOrder: 28
   m_SortAtRoot: 0
   m_Sort3DAs2D: 0
+--- !u!1 &337382217
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 337382219}
+  - component: {fileID: 337382218}
+  m_Layer: 0
+  m_Name: GameManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &337382218
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 337382217}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 069721c10cced2f45b61d7ecb207eb02, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GameManager
+  salaryAmount: 20000
+--- !u!4 &337382219
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 337382217}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0.39096, y: -0.09748, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &396090695
 GameObject:
   m_ObjectHideFlags: 0
@@ -1644,11 +1739,6 @@ MonoBehaviour:
   - {fileID: 417582401}
   - {fileID: 148148698}
   - {fileID: 2101722630}
-  playerPawns:
-  - {fileID: 959385828}
-  - {fileID: 747579192}
-  - {fileID: 1850026456}
-  - {fileID: 1279938393}
   defaultColor: {r: 0.44001427, g: 0.9056604, b: 0.7870102, a: 1}
   defaultTextColor: {r: 0.21698111, g: 0.0775333, b: 0, a: 1}
   cornerColor: {r: 1, g: 0.87574923, b: 0.2783019, a: 1}
@@ -1782,6 +1872,51 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 1266910959943693191, guid: d4b5c650d149afd4aac1fa95bf65e131, type: 3}
   m_PrefabInstance: {fileID: 2680124254529401608}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1104434966
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1104434968}
+  - component: {fileID: 1104434967}
+  m_Layer: 0
+  m_Name: CardManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1104434967
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1104434966}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2e88a16c9dfc4da4786aef9a6755b462, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CardManager
+  deckData: {fileID: 11400000, guid: 28d3ca2c6729ed246a6df82e701ba38a, type: 2}
+--- !u!4 &1104434968
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1104434966}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0.39096, y: -0.09748, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &1169366861
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -2014,6 +2149,52 @@ Transform:
   - {fileID: 2101722628}
   m_Father: {fileID: 535977660}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1211441996
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1211441998}
+  - component: {fileID: 1211441997}
+  m_Layer: 0
+  m_Name: PropertyManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1211441997
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1211441996}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dfb4c3bc288d99747a60b3ae369d075e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PropertyManager
+  properties: []
+  propertiesJson: {fileID: 4900000, guid: fb0ac76d45bfb9a4dbdccb57f784e0ac, type: 3}
+--- !u!4 &1211441998
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1211441996}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0.39096, y: -0.09748, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &1218578587
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -2223,17 +2404,6 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 1266910959943693191, guid: d4b5c650d149afd4aac1fa95bf65e131, type: 3}
   m_PrefabInstance: {fileID: 1279938391}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &1279938393 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 4046341195678712681, guid: d4b5c650d149afd4aac1fa95bf65e131, type: 3}
-  m_PrefabInstance: {fileID: 1279938391}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3e14708fa90e46ba8be6d1fbafee60ca, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerPawn
 --- !u!1001 &1326015104
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -3399,17 +3569,6 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 1266910959943693191, guid: d4b5c650d149afd4aac1fa95bf65e131, type: 3}
   m_PrefabInstance: {fileID: 1850026454}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &1850026456 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 4046341195678712681, guid: d4b5c650d149afd4aac1fa95bf65e131, type: 3}
-  m_PrefabInstance: {fileID: 1850026454}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3e14708fa90e46ba8be6d1fbafee60ca, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerPawn
 --- !u!1001 &1872367359
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -4151,5 +4310,9 @@ SceneRoots:
   m_Roots:
   - {fileID: 1739979339}
   - {fileID: 1535259471}
-  - {fileID: 839385235}
   - {fileID: 2127056688}
+  - {fileID: 839385235}
+  - {fileID: 45369953}
+  - {fileID: 337382219}
+  - {fileID: 1211441998}
+  - {fileID: 1104434968}

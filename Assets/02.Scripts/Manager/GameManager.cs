@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using UnityEngine;
 
 public class GameManager : Singleton<GameManager>
@@ -8,12 +9,15 @@ public class GameManager : Singleton<GameManager>
 
     private System.Random random; // 선턴 정하기나 랜덤 주사위 값을 계산할 때 사용합니다.
 
-    public List<long> playerOrder;
+    private List<long> playerOrder;
 
     private bool isDouble; // 추가 턴 진행 여부를 결정하는데 사용됩니다.
     private int consecutiveDoubleCount; // 추후 3연속 더블시 무인도행을 판정할 때 사용합니다.
 
     private const int IslandTurns = 3; // 무인도 영업정지 턴 수
+    
+    [SerializeField] private long salaryAmount = 20000;   // TODO: 월급 금액 확정 필요
+    private bool isMoving;
     
     protected override void Awake()
     {
@@ -43,6 +47,11 @@ public class GameManager : Singleton<GameManager>
 
     void Start()
     {
+        // MVP 단계에서 플레이어의 playerId는 123, 봇의 playerId는 456 입니다.
+        playerOrder.Add(123);
+        playerOrder.Add(456);
+        PlayerManager.Instance.Initialize(playerOrder); // 다른 Monobehaviour 클래스를 참조하여 초기화할때는 Awake말고 Start에서 하는게 안전
+        
         StartGame();
     }
 
@@ -55,9 +64,7 @@ public class GameManager : Singleton<GameManager>
     {
         // 선턴 정하기 이벤트 발생. MVP에서는 생략합니다.
 
-        // 결과를 playerOrder 에 저장. MVP에서는 플레이어가 무조건 선턴입니다. 플레이어의 playerId는 123, 봇의 playerId는 456 입니다.
-        playerOrder.Add(123);
-        playerOrder.Add(456);
+        // 결과를 playerOrder 에 저장. MVP에서는 플레이어가 무조건 선턴입니다.
 
         // 모든 플레이어에게 초기자금 지급
         foreach (PlayerState playerState in gameState.PlayerStates)
@@ -71,8 +78,6 @@ public class GameManager : Singleton<GameManager>
 
     public void HandleTurnChanged(long playerId)
     {
-        PlayerState playerState = GetPlayerState(playerId);
-        
         // gameState.CurrentPlayerId 를 playerId로 갱신합니다. gameState.TurnNumber를 1 증가시킵니다.
         gameState.CurrentPlayerId = playerId;
         gameState.TurnNumber += 1;
@@ -83,11 +88,11 @@ public class GameManager : Singleton<GameManager>
         // 필드 변수를 갱신합니다.
         isDouble = false;
         consecutiveDoubleCount = 0;
-
-        int playerPosition = playerState.Position;
         
-        if(false) // <- 보드매니저에서 제공하는 함수를 통해 보드의 'playerPosition'번째 칸의 type이 '자유여행'인지 확인합니다.
+        // 새 차례가 온 플레이어의 위치가 자유여행인 경우
+        if(BoardManager.Instance.GetTileData(GetPlayerState(playerId).Position).Type == TileType.WORLD_TRAVEL)
         {
+            // 주사위를 굴리는 창 대신, 원하는 타일을 선택하는 창을 띄웁니다.
             HandleChooseDestinationPrompt();
         }
         else
@@ -98,11 +103,15 @@ public class GameManager : Singleton<GameManager>
 
     public void HandleChooseDestinationPrompt()
     {
-        // 봇의 경우, 시작타일(0)을 목적지로 HandleDestinationChosen를 호출합니다. (빈 땅을 우선적으로 선택하는 등의 지능은 추후 개발)
-        HandleDestinationChosen(0);
-
+        // 봇의 경우, 복지기금수령(16)을 목적지로 HandleDestinationChosen를 호출합니다. (빈 땅을 우선적으로 선택하는 등의 지능은 추후 개발)
+        if (gameState.CurrentPlayerId == 456)
+        {
+            HandleDestinationChosen(16);
+            return;
+        }
         // 플레이어의 경우, 자유 여행할 타일을 선택하는 UI를 표시합니다.
-        
+        Debug.Log("자유여행할 타일 선택 기능 미구현... 임시로 기부금수령 타일로 이동합니다.");
+        HandleDestinationChosen(16);
     }
 
     /// <summary>
@@ -111,29 +120,43 @@ public class GameManager : Singleton<GameManager>
     public void HandleDestinationChosen(int destinationPosition)
     {
         // 말이 목적지로 이동하는 것을 연출합니다. (주사위 굴림으로 이동하는것과 연출이 다를 수 있음.)
+        MovePlayerDirectly(gameState.CurrentPlayerId, destinationPosition);
     }
 
     public void HandleRollDicePrompt()
     {
-        // 플레이어인 경우 주사위 굴림 UI를 표시합니다.
-
         // 봇의 경우 RollDice를 호출합니다.
+        if (gameState.CurrentPlayerId == 456)
+        {
+            RollDice();
+            return;
+        }
+
+        // 플레이어인 경우 주사위 굴림 UI를 표시합니다.
+        Debug.Log("주사위 굴림 창 뜨는 기능 미구현... 임시로 RollDice를 즉시 호출합니다.");
+        RollDice();
     }
 
+    [ContextMenu("RollDiceTest")]   // 플레이 모드에서 테스트용
+    private void RollDiceTest() => RollDice();
+    
     /// <summary>
     /// 화면의 '주사위 굴리기' 버튼을 누르면 이 함수가 호출됩니다.
     /// </summary>
     public void RollDice()
     {
-        long playerId = gameState.CurrentPlayerId;
-        
         // 주사위 굴림 결과를 생성합니다.
         int dice1 = random.Next(1, 7);
         int dice2 = random.Next(1, 7);
 
         // HandleRollDice를 호출합니다.
         HandleDiceRolled(dice1, dice2);
+    }
 
+    public void HandleDiceRolled(int dice1, int dice2)
+    {
+        Debug.Log($"주사위 결과: {dice1} & {dice2}");
+        
         // 더블 처리
         if (dice1 == dice2)
         {
@@ -146,17 +169,65 @@ public class GameManager : Singleton<GameManager>
             consecutiveDoubleCount = 0;
         }
 
+        long playerId = gameState.CurrentPlayerId;
+        PlayerState player = GetPlayerState(playerId);
+        
         // if (현재 위치가 무인도 && PlayerStates.IslandTurnsRemaining > 0 && !isDouble )  무인도 탈출 실패 판정.
+        bool onIslandTile = BoardManager.Instance.GetTileData(player.Position).Type == TileType.ISLAND;
+        bool isIslandTurnsRemaining = player.IslandTurnsRemaining > 0;
+        if (onIslandTile && isIslandTurnsRemaining && !isDouble)
+        {
+            // 남은 감금 턴수 차감
+            player.IslandTurnsRemaining -= 1;
+            
+            Debug.Log($"무인도 탈출 실패. 남은 턴 수: {player.IslandTurnsRemaining}");
+            HandleTurnChanged(GetNextPlayerId()); // 강제로 턴을 넘깁니다.
+            return;
+        }
+        
+        if (isMoving) return;
+        
+        int tileCount = BoardManager.Instance.TileCount;
+        int fromPosition = player.Position;
+        int toPosition = (fromPosition + dice1 + dice2) % tileCount;
+        bool shouldReceiveSalary = toPosition < fromPosition;   // 출발 지점을 지나침
 
-        // 플레이어 이동을 계산합니다. gameState.PlayerStates로부터 플레이어의 현재위치 fromPosition을 조회하고, 주사위 결과를 더하여 toPosition값을 계산합니다.
-        // gameState.PlayerStates에서 playerId에 해당하는 원소를 찾기 위해 매번 foreach문을 도는것은 비효율적이기 때문에, 실제 서버측 구현을 할 때에는 Map자료구조를 사용할 수 있습니다.
-        // 하지만, GameState는 재접속시 상태 동기화를 위한 DTO로도 사용되기 때문에, Json 변환이 가능한 List구조체를 PlayerStates 프로퍼티의 데이터타입으로 사용했습니다.
+        HandlePlayerMoved(playerId, fromPosition, toPosition, shouldReceiveSalary);
+    }
+    
+    public void HandlePlayerMoved(long playerId, int fromPosition, int toPosition, bool shouldReceiveSalary)
+    {
+        PlayerState player = GetPlayerState(playerId);
+        if (player == null) return;
 
-        // HandlePlayerMoved를 호출합니다.
-        // 이때, toPosition < fromPosition 인 경우, 출발지점을 지나쳤다고 판단하여 ShouldReceiveSalary == true 가 됩니다.
-        // '월급 획득 여부'를 이동 처리 함수의 매개변수로 추가한 이유는, 월급 획득 연출 타이밍이 출발 지점을 지날 때와 일치해야하기 때문입니다.
+        int tileCount = BoardManager.Instance.TileCount;
+        int steps = (toPosition - fromPosition + tileCount) % tileCount;
 
-        // ProcessArrival(playerId, toPosition);
+        // 1) GameState는 즉시 갱신
+        player.Position = toPosition;
+        if (shouldReceiveSalary)
+        {
+            long before = player.Money;
+            player.Money += salaryAmount;
+            EconomyManager.NotifyMoneyChanged(playerId, before, player.Money);
+        }
+
+        // 2) 말 이동 연출 → 끝나면 도착 처리
+        isMoving = true;
+        PlayerManager.Instance.MoveBySteps(
+            playerId, steps,
+            onTileReached: tileIndex =>
+            {
+                if (shouldReceiveSalary && tileIndex == 0)
+                {
+                    // 월급 획득 연출
+                }
+            },
+            onCompleted: () =>
+            {
+                isMoving = false;
+                ProcessArrival(playerId, toPosition);
+            });
     }
 
     private void ProcessArrival(long playerId, int toPosition)
@@ -171,6 +242,7 @@ public class GameManager : Singleton<GameManager>
                 break;
 
             case TileType.ISLAND: // 무인도에 도착
+                player.IslandTurnsRemaining = IslandTurns;
                 HandleTurnChanged(GetNextPlayerId()); // 강제로 턴을 넘깁니다.
                 break;
 
@@ -236,7 +308,7 @@ public class GameManager : Singleton<GameManager>
                         long acquireValue = PropertyManager.Instance.GetAcquireValue(propertyState);
                         if (player.Money >= acquireValue) // 납부하고도 인수할 돈이 있다면 
                         {
-                            HandleAcquirePropertyPrompt(playerId, propertyId); // 인수 선택지 UI를 표시합니다. ( 호출에 필요한 매개변수는 GameState 와 Data를 조회하여 얻습니다. )
+                            HandleAcquirePropertyPrompt(playerId, propertyId, acquireValue); // 인수 선택지 UI를 표시합니다. ( 호출에 필요한 매개변수는 GameState 와 Data를 조회하여 얻습니다. )
                         }
                         else
                         {
@@ -259,6 +331,21 @@ public class GameManager : Singleton<GameManager>
         
     }
 
+    // 새 함수 추가
+    private void MovePlayerDirectly(long playerId, int toPosition)
+    {
+        PlayerState player = GetPlayerState(playerId);
+        if (player == null) return;
+
+        player.Position = toPosition;
+        isMoving = true;
+        PlayerManager.Instance.MoveToTile(playerId, toPosition, () =>
+        {
+            isMoving = false;
+            ProcessArrival(playerId, toPosition);
+        });
+    }
+    
     /// <summary>
     /// 턴을 종료하는 함수입니다. 무조건 턴을 넘기는게 아닙니다! 추가턴 진행 조건(isDouble == true)를 만족하면 추가턴을 진행합니다.
     /// </summary>
@@ -275,7 +362,19 @@ public class GameManager : Singleton<GameManager>
 
     private long GetNextPlayerId()
     {
-        return 0; // 컴파일 에러를 막기 위해 임시로 0을 적어뒀습니다. GameState와 playerOrder를 참조하여 다음 차례인 플레이어의 playerId를 찾아 리턴하면 됩니다. 파산한 플레이어는 건너뜁니다.
+        int currentIndex = playerOrder.IndexOf(gameState.CurrentPlayerId);
+
+        // 현재 플레이어 다음 순서부터 한 바퀴 돌면서, 파산하지 않은 플레이어를 찾습니다.
+        for (int i = 1; i <= playerOrder.Count; i++)
+        {
+            long candidateId = playerOrder[(currentIndex + i) % playerOrder.Count];
+            PlayerState candidate = GetPlayerState(candidateId);
+
+            if (candidate != null && !candidate.IsBankrupt)
+                return candidateId;
+        }
+
+        return gameState.CurrentPlayerId;   // 모두 파산한 경우 (게임 종료 상황)
     }
 
     public void ProcessBankruptcy(long playerId)
@@ -297,25 +396,11 @@ public class GameManager : Singleton<GameManager>
         }
     }
 
-    public void HandleDiceRolled(int dice1, int dice2)
-    {
-        // 주사위 굴림 연출을 재생합니다.
-    }
-
-    public void HandlePlayerMoved(long playerId, int fromPosition, int toPosition, bool shouldReceiveSalary)
-    {
-        // GameState를 갱신합니다.
-
-        // 말 이동 연출을 재생합니다.
-    }
-
-
-
     /// <summary>
     /// 플레이어를 무인도로 바로 보낸다. (황금 열쇠 무인도 카드, 3연속 더블)
     /// 걸어서 이동하는 것이 아니므로 출발지를 지나도 월급이 없다.
     /// </summary>
-    public void HandleSentToIsland(long playerId, int fromPosition, int islandPosition)
+    public void HandleSentToIsland(long playerId, int fromPosition, int islandPosition, Action onCompleted = null)
     {
         // GameState를 갱신합니다. (위치를 무인도로, 영업정지 턴 설정)
         var player = GetPlayerState(playerId);
@@ -329,6 +414,12 @@ public class GameManager : Singleton<GameManager>
         player.IslandTurnsRemaining = IslandTurns;
 
         // 무인도 이동 연출을 재생합니다. (순간이동, 월급 없음)
+        isMoving = true;
+        PlayerManager.Instance.MoveToTile(playerId, islandPosition, () =>
+        {
+            isMoving = false;
+            onCompleted?.Invoke();
+        });
     }
 
 
@@ -393,7 +484,6 @@ public class GameManager : Singleton<GameManager>
         bool shouldReceiveSalary = toPosition < fromPosition; // RollDice와 같은 규칙: toPosition < fromPosition 이면 출발지 통과
 
         HandlePlayerMoved(player.PlayerId, fromPosition, toPosition, shouldReceiveSalary);
-        ProcessArrival(player.PlayerId, toPosition); // 도착한 칸 효과 처리
     }
 
     // CardEffect: MoveBy - N칸 이동한다 (음수면 뒤로, 뒤로 갈 때는 월급 없음)
@@ -412,8 +502,11 @@ public class GameManager : Singleton<GameManager>
         int toPosition = ((fromPosition + steps) % boardSize + boardSize) % boardSize;
         bool shouldReceiveSalary = steps > 0 && fromPosition + steps >= boardSize;
 
-        HandlePlayerMoved(player.PlayerId, fromPosition, toPosition, shouldReceiveSalary);
-        ProcessArrival(player.PlayerId, toPosition); // 도착한 칸 효과 처리
+        // 이동이 끝나면 두 함수 모두 알아서 ProcessArrival을 호출합니다.
+        if (steps > 0)
+            HandlePlayerMoved(player.PlayerId, fromPosition, toPosition, shouldReceiveSalary);
+        else
+            MovePlayerDirectly(player.PlayerId, toPosition);   // 뒤로 이동
     }
 
     // CardEffect: GoToInspection - 무인도로 바로 이동한다 (월급 없음, 더블이어도 추가 턴 없음)
@@ -449,9 +542,19 @@ public class GameManager : Singleton<GameManager>
     // ────────────────────────── 토지 구매 ──────────────────────────
     public void HandlePurchasePropertyPrompt(long playerId, int propertyId, long amount)
     {
-        // 플레이어의 경우, 땅을 구매할 것인지 선택 가능한 UI를 표시합니다.
-
         // 봇의 경우, 돈이 있다면 무조건 구매합니다.
+        if (playerId == 456)
+        {
+            if (GetPlayerState(456).Money >= amount)
+            {
+                PurchaseProperty(456, propertyId);
+            }
+
+            return;
+        }
+
+        // 플레이어의 경우, 땅을 구매할 것인지 선택 가능한 UI를 표시합니다.
+        Debug.Log("땅 구매 결정 창 뜨는 기능 미구현...");
     }
 
     /// <summary>
@@ -492,9 +595,19 @@ public class GameManager : Singleton<GameManager>
     // ────────────────────────── 건물 건설 ──────────────────────────
     public void HandleBuildPrompt(long playerId, int propertyId, long amount)
     {
-        // 플레이어의 경우, 건설할 것인지 선택 가능한 UI를 표시합니다.
-
         // 봇의 경우, 돈이 있다면 무조건 건설합니다.
+        if (playerId == 456)
+        {
+            if (GetPlayerState(456).Money >= amount)
+            {
+                Build(456, propertyId);
+            }
+
+            return;
+        }
+        
+        // 플레이어의 경우, 건설할 것인지 선택 가능한 UI를 표시합니다.
+        Debug.Log("건설 결정 창 뜨는 기능 미구현...");
     }
 
     /// <summary>
@@ -540,11 +653,21 @@ public class GameManager : Singleton<GameManager>
 
 
     // ────────────────────────── 자산 인수 ──────────────────────────
-    public void HandleAcquirePropertyPrompt(long playerId, int propertyId)
+    public void HandleAcquirePropertyPrompt(long playerId, int propertyId, long amount)
     {
-        // 플레이어의 경우, 인수할 것인지 선택 가능한 UI를 표시합니다.
-        
         // 봇의 경우, 돈이 있다면 무조건 인수합니다.
+        if (playerId == 456)
+        {
+            if (GetPlayerState(456).Money >= amount)
+            {
+                AcquireProperty(456, propertyId);
+            }
+
+            return;
+        }
+        
+        // 플레이어의 경우, 인수할 것인지 선택 가능한 UI를 표시합니다.
+        Debug.Log("인수 결정 창 뜨는 기능 미구현...");
     }
 
     /// <summary>
