@@ -36,6 +36,44 @@ public class PropertyManager : MonoBehaviour
     [SerializeField] private List<PropertyData> properties = new();
     private Dictionary<int, PropertyData> propertiesById;
 
+    // ───────────── JSON 불러오기 (에디터용) ─────────────
+
+    [Header("JSON Import")]
+    [SerializeField] private TextAsset propertiesJson;
+
+    [System.Serializable]
+    private class PropertyDataListWrapper
+    {
+        public List<PropertyData> properties;
+    }
+
+    /// <summary>propertiesJson의 내용을 properties 리스트에 채웁니다. (에디터에서 우클릭 메뉴로 실행)</summary>
+    [ContextMenu("Load Properties From JSON")]
+    private void LoadPropertiesFromJson()
+    {
+        if (propertiesJson == null)
+        {
+            Debug.LogError("[PropertyManager] propertiesJson이 연결되지 않았습니다.", this);
+            return;
+        }
+
+        var wrapper = JsonUtility.FromJson<PropertyDataListWrapper>(propertiesJson.text);
+        if (wrapper == null || wrapper.properties == null || wrapper.properties.Count == 0)
+        {
+            Debug.LogError("[PropertyManager] JSON 파싱 실패 또는 데이터가 비어 있습니다.", this);
+            return;
+        }
+
+        properties = wrapper.properties;
+        propertiesById = null;   // 조회용 캐시 초기화
+
+#if UNITY_EDITOR
+        UnityEditor.EditorUtility.SetDirty(this);
+#endif
+
+        Debug.Log($"[PropertyManager] JSON에서 {properties.Count}개 로드 완료", this);
+    }
+
     private void Awake()
     {
         if (_instance != null && _instance != this)
