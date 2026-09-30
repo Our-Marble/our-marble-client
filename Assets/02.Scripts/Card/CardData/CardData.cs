@@ -16,19 +16,4 @@ public class CardData : ScriptableObject
     public int targetTileId;
     public int steps;
     public bool penaltyToFestivalPool;
-
-    public CardDefinition ToDefinition()
-    {
-        return new CardDefinition
-        {
-            id = id,
-            name = cardName,
-            description = description,
-            effectType = effectType,
-            amount = amount,
-            targetTileId = targetTileId,
-            steps = steps,
-            penaltyToFestivalPool = penaltyToFestivalPool
-        };
-    }
 }

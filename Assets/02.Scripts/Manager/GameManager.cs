@@ -12,10 +12,10 @@ public class GameManager : MonoBehaviour
 
     public List<long> playerOrder;
 
-    [SerializeField] private CardManager cardManager; // 황금 열쇠 카드 처리
-
     private bool isDouble; // 추가 턴 진행 여부를 결정하는데 사용됩니다.
     private int consecutiveDoubleCount; // 추후 3연속 더블시 무인도행을 판정할 때 사용합니다.
+
+    private const int IslandTurns = 3; // 무인도 영업정지 턴 수
 
     private void Awake()
     {
@@ -199,9 +199,8 @@ public class GameManager : MonoBehaviour
                 break;
 
             case TileType.GOLDEN_KEY: // 황금열쇠에 도착
-                // 황금 열쇠 카드 드로우
-                // DrawCard();
-                ProcessEndTurn();
+                // 황금 열쇠 카드 드로우 (턴 처리는 각 CardEffect 실행 메서드에서 진행하므로 ProcessEndTurn 호출하지 않음)
+                DrawCard(playerId);
                 break;
 
             case TileType.PROPERTY: // 자산 유형의 타일에 도착
@@ -317,7 +316,7 @@ public class GameManager : MonoBehaviour
         // 말 이동 연출을 재생합니다.
     }
 
-    private const int IslandTurns = 3; // 무인도 영업정지 턴 수
+
 
     /// <summary>
     /// 플레이어를 무인도로 바로 보낸다. (황금 열쇠 무인도 카드, 3연속 더블)
@@ -339,27 +338,115 @@ public class GameManager : MonoBehaviour
         // 무인도 이동 연출을 재생합니다. (순간이동, 월급 없음)
     }
 
-    /// <summary>
-    /// 황금 열쇠 카드로 은행과 돈을 주고받는다. (보너스는 +, 은행행 벌금은 -)
-    /// 적립금으로 가는 벌금은 HandleDonationPaid를 사용한다.
-    /// </summary>
-    public void HandleCardMoneyChanged(long playerId, long delta)
+    // ────────────────────────── 황금 열쇠 CardEffect 실행 ──────────────────────────
+    // CardManager가 카드의 EffectType을 확인한 뒤 호출합니다.
+    // 대상은 현재 턴 플레이어(gameState.CurrentPlayerId)이며, 게임 상태 변경 후 다음 흐름(턴 종료, 도착 칸 처리)까지 진행합니다.
+
+    // CardEffect: Bonus - 은행에서 돈을 받는다
+    public void ExecuteBonusEffect(int amount)
     {
-        // GameState를 갱신합니다. (플레이어 현금 증감)
-        // var player = GetPlayerState(playerId);
-        // if (player == null)
-        // {
-        //     Debug.LogError($"[GameManager] 카드 재화 변경 실패: 플레이어 {playerId} 없음");
-        //     return;
-        // }
-        //
-        // long before = player.Money;
-        // player.Money += delta;
-        // EconomyManager.NotifyMoneyChanged(playerId, before, player.Money);
+        PlayerState player = GetPlayerState(gameState.CurrentPlayerId);
+        if (player == null)
+        {
+            ProcessEndTurn();
+            return;
+        }
 
-        // TODO: 벌금(delta < 0)이 현금보다 클 때 매각/파산 처리 (경제 담당과 협의)
+        long before = player.Money;
+        player.Money += amount;
+        EconomyManager.NotifyMoneyChanged(player.PlayerId, before, player.Money);
 
-        // 재화 획득/손실 연출을 재생합니다.
+        // 재화 획득 연출을 재생합니다.
+
+        ProcessEndTurn();
+    }
+
+    // CardEffect: Penalty - 은행 또는 기부금(WelfareFund)에 돈을 낸다
+    public void ExecutePenaltyEffect(int amount, bool toWelfareFund)
+    {
+        PlayerState player = GetPlayerState(gameState.CurrentPlayerId);
+        if (player == null)
+        {
+            ProcessEndTurn();
+            return;
+        }
+
+        // TODO: 현금이 벌금보다 적을 때 매각/파산 처리 (경제 담당과 협의)
+        long before = player.Money;
+        player.Money -= amount;
+        if (toWelfareFund)
+            gameState.WelfareFund += amount;
+        EconomyManager.NotifyMoneyChanged(player.PlayerId, before, player.Money);
+
+        // 재화 손실 연출을 재생합니다.
+
+        ProcessEndTurn();
+    }
+
+    // CardEffect: MoveTo - 지정한 칸으로 앞으로 이동한다 (출발지를 지나면 월급)
+    public void ExecuteMoveToEffect(int targetTileId)
+    {
+        PlayerState player = GetPlayerState(gameState.CurrentPlayerId);
+        if (player == null)
+        {
+            ProcessEndTurn();
+            return;
+        }
+
+        int fromPosition = player.Position;
+        int toPosition = targetTileId;
+        bool shouldReceiveSalary = toPosition < fromPosition; // RollDice와 같은 규칙: toPosition < fromPosition 이면 출발지 통과
+
+        HandlePlayerMoved(player.PlayerId, fromPosition, toPosition, shouldReceiveSalary);
+        ProcessArrival(player.PlayerId, toPosition); // 도착한 칸 효과 처리
+    }
+
+    // CardEffect: MoveBy - N칸 이동한다 (음수면 뒤로, 뒤로 갈 때는 월급 없음)
+    public void ExecuteMoveByEffect(int steps)
+    {
+        PlayerState player = GetPlayerState(gameState.CurrentPlayerId);
+        int boardSize = BoardManager.Instance.BoardData.Tiles.Count;
+        if (player == null || boardSize <= 0)
+        {
+            Debug.LogError($"[GameManager] MoveBy 카드 실패: 플레이어 또는 보드 데이터 없음 (보드 칸 수 {boardSize})");
+            ProcessEndTurn();
+            return;
+        }
+
+        int fromPosition = player.Position;
+        int toPosition = ((fromPosition + steps) % boardSize + boardSize) % boardSize;
+        bool shouldReceiveSalary = steps > 0 && fromPosition + steps >= boardSize;
+
+        HandlePlayerMoved(player.PlayerId, fromPosition, toPosition, shouldReceiveSalary);
+        ProcessArrival(player.PlayerId, toPosition); // 도착한 칸 효과 처리
+    }
+
+    // CardEffect: GoToInspection - 무인도로 바로 이동한다 (월급 없음, 더블이어도 추가 턴 없음)
+    public void ExecuteGoToInspectionEffect()
+    {
+        PlayerState player = GetPlayerState(gameState.CurrentPlayerId);
+        int islandPosition = FindIslandTileIndex();
+        if (player == null || islandPosition < 0)
+        {
+            Debug.LogError($"[GameManager] 무인도 카드 실패: 플레이어 또는 무인도 칸 없음");
+            ProcessEndTurn();
+            return;
+        }
+
+        HandleSentToIsland(player.PlayerId, player.Position, islandPosition);
+        HandleTurnChanged(GetNextPlayerId()); // 추가 턴 없이 턴을 넘깁니다.
+    }
+
+    // 보드에서 무인도(ISLAND) 칸 번호를 찾는다. 없으면 -1
+    private int FindIslandTileIndex()
+    {
+        foreach (TileData tile in BoardManager.Instance.BoardData.Tiles)
+        {
+            if (tile != null && tile.Type == TileType.ISLAND)
+                return tile.Index;
+        }
+
+        return -1;
     }
 
 
@@ -622,21 +709,25 @@ public class GameManager : MonoBehaviour
 
     public void DrawCard(long playerId)
     {
-        CardResult result = cardManager.Draw(playerId); // 카드 뽑기 + 효과 적용
+        // 덱에 등록된 CardId 중 하나를 랜덤으로 결정합니다. (카드 장수, 사용 여부는 고려하지 않음)
+        List<int> cardIds = CardManager.Instance.GetCardIds();
+        if (cardIds.Count == 0)
+        {
+            Debug.LogError("[GameManager] 황금 열쇠 카드 없음: CardDeckData 확인 필요");
+            ProcessEndTurn();
+            return;
+        }
 
-        if (result.requiresTileResolve)
-            ProcessArrival(playerId, result.landedTileId); // 이동 카드: 도착 칸 처리
-        else if (result.sentToInspection)
-            HandleTurnChanged(GetNextPlayerId());          // 무인도행: 추가 턴 없이 턴 넘김
-        else
-            ProcessEndTurn();                              // 그 외: 턴 종료
+        int cardId = cardIds[random.Next(cardIds.Count)];
+        HandleCardDrawn(cardId);
     }
 
     public void HandleCardDrawn(int cardId)
     {
-        // (보관 가능한 카드의 경우)GameState를 갱신합니다.
-
-        // (즉시 발동되는 카드의 경우)cardId에 맞는 효과를 연출합니다.
+        // CardManager가 CardId로 카드를 조회하고, EffectType에 맞는 CardEffect 실행 메서드를 호출합니다.
+        bool played = CardManager.Instance.PlayCard(cardId);
+        if (!played)
+            ProcessEndTurn(); // 카드 조회 실패 시 턴이 멈추지 않도록 종료
     }
 
     /// <summary>

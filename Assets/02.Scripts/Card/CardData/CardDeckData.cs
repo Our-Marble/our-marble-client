@@ -10,28 +10,9 @@ public class CardDeckData : ScriptableObject
     public class Entry
     {
         public CardData card;
-        [Min(1)] public int count = 1;
     }
 
     public List<Entry> entries = new List<Entry>();
-
-    // 로직에 넘길 카드 목록 (장수만큼 복제)
-    public List<CardDefinition> BuildDefinitions()
-    {
-        var list = new List<CardDefinition>();
-        foreach (var entry in entries)
-        {
-            if (entry.card == null)
-                continue;
-
-            for (int i = 0; i < entry.count; i++)
-            {
-                list.Add(entry.card.ToDefinition());
-            }
-        }
-
-        return list;
-    }
 
     // cardId로 표시용 데이터(이름, 설명, 아이콘) 찾기. UI 매니저가 카드 연출할 때 사용
     public CardData FindById(int id)
@@ -43,5 +24,22 @@ public class CardDeckData : ScriptableObject
         }
 
         return null;
+    }
+
+    // 덱에 등록된 CardId 목록 (같은 id는 한 번만). 카드 장수, 사용 여부와 무관
+    // GameManager가 랜덤 CardId를 결정할 때 사용
+    public List<int> GetCardIds()
+    {
+        var ids = new List<int>();
+        foreach (var entry in entries)
+        {
+            if (entry.card == null)
+                continue;
+
+            if (!ids.Contains(entry.card.id))
+                ids.Add(entry.card.id);
+        }
+
+        return ids;
     }
 }
