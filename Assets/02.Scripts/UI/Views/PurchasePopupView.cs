@@ -139,6 +139,16 @@ public class PurchasePopupView : UIView
         SetOnClick(buyButton, () => PlayBought(selected.TargetLevel, onBuy));
         SetOnClick(cancelButton, () => { Close(); onCancel?.Invoke(); });
         Open();
+
+        // 창이 열린 뒤에 기본 선택을 한 번 더 확실히 켠다. (닫혀 있는 동안 켠 토글은 선택 표시가 갱신되지 않을 수 있다)
+        // 지금 살 수 있는 첫 단계가 선택된 상태로 보이게 한다.
+        if (pick >= 0 && optionCards[pick] != null && optionCards[pick].toggle != null)
+        {
+            var pickToggle = optionCards[pick].toggle;
+            pickToggle.SetIsOnWithoutNotify(false);
+            pickToggle.isOn = true;
+            Select(pick, notifyToggle: false);
+        }
     }
 
     private void SetupCard(int index)

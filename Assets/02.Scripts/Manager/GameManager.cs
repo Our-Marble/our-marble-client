@@ -216,6 +216,15 @@ public class GameManager : Singleton<GameManager>
         if (UIManager.Instance != null)
         {
             UIManager.Instance.ShowChooseDestinationPopup();
+            // TODO: 보드에서 칸을 고르는 기능이 아직 없어서, 창을 잠시 보여준 뒤 닫고 아래 임시 이동(기부금수령 타일)으로 이어갑니다.
+            // 보드 선택이 구현되면 이 RunAfterDelay 블록은 지우세요. (칸을 누르면 UIManager.OnBoardTileClicked가 HandleDestinationChosen을 부릅니다.)
+            RunAfterDelay(() =>
+            {
+                if (!UIManager.Instance.IsChoosingDestination) return; // 그 사이 직접 골랐다면 아무것도 하지 않는다
+                UIManager.Instance.HideChooseDestinationPopup();
+                Debug.Log("자유여행할 타일 선택 기능 미구현... 임시로 기부금수령 타일로 이동합니다.");
+                HandleDestinationChosen(16);
+            });
             return;
         }
         // 플레이어의 경우, 자유 여행할 타일을 선택하는 UI를 표시합니다.
@@ -746,14 +755,12 @@ public class GameManager : Singleton<GameManager>
 
             return;
         }
-
+        // 플레이어의 경우, 땅을 구매할 것인지 선택 가능한 UI를 표시합니다.
         if (UIManager.Instance != null)
         {
             UIManager.Instance.ShowPurchasePropertyPopup(playerId, propertyId, (int)amount);
             return;
         }
-        // 플레이어의 경우, 땅을 구매할 것인지 선택 가능한 UI를 표시합니다.
-        Debug.Log("땅 구매 결정 창 뜨는 기능 미구현...");
     }
 
     /// <summary>
