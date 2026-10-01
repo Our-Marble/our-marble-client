@@ -41,7 +41,6 @@ public class UIDebugPanel : MonoBehaviour
         for (int i = 0; i < Players.Count; i++) UI.SetPlayerProfile(Players[i].PlayerId, Names[i]);
         UI.SetLocalPlayer(Players[LocalPlayer].PlayerId);
         UI.DiceRoll?.SetIslandTurns(0);
-        UI.BuildLockReason = LapLockReason;
         ready = true;
 
         FillHud(animate: false);
@@ -199,21 +198,6 @@ public class UIDebugPanel : MonoBehaviour
         }
     }
 
-    private int lap = 1; // 현재 바퀴 (별 1개는 2바퀴, 2개는 3바퀴, 3개는 4바퀴부터)
-
-    private void NextLap()
-    {
-        lap = Mathf.Min(lap + 1, 4);
-        Log($"{lap}바퀴째");
-    }
-
-    // 별(건설) 단계는 바퀴 수로 잠근다: 건물 1바퀴, 별 1개 2바퀴, 별 2개 3바퀴, 별 3개 4바퀴부터
-    private string LapLockReason(BuildingLevel level)
-    {
-        int unlockLap = (int)level + 1;
-        return lap < unlockLap ? $"{unlockLap}바퀴부터" : null;
-    }
-
     // ───────────── 땅 (PropertyManager 데이터 + GameState) ─────────────
 
     private void DrawPropertySection()
@@ -239,7 +223,6 @@ public class UIDebugPanel : MonoBehaviour
             ("봇 땅", () => SetOwner(data.Id, other, 0)));
         Row(("단계 +1", () => { if (state != null && state.BuildingLevel < BuildingLevel.Hotel) SetOwner(data.Id, state.OwnerId, (int)state.BuildingLevel + 1); }),
             ("내 돈 100,000", () => SetMyMoney(100000)), ("내 돈 100", () => SetMyMoney(100)));
-        if (GUILayout.Button($"바퀴 +1 (현재 {lap}바퀴째, 건설창 별 잠금)")) NextLap();
         GUILayout.Label("아래 팝업 버튼 → 누르면 GameManager.Purchase/Build/Acquire/Sell 호출");
         Row(("구매 창", () => UI.ShowPurchasePropertyPopup(me, data.Id, (int)PropertyManager.Instance.GetLandPrice(data.Id))),
             ("건설 창", () => UI.ShowBuildPopup(me, data.Id)));

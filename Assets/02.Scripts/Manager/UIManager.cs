@@ -55,12 +55,6 @@ public class UIManager : MonoBehaviour
     // ───────────── 밖에서 연결하는 곳 ─────────────
 
     /// <summary>
-    /// 건설 단계를 잠그는 규칙. 잠가야 하면 사유(예: "2바퀴부터")를, 열려 있으면 null을 돌려준다.
-    /// 바퀴 수처럼 UI가 모르는 규칙은 GameManager 쪽에서 이 함수를 지정해서 알려준다.
-    /// </summary>
-    public Func<BuildingLevel, string> BuildLockReason { get; set; }
-
-    /// <summary>
     /// 특수 칸(PropertyData.CanBuild == false, 예: 카페)의 효과 설명을 돌려주는 함수. propertyId를 받아 문장을 돌려줍니다.
     /// 지정하지 않거나 빈 문장이면 기본 안내가 나옵니다. (설명 데이터가 PropertyData에 생기면 여기서 읽으면 됩니다.)
     /// </summary>
@@ -123,6 +117,16 @@ public class UIManager : MonoBehaviour
         if (destinationSelect != null) destinationSelect.Show();
     }
 
+    /// <summary>목적지 선택 창이 떠 있고 칸을 고르기를 기다리는 중인지</summary>
+    public bool IsChoosingDestination => chooseDestinationMode;
+
+    // 목적지 선택 창을 선택 없이 닫는 함수입니다. (보드 선택이 구현되기 전의 임시 흐름에서 씁니다.)
+    public void HideChooseDestinationPopup()
+    {
+        chooseDestinationMode = false;
+        if (destinationSelect != null) destinationSelect.Close();
+    }
+
     // 주사위 굴리기 버튼이 있는 창을 띄워주는 함수입니다.
     // 굴리기 버튼을 누르면 GameManager.RollDice() 를 호출합니다.
     // 현재 차례 플레이어가 무인도에 갇혀 있으면 남은 턴도 함께 보여줍니다.
@@ -144,6 +148,7 @@ public class UIManager : MonoBehaviour
     // 빈 땅에 대하여  사기 & 사지않기 버튼이 있는 창을 띄워주는 함수입니다.
     // 사기 버튼을 누르면 GameManager.PurchaseProperty(playerId, propertyId) 를 호출합니다.
     // 사지않기 버튼을 누르면 GameManager.DeclinePropertyPurchase(playerId, propertyId) 를 호출합니다.
+    // 이 창은 빈 땅 전용입니다. (내 땅의 건설은 GameManager가 ShowBuildPopup으로 따로 부릅니다.)
     // 땅 구매 창은 '건물(땅 구매)'만 고를 수 있고, 별 카드는 구매 뒤 건설 단계라 잠겨서 보입니다.
     public void ShowPurchasePropertyPopup(long playerId, long propertyId, int amount)
     {
@@ -153,20 +158,6 @@ public class UIManager : MonoBehaviour
         PropertyData data = PropertyManager.Instance.GetData(id);
         PlayerState player = GetPlayer(playerId);
 
-        // 내 땅이면 가진 단계까지 "보유 중" (Land=건물, Villa=별1, Building=별2, Hotel=별3)
-        // 남의 땅은 인수 선택을 거치므로 여기서 따로 막지 않는다
-        PropertyState owned = GetProperty(id);
-        bool mine = owned != null && owned.OwnerId.HasValue && owned.OwnerId.Value == playerId;
-        int ownedLevel = mine ? (int)owned.BuildingLevel : -1;
-
-        // 이미 내 땅이고 더 지을 수 있으면, 다음 단계(별 추가)를 고르는 건설 창과 같다 (바퀴 제한은 BuildLockReason)
-        bool special = data != null && !data.CanBuild; // 특수 칸은 건물(땅)만 살 수 있고 별 건설이 없다
-        if (mine && !special && ownedLevel < (int)BuildingLevel.Hotel && data != null)
-        {
-            ShowBuildPopup(playerId, id);
-            return;
-        }
-
         var options = new List<PurchasePopupView.Option>
         {
             new PurchasePopupView.Option
@@ -174,18 +165,17 @@ public class UIManager : MonoBehaviour
                 TargetLevel = BuildingLevel.Land,
                 Cost = amount,
                 Toll = data != null ? data.GetToll(BuildingLevel.Land) : 0,
-                Locked = mine,
-                LockReason = mine ? "보유 중" : null,
             }
         };
 
+        // 특수 칸(PropertyData.CanBuild == false)은 건물(땅)만 살 수 있고 별 건설이 없어서, 별 카드 대신 효과 설명을 보여준다
+        bool special = data != null && !data.CanBuild;
         if (special)
         {
-            string description = SpecialDescription(id);
             purchase.Show(TileName(id), null, options, player != null ? player.Money : 0,
                 level => { if (Game != null) Game.PurchaseProperty(playerId, id); },
                 () => { if (Game != null) Game.DeclinePropertyPurchase(playerId, id); },
-                OwnerLabel(owned), description);
+                OwnerLabel(GetProperty(id)), SpecialDescription(id));
             return;
         }
 
@@ -195,22 +185,20 @@ public class UIManager : MonoBehaviour
             var level = (BuildingLevel)i;
             if (data != null) buildCostSum += data.GetBuildCost(level);
 
-            string reason = BuildLockReason != null ? BuildLockReason(level) : null;
             options.Add(new PurchasePopupView.Option
             {
                 TargetLevel = level,
                 Cost = buildCostSum,
                 Toll = data != null ? data.GetToll(level) : 0,
                 Locked = true,
-                LockReason = i <= ownedLevel ? "보유 중"
-                    : string.IsNullOrEmpty(reason) ? "구매 후 건설" : reason,
+                LockReason = "다음 단계",
             });
         }
 
         purchase.Show(TileName(id), null, options, player != null ? player.Money : 0,
             level => { if (Game != null) Game.PurchaseProperty(playerId, id); },
             () => { if (Game != null) Game.DeclinePropertyPurchase(playerId, id); },
-            OwnerLabel(owned));
+            OwnerLabel(GetProperty(id)));
     }
 
     // 건설하기 & 건설하지않기 버튼이 있는 창을 띄워주는 함수입니다.
@@ -248,16 +236,7 @@ public class UIManager : MonoBehaviour
                 if (i > current + 1)
                 {
                     option.Locked = true;
-                    option.LockReason = "이전 단계 먼저";
-                }
-                else
-                {
-                    string reason = BuildLockReason != null ? BuildLockReason(level) : null;
-                    if (!string.IsNullOrEmpty(reason))
-                    {
-                        option.Locked = true;
-                        option.LockReason = reason;
-                    }
+                    option.LockReason = "다음 단계";
                 }
             }
             options.Add(option);
