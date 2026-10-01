@@ -108,7 +108,7 @@ public class UIManager : MonoBehaviour
         if (diceRoll != null) diceRoll.SetInteractable(false); // 목적지를 고르는 동안에는 주사위를 굴릴 수 없다
 
         // TODO: BoardManager에 구현되면 주석을 풀어주세요. (보드를 여행지 선택 모드로 바꿉니다)
-        // BoardManager.Instance.ChangeToSelectTravelMode();
+        BoardManager.Instance.ChangeToSelectTravelMode();
 
         if (destinationSelect != null) destinationSelect.Show(CompleteDestination); // 완료 버튼은 꺼진 상태로 시작
     }
@@ -136,10 +136,10 @@ public class UIManager : MonoBehaviour
         if (destinationSelect != null) destinationSelect.Close();
 
         // TODO: BoardManager에 구현되면 주석을 풀어주세요. (보드를 다시 둘러보기 모드로 바꿉니다)
-        // BoardManager.Instance.ChangeToInspectMode();
+        BoardManager.Instance.ChangeToInspectMode();
 
         // TODO: GameManager에 구현되면 주석을 풀어주세요.
-        // if (Game != null) Game.ChooseDestination(destination);
+        if (Game != null) Game.ChooseDestination(destination);
     }
 
     /// <summary>목적지 선택 창이 떠 있고 칸을 고르기를 기다리는 중인지</summary>
@@ -326,7 +326,7 @@ public class UIManager : MonoBehaviour
         selectedSellPropertyIds.Clear();
 
         // TODO: BoardManager에 구현되면 주석을 풀어주세요. (보드를 매각 자산 선택 모드로 바꿉니다)
-        // BoardManager.Instance.ChangeToSelectSellMode();
+        BoardManager.Instance.ChangeToSelectSellMode();
 
         PlayerState payer = GetPlayer(payerId);
         bool loanAvailable = BankLoanRequested != null && !loanUsed.Contains(payerId);
@@ -1026,18 +1026,4 @@ public class UIManager : MonoBehaviour
     }
 
     #endregion
-    
-    
-    
-    // 컴파일 에러 안나기 위해 임시로 만든 함수입니다. 현규님 작업 끝나시면 이 함수는 삭제됩니다.
-    public void CheckTilesValidForTravel(List<int> tileIndexes)
-    {
-        return;
-    }
-    
-    // 컴파일 에러 안나기 위해 임시로 만든 함수입니다. 현규님 작업 끝나시면 이 함수는 삭제됩니다.
-    public void CheckTilesValidForSell(List<int> tileIndexes)
-    {
-        return;
-    }
 }

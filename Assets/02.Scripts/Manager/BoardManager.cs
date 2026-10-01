@@ -21,7 +21,7 @@ public class BoardManager : Singleton<BoardManager>
     
     private TileClickMode mode = TileClickMode.Inspect;
     
-    List<int> selectedIndexes = new List<int>();
+    public List<int> selectedIndexes = new List<int>();
     int maxSelectCount = 0;
 
     public void ChangeToSelectTravelMode()
@@ -62,6 +62,7 @@ public class BoardManager : Singleton<BoardManager>
                 if (selectedIndexes.Contains(tileIndex))
                 {
                     selectedIndexes.Remove(tileIndex);
+                    UIManager.Instance.CheckTileValidForTravel(selectedIndexes);
                     return;
                 }
 
@@ -75,7 +76,7 @@ public class BoardManager : Singleton<BoardManager>
                 selectedIndexes.Add(tileIndex);
                 
                 // 선택 완료 버튼 활성화 여부 결정함수 호출
-                UIManager.Instance.CheckTilesValidForTravel(selectedIndexes);
+                UIManager.Instance.CheckTileValidForTravel(selectedIndexes);
                 return;
             
             case TileClickMode.SelectSell:
@@ -83,6 +84,7 @@ public class BoardManager : Singleton<BoardManager>
                 if (selectedIndexes.Contains(tileIndex))
                 {
                     selectedIndexes.Remove(tileIndex);
+                    UIManager.Instance.CheckTilesValidForSell(selectedIndexes);
                     return;
                 }
                 
