@@ -23,10 +23,10 @@ public class PlayerManager : MonoBehaviour
     [Tooltip("칸 중심 기준 오프셋입니다. 기본값은 3D 보드(XZ 평면)용이며, 2D 보드라면 Z 대신 Y 값을 쓰세요.")]
     [SerializeField] private Vector3[] slotOffsets =
     {
-        new Vector3(-0.25f, 0f,  0.25f), // 1P: 왼쪽 위
-        new Vector3( 0.25f, 0f,  0.25f), // 2P: 오른쪽 위
-        new Vector3(-0.25f, 0f, -0.25f), // 3P: 왼쪽 아래
-        new Vector3( 0.25f, 0f, -0.25f), // 4P: 오른쪽 아래
+        new Vector3(-0.25f, 0.25f,  0f), // 1P: 왼쪽 위
+        new Vector3( 0.25f, 0.25f,  0f), // 2P: 오른쪽 위
+        new Vector3(-0.25f, -0.25f, 0f), // 3P: 왼쪽 아래
+        new Vector3( 0.25f, -0.25f, 0f), // 4P: 오른쪽 아래
     };
 
     private readonly Dictionary<long, PlayerPawn> pawnsByPlayerId = new();

@@ -1002,7 +1002,7 @@ MonoBehaviour:
   salaryAmount: 100000
   startMoney: 500000
   autoPlayAllPlayers: 1
-  botActionDelay: 3
+  botActionDelay: 0
   playerSetups:
   - playerId: 12
     isBot: 0
@@ -2899,6 +2899,11 @@ MonoBehaviour:
   - {fileID: 1279938393}
   hopDuration: 0.25
   slideDuration: 0.6
+  slotOffsets:
+  - {x: -0.25, y: 0.25, z: 1}
+  - {x: 0.25, y: 0.25, z: 0}
+  - {x: -0.25, y: -0.25, z: 0}
+  - {x: 0.25, y: -0.25, z: 1}
 --- !u!4 &1503842746
 Transform:
   m_ObjectHideFlags: 0
