@@ -768,7 +768,7 @@ public class UIManager : MonoBehaviour
             data.CanBuild ? null : SpecialDescription(propertyId));
     }
 
-    // 황금열쇠 카드를 뽑는 연출입니다. CardManager.PlayCard가 카드 효과를 실행하기 전에 부릅니다.
+    // 황금열쇠 카드를 뽑는 연출입니다. GameManager.HandleCardDrawn이 카드 효과(ExecuteCardEffect)를 실행하기 전에 부르면 됩니다.
     // 카드가 뒤집혀 이름·설명이 나오고, 확인을 누르면 onConfirm을 호출합니다. (여기서 카드 효과를 실행하면 됩니다.)
     public void ShowCardDrawPopup(int cardId, Action onConfirm)
     {
