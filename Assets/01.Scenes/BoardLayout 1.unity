@@ -7093,7 +7093,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &271148788
 RectTransform:
   m_ObjectHideFlags: 0
@@ -54612,6 +54612,7 @@ GameObject:
   - component: {fileID: 1739979339}
   - component: {fileID: 1739979338}
   - component: {fileID: 1739979337}
+  - component: {fileID: 1739979340}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -54662,7 +54663,7 @@ Camera:
   far clip plane: 1000
   field of view: 60
   orthographic: 1
-  orthographic size: 5.5
+  orthographic size: 8
   m_Depth: -1
   m_CullingMask:
     serializedVersion: 2
@@ -54693,6 +54694,22 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1739979340
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1739979336}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 56666c5a40171f54783dd416a44f42bf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.EventSystems.Physics2DRaycaster
+  m_EventMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_MaxRayIntersections: 0
 --- !u!1 &1740626579
 GameObject:
   m_ObjectHideFlags: 0
@@ -57543,7 +57560,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &1814115619
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -57979,6 +57996,7 @@ MonoBehaviour:
   dimGroup: {fileID: 0}
   titleText: {fileID: 1295977210}
   hintText: {fileID: 364415051}
+  completeButton: {fileID: 0}
 --- !u!224 &1826900267
 RectTransform:
   m_ObjectHideFlags: 0
@@ -68685,6 +68703,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BoardManager
   boardController: {fileID: 839385234}
   boardData: {fileID: 11400000, guid: d05d5df88b4bc65488273ca45c54509a, type: 2}
+  selectedIndexes: 
 --- !u!4 &2127056688
 Transform:
   m_ObjectHideFlags: 0
@@ -69407,6 +69426,7 @@ SceneRoots:
   - {fileID: 1104434968}
   - {fileID: 1681845908}
   - {fileID: 787508606}
+  - {fileID: 1980586733}
   - {fileID: 1611914579}
   - {fileID: 645166351}
   - {fileID: 1200730790}
@@ -69418,7 +69438,6 @@ SceneRoots:
   - {fileID: 1035139366}
   - {fileID: 624877001}
   - {fileID: 22263459}
-  - {fileID: 1980586733}
   - {fileID: 641707231}
   - {fileID: 1539130663}
   - {fileID: 314615845}
