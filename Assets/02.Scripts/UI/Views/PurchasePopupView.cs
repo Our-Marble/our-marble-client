@@ -39,6 +39,12 @@ public class PurchasePopupView : UIView
 
     [SerializeField] private Image tileImage;
     [SerializeField] private TMP_Text tileNameText;
+    [SerializeField] private GameObject stageTrackRoot;    // 별 단계 표시 (특수 칸에서는 숨김)
+    [SerializeField] private GameObject optionsRoot;       // 건물/별 선택 카드 (특수 칸에서는 숨김)
+    [SerializeField] private GameObject specialBadge;      // "특수 칸" 배지 (특수 칸에서만 보임)
+    [SerializeField] private GameObject effectBox;         // 땅 효과 설명 상자 (특수 칸에서만 보임)
+    [SerializeField] private TMP_Text effectText;
+    [SerializeField] private TMP_Text ownerText;   // 타일 사진 왼쪽 아래 칩: "빈 땅" / "● 이름 님의 땅"
     [SerializeField] private StageTrack stageTrack = new StageTrack();
     [SerializeField] private OptionRefs[] optionCards = new OptionRefs[OptionCount];
     [SerializeField] private TMP_Text tollText;
@@ -57,6 +63,12 @@ public class PurchasePopupView : UIView
         const string w = "PurchasePopup/Window/";
         tileImage = Find<Image>(w + "TilePortrait/TileImage");
         tileNameText = Find<TMP_Text>(w + "TileNameText");
+        ownerText = Find<TMP_Text>(w + "TilePortrait/OwnerChip/OwnerText");
+        stageTrackRoot = FindObject(w + "StageTrack");
+        optionsRoot = FindObject(w + "Options");
+        specialBadge = FindObject(w + "SpecialBadge");
+        effectBox = FindObject(w + "EffectBox");
+        effectText = Find<TMP_Text>(w + "EffectBox/DescText");
         stageTrack.Bind(transform.Find(w + "StageTrack"));
         for (int i = 0; i < OptionCount; i++)
         {
@@ -82,7 +94,8 @@ public class PurchasePopupView : UIView
     /// 처음엔 잠기지 않은 첫 카드가 선택된다. onBuy에는 고른 단계가 넘어간다.
     /// </summary>
     public void Show(string tileName, Sprite image, IList<Option> options,
-                     long cash, Action<BuildingLevel> onBuy, Action onCancel)
+                     long cash, Action<BuildingLevel> onBuy, Action onCancel, string ownerLabel = null,
+                     string specialDescription = null)
     {
         boughtSequence?.Kill(complete: false);
         this.cash = cash;
@@ -97,6 +110,19 @@ public class PurchasePopupView : UIView
         if (cancelButton != null) cancelButton.interactable = true;
         if (image != null && tileImage != null) { tileImage.sprite = image; tileImage.color = Color.white; }
         if (tileNameText != null) tileNameText.text = tileName;
+        // 특수 칸(별 건설 없음): 선택 카드와 별 단계 대신 "특수 칸" 배지와 효과 설명을 보여준다. 살 수 있는 것은 땅(건물)뿐이다
+        bool special = specialDescription != null;
+        SetActive(stageTrackRoot, !special);
+        SetActive(optionsRoot, !special);
+        SetActive(specialBadge, special);
+        SetActive(effectBox, special);
+        if (effectText != null) effectText.text = specialDescription ?? "";
+
+        if (ownerText != null)
+        {
+            ownerText.text = ownerLabel ?? "";
+            if (ownerText.transform.parent != null) ownerText.transform.parent.gameObject.SetActive(!string.IsNullOrEmpty(ownerLabel));
+        }
         if (cashText != null) cashText.text = UIPalette.Money(cash);
 
         int first = -1, firstUnlocked = -1;

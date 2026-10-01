@@ -97,6 +97,17 @@ public static class GameUISetup
             infos.GetArrayElementAtIndex(i).objectReferenceValue = playerInfos[i];
         foreach (var (field, view) in views)
             so.FindProperty(field).objectReferenceValue = view;
+
+        // 황금열쇠 카드 덱: 비어 있으면 프로젝트의 CardDeckData를 찾아 연결한다 (카드 이름·설명·아이콘 조회용)
+        var deckProperty = so.FindProperty("cardDeck");
+        if (deckProperty != null && deckProperty.objectReferenceValue == null)
+        {
+            string[] guids = AssetDatabase.FindAssets("t:CardDeckData");
+            if (guids.Length > 0)
+                deckProperty.objectReferenceValue = AssetDatabase.LoadAssetAtPath<CardDeckData>(AssetDatabase.GUIDToAssetPath(guids[0]));
+            else
+                Debug.LogWarning("[GameUISetup] CardDeckData 에셋이 없어 카드 덱을 연결하지 못했습니다. UIManager의 Card Deck에 직접 넣어주세요.");
+        }
         so.ApplyModifiedProperties();
 
         EditorSceneManager.MarkSceneDirty(scene);

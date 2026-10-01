@@ -41,6 +41,9 @@ public class DiceResultView : UIView
     [SerializeField] private float autoHideSeconds = 1.5f;
 
     private Sequence sequence;
+    private Sequence rollLoop;   // 결과를 기다리는 동안 계속 굴러가는 연출
+    private Tween shake1, shake2;
+    private bool rolling;
 
     public override void Bind()
     {
@@ -56,12 +59,63 @@ public class DiceResultView : UIView
     }
 
     /// <summary>
+    /// 결과를 기다리는 굴림 상태를 시작한다. 창을 열고, Show()로 결과가 들어오기 전까지 주사위가 계속 구른다.
+    /// 굴리기 버튼을 누르는 즉시(결과를 요청하는 시점에) 부른다.
+    /// </summary>
+    public void StartRolling()
+    {
+        sequence?.Kill();
+        KillRollLoop();
+        ResetVisuals();
+        SetActive(doubleBadge, false);
+        SetActive(doubleSubText, false);
+        SetActive(doubleHighlight, false);
+        if (totalText != null) totalText.text = "";
+        Open();
+        rolling = true;
+
+        rollLoop = DOTween.Sequence().SetUpdate(true).SetLink(gameObject).SetLoops(-1);
+        rollLoop.AppendCallback(() =>
+        {
+            SetFace(die1Pips, Random.Range(1, 7));
+            SetFace(die2Pips, Random.Range(1, 7));
+        });
+        rollLoop.AppendInterval(0.07f);
+
+        var die1 = DieOf(die1Pips);
+        var die2 = DieOf(die2Pips);
+        if (die1 != null) shake1 = die1.DOShakeRotation(0.5f, new Vector3(0f, 0f, 22f), 14, 90f, true).SetUpdate(true).SetLink(gameObject).SetLoops(-1);
+        if (die2 != null) shake2 = die2.DOShakeRotation(0.5f, new Vector3(0f, 0f, 22f), 14, 90f, true).SetUpdate(true).SetLink(gameObject).SetLoops(-1);
+    }
+
+    /// <summary>결과가 오지 않아 굴림을 취소할 때 부른다. 굴리는 중이던 창을 닫는다.</summary>
+    public void CancelRolling()
+    {
+        if (!rolling) return;
+        KillRollLoop();
+        ResetVisuals();
+        Close();
+    }
+
+    private void KillRollLoop()
+    {
+        rolling = false;
+        rollLoop?.Kill();
+        shake1?.Kill();
+        shake2?.Kill();
+        rollLoop = null;
+        shake1 = shake2 = null;
+    }
+
+    /// <summary>
     /// 두 주사위 값(1~6)을 굴림 연출과 함께 보여준다. onRevealed는 합계·더블 표시까지 끝난 뒤 호출.
     /// 그 뒤 autoHideSeconds(기본 1.5초)가 지나면 창이 스스로 닫힌다.
     /// </summary>
     public void Show(int dice1, int dice2, Action onRevealed = null)
     {
         sequence?.Kill();
+        bool wasRolling = rolling; // 이미 굴러가는 중이면 결과가 오는 즉시 멈추는 연출로 이어간다
+        KillRollLoop();
         ResetVisuals();
 
         bool isDouble = dice1 == dice2;
@@ -69,22 +123,25 @@ public class DiceResultView : UIView
         SetActive(doubleSubText, false);
         SetActive(doubleHighlight, false);
         if (totalText != null) totalText.text = "";
-        Open();
+        if (!wasRolling) Open();
 
         var die1 = DieOf(die1Pips);
         var die2 = DieOf(die2Pips);
         sequence = DOTween.Sequence().SetUpdate(true).SetLink(gameObject);
 
         // 1) 굴림: 눈이 바뀌는 간격이 점점 길어진다
+        // (이미 굴러가던 중이면 짧게 감속만 한다)
+        int steps = wasRolling ? 3 : rollSteps;
+        float seconds = wasRolling ? rollSeconds * 0.35f : rollSeconds;
         float rollTime = 0f;
-        for (int k = 0; k < rollSteps; k++)
+        for (int k = 0; k < steps; k++)
         {
             sequence.AppendCallback(() =>
             {
                 SetFace(die1Pips, Random.Range(1, 7));
                 SetFace(die2Pips, Random.Range(1, 7));
             });
-            float interval = rollSeconds / rollSteps * Mathf.Lerp(0.6f, 1.6f, k / (float)rollSteps);
+            float interval = seconds / steps * Mathf.Lerp(0.6f, 1.6f, k / (float)steps);
             sequence.AppendInterval(interval);
             rollTime += interval;
         }
