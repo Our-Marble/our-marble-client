@@ -6,38 +6,9 @@ using UnityEngine;
 // - 카드의 EffectType을 확인해 GameManager의 CardEffect 실행 메서드를 호출
 // - 실제 게임 상태는 변경하지 않음 (GameManager 담당)
 // - 추후 카드 연출 효과 재생 담당
-public class CardManager : MonoBehaviour
+public class CardManager : Singleton<CardManager>
 {
-    private static CardManager _instance;
-    public static CardManager Instance
-    {
-        get
-        {
-            if (_instance == null)
-            {
-                _instance = FindFirstObjectByType<CardManager>(); // 씬에 이미 존재하는지 검색
-
-                if (_instance == null) // 없으면 동적으로 생성 
-                {
-                    GameObject go = new GameObject("CardManager");
-                    _instance = go.AddComponent<CardManager>();
-                }
-            }
-            return _instance;
-        }
-    }
-
     [SerializeField] private CardDeckData deckData; // 카드 종류 및 카드 데이터
-
-    private void Awake()
-    {
-        if (_instance != null && _instance != this)
-        {
-            Destroy(gameObject);
-            return;
-        }
-        _instance = this;
-    }
 
     // 덱에 등록된 CardId 목록. GameManager가 랜덤 CardId를 결정할 때 사용
     public List<int> GetCardIds()
