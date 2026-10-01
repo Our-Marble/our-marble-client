@@ -330,8 +330,7 @@ public class GameManager : Singleton<GameManager>
                 Log($"[3연속 더블] {P(playerId)}: 무인도로 이동합니다.");
                 isDouble = false;
                 consecutiveDoubleCount = 0;
-                HandleSentToIsland(playerId, player.Position, islandPosition,
-                    () => HandleTurnChanged(GetNextPlayerId()));
+                MovePlayerDirectly(playerId, islandPosition); // 순간이동 (월급 없음) → 도착 처리에서 영업정지 설정 + 턴 넘김
                 return;
             }
         }
@@ -513,7 +512,7 @@ public class GameManager : Singleton<GameManager>
 #endregion
 
     /// <summary>
-    /// 말이 목적지로 직접 이동합니다. (자유여행, 뒤로 이동 카드 등) 이동이 끝나면 도착 처리를 합니다.
+    /// 말이 목적지로 직접 이동합니다. (자유여행, 뒤로 이동 카드, 무인도행 등) 월급은 없으며, 이동이 끝나면 도착 처리를 합니다.
     /// </summary>
     private void MovePlayerDirectly(long playerId, int toPosition)
     {
@@ -586,36 +585,6 @@ public class GameManager : Singleton<GameManager>
         
         PlayerManager.Instance.HidePawn(playerId);
     }
-
-    /// <summary>
-    /// 플레이어를 무인도로 바로 보낸다. (황금 열쇠 무인도 카드, 3연속 더블)
-    /// 걸어서 이동하는 것이 아니므로 출발지를 지나도 월급이 없다.
-    /// </summary>
-    public void HandleSentToIsland(long playerId, int fromPosition, int islandPosition, Action onCompleted = null)
-    {
-        // GameState를 갱신합니다. (위치를 무인도로, 영업정지 턴 설정)
-        var player = GetPlayerState(playerId);
-        if (player == null)
-        {
-            Debug.LogError($"[GameManager] 무인도 이동 실패: 플레이어 {playerId} 없음");
-            return;
-        }
-
-        Log($"[무인도] {P(playerId)}: {TileName(fromPosition)} → 무인도 (영업정지 {IslandTurns}턴)");
-        
-        player.Position = islandPosition;
-        player.IslandTurnsRemaining = IslandTurns;
-
-        // 무인도 이동 연출을 재생합니다. (순간이동, 월급 없음)
-        SpecialTileManager.Instance.PlaySentToIsland(playerId, fromPosition, islandPosition);
-        isMoving = true;
-        PlayerManager.Instance.MoveToTile(playerId, islandPosition, () =>
-        {
-            isMoving = false;
-            onCompleted?.Invoke();
-        });
-    }
-
 
 #region Card Effect
     // ────────────────────────── 황금 열쇠 CardEffect 실행 ──────────────────────────
@@ -720,9 +689,10 @@ public class GameManager : Singleton<GameManager>
             return;
         }
 
-        // 이동 연출이 끝난 뒤 추가 턴 없이 턴을 넘깁니다.
-        HandleSentToIsland(player.PlayerId, player.Position, islandPosition,
-            () => HandleTurnChanged(GetNextPlayerId()));
+        Log($"[카드:무인도] {P(player.PlayerId)}: 무인도로 이동합니다.");
+
+        // 순간이동 (월급 없음) → 도착 처리에서 영업정지 설정 + 추가 턴 없이 턴 넘김
+        MovePlayerDirectly(player.PlayerId, islandPosition);
     }
 
     // 보드에서 무인도(ISLAND) 칸 번호를 찾는다. 없으면 -1
