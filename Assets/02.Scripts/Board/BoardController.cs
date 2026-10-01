@@ -110,4 +110,10 @@ public class BoardController : MonoBehaviour
         
         boardTile.SetSpriteColor(newColor);
     }
+        int tileIndex = propertyData.BoardIndex;
+
+        BoardTile boardTile = boardTiles[tileIndex];
+
+        boardTile.SetBuildingSpriteRenderers(buildingLevel);
+    }
 }
