@@ -6865,6 +6865,52 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 218594094}
   m_CullTransparentMesh: 1
+--- !u!1 &220068473
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 220068475}
+  - component: {fileID: 220068474}
+  m_Layer: 0
+  m_Name: BoardManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &220068474
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 220068473}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d0cb5c7d53ab40118261b913b3df22f9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BoardManager
+  boardController: {fileID: 0}
+  boardData: {fileID: 11400000, guid: d05d5df88b4bc65488273ca45c54509a, type: 2}
+--- !u!4 &220068475
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 220068473}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &224286383
 GameObject:
   m_ObjectHideFlags: 0
@@ -23918,6 +23964,7 @@ MonoBehaviour:
     landPrice: 350000
     buildCosts: f049020000000000e093040000000000d0dd060000000000
     tolls: 007d0000000000000071020000000000005307000000000000f9150000000000
+  propertiesJson: {fileID: 4900000, guid: fb0ac76d45bfb9a4dbdccb57f784e0ac, type: 3}
 --- !u!4 &750152844
 Transform:
   m_ObjectHideFlags: 0
@@ -42292,7 +42339,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 069721c10cced2f45b61d7ecb207eb02, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GameManager
-  playerOrder: 7b00000000000000c801000000000000
+  salaryAmount: 100000
+  startMoney: 500000
+  autoPlayAllPlayers: 0
+  botActionDelay: 3
+  playerSetups:
+  - playerId: 123
+    isBot: 0
+  - playerId: 456
+    isBot: 1
 --- !u!4 &1447545942
 Transform:
   m_ObjectHideFlags: 0
@@ -65513,3 +65568,4 @@ SceneRoots:
   - {fileID: 855802360}
   - {fileID: 2140110792}
   - {fileID: 1150495120}
+  - {fileID: 220068475}
