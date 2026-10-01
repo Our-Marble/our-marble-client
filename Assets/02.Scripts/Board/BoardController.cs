@@ -21,7 +21,7 @@ public class BoardController : MonoBehaviour
     [SerializeField] private List<BoardTile> boardTiles = new();
     
     [Header("Colors")]
-    [SerializeField] private Color defaultColor = Color.beige;
+    [SerializeField] private Color defaultColor = Color.gray8;
     [SerializeField] private Color defaultTextColor = Color.brown;
     [SerializeField] private Color cornerColor = Color.aliceBlue;
     public IReadOnlyList<BoardTile> BoardTiles => boardTiles;
@@ -110,6 +110,11 @@ public class BoardController : MonoBehaviour
         
         boardTile.SetSpriteColor(newColor);
     }
+    
+    public void UpdatePropertyBuildingVisual(int propertyId, BuildingLevel buildingLevel)
+    {
+        PropertyData propertyData = PropertyManager.Instance.GetData(propertyId);
+        
         int tileIndex = propertyData.BoardIndex;
 
         BoardTile boardTile = boardTiles[tileIndex];

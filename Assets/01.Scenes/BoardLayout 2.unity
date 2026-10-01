@@ -10933,7 +10933,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::GameManager
   salaryAmount: 20000
   taxAmount: 100000
-  startMoney: 500000
+  startMoney: 1500000
+  forceDice1: -1
+  forceDice2: -1
   autoPlayAllPlayers: 0
   botActionDelay: 1
   playerSetups:
