@@ -1197,10 +1197,18 @@ public class GameManager : Singleton<GameManager>
             return;
         }
 
-        // TODO: 카드 연출
+        long playerId = gameState.CurrentPlayerId;
+        Log($"[황금열쇠] {P(playerId)}: '{card.cardName}' 카드를 뽑았습니다.");
 
-        // EffectType에 맞는 CardEffect 실행 메서드를 호출합니다.
-        ExecuteCardEffect(card);
+        if (UIManager.Instance == null)
+        {
+            ExecuteCardEffect(card); // UI가 없으면 바로 실행합니다.
+            return;
+        }
+
+        // 카드 연출을 재생합니다. 연출이 끝나면 EffectType에 맞는 CardEffect 실행 메서드를 호출합니다.
+        // 내 카드면 확인을 눌렀을 때, 다른 플레이어 카드면 자동으로 닫힐 때 실행됩니다. (전원 자동 진행 테스트에서는 모두 자동으로 닫힘)
+        UIManager.Instance.ShowCardDrawPopup(playerId, card.id, autoPlayAllPlayers, () => ExecuteCardEffect(card));
     }
 
     private void SetOwnerId(PropertyState state, long? playerId)

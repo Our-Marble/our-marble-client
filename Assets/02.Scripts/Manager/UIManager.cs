@@ -35,6 +35,8 @@ public class UIManager : MonoBehaviour
     [Header("데이터")]
     [Tooltip("황금열쇠 카드의 이름·설명·아이콘을 찾는 덱. CardManager가 쓰는 덱과 같은 에셋을 연결한다.")]
     [SerializeField] private CardDeckData cardDeck;
+    [Tooltip("다른 플레이어가 뽑은 황금열쇠 카드를 보여주는 시간(초). 카드가 뒤집힌 뒤부터 센다.")]
+    [SerializeField] private float otherCardShowSeconds = 2f;
     [Tooltip("상단바에 '턴 N / 최대'로 보여줄 최대 턴")]
     [SerializeField] private int maxTurn = 30;
 
@@ -766,9 +768,11 @@ public class UIManager : MonoBehaviour
             data.CanBuild ? null : SpecialDescription(propertyId));
     }
 
-    // 황금열쇠 카드를 뽑는 연출입니다. GameManager.HandleCardDrawn이 카드 효과(ExecuteCardEffect)를 실행하기 전에 부르면 됩니다.
-    // 카드가 뒤집혀 이름·설명이 나오고, 확인을 누르면 onConfirm을 호출합니다. (여기서 카드 효과를 실행하면 됩니다.)
-    public void ShowCardDrawPopup(int cardId, Action onConfirm)
+    // 황금열쇠 카드를 뽑는 연출입니다. GameManager.HandleCardDrawn이 카드 효과(ExecuteCardEffect)를 실행하기 전에 부릅니다.
+    // 카드가 뒤집혀 이름·설명이 나옵니다.
+    // - 이 화면의 플레이어(LocalPlayerId)가 뽑은 카드: 확인을 누르면 onConfirm을 호출합니다.
+    // - 다른 플레이어가 뽑은 카드, 또는 forceAutoClose: 확인 버튼 없이 otherCardShowSeconds 동안 보여준 뒤 스스로 닫히고 onConfirm을 호출합니다.
+    public void ShowCardDrawPopup(long playerId, int cardId, bool forceAutoClose, Action onConfirm)
     {
         if (cardDraw == null)
         {
@@ -781,12 +785,12 @@ public class UIManager : MonoBehaviour
         string description = card != null ? card.description : "";
         Sprite icon = card != null ? card.icon : null;
 
-        long currentId = State != null ? State.CurrentPlayerId : 0;
+        bool autoClose = forceAutoClose || playerId != LocalPlayerId; // 내 카드가 아니면 자동으로 닫힌다
         cardDraw.Show(cardName, description, icon, false, () =>
         {
-            SetNextMoneyReason(currentId, "황금열쇠"); // 카드로 돈이 바뀌면 사유가 '황금열쇠'로 뜬다
+            SetNextMoneyReason(playerId, "황금열쇠"); // 카드로 돈이 바뀌면 사유가 '황금열쇠'로 뜬다
             onConfirm?.Invoke();
-        });
+        }, autoClose ? otherCardShowSeconds : 0f);
     }
 
     // 게임 결과 창을 띄우는 함수입니다. 게임이 끝났을 때 GameManager가 호출합니다.
