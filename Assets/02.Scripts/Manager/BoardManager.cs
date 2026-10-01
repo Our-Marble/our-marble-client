@@ -117,7 +117,10 @@ public class BoardManager : Singleton<BoardManager>
          boardController.UpdatePropertyTileColor(propertyId, playerId);
     }
 
-
+    public void UpdatePropertyBuildingVisual(int propertyId, BuildingLevel buildingLevel)
+    {
+        boardController.UpdatePropertyBuildingVisual(propertyId, buildingLevel);
+    }
 
 
 

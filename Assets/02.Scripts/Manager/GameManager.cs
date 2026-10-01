@@ -23,6 +23,10 @@ public class GameManager : Singleton<GameManager>
     
     private bool isMoving;
     
+    // ────────────────────────── 기능 테스트용 주사위 값 지정 필드 ──────────────────────────
+    [Header("기능 테스트용 주사위 값 강제")]
+    public int forceDice1 = -1;
+    public int forceDice2 = -1;
     
     // ────────────────────────── MVP 단계에서 봇 테스트용 ──────────────────────────
     [Header("Bot (Test)")]
@@ -285,6 +289,19 @@ public class GameManager : Singleton<GameManager>
         int dice1 = random.Next(1, 7);
         int dice2 = random.Next(1, 7);
 
+        // TODO: 기능 테스트 끝나면 forceDice1, forceDice2와 함께 코드 제거
+        if(forceDice1 != -1)
+        {
+            dice1 = forceDice1;
+            forceDice1 = -1;
+        }
+        if(forceDice2 != -1)
+        {
+            dice2 = forceDice2;
+            forceDice2 = -1;
+        }
+        
+        
         // HandleRollDice를 호출합니다.
         HandleDiceRolled(dice1, dice2);
     }
@@ -803,7 +820,7 @@ public class GameManager : Singleton<GameManager>
 
         player.Money -= amount;
         SetOwnerId(property, playerId);
-        property.BuildingLevel = BuildingLevel.Land; // 새로 산 땅은 건물 없음
+        SetBuildingLevel(property, BuildingLevel.Land); // 새로 산 땅은 건물 없음
         Log($"[구매] {P(playerId)}: {CityName(propertyId)} 구매 (-{Won(amount)}, 남은 현금 {Won(player.Money)})");
         
         // 자산 구매 연출을 재생합니다.
@@ -869,8 +886,7 @@ public class GameManager : Singleton<GameManager>
         if (player == null || property == null) return;
 
         player.Money -= amount; //건설비 차감
-        property.BuildingLevel += 1; // 건설 레벨 증가
-
+        SetBuildingLevel(property, property.BuildingLevel + 1); // 건설 레벨 증가
         // 건설 연출을 재생합니다.
         if (UIManager.Instance != null)
             UIManager.Instance.PlayMoneyChange(playerId, -amount, "건설");
@@ -1045,7 +1061,7 @@ public class GameManager : Singleton<GameManager>
             if (property == null || property.OwnerId != payerId)  continue; // 소유자가 맞는지 확인
             
             SetOwnerId(property, null); // 주인 없는 땅으로
-            property.BuildingLevel = BuildingLevel.Land; // 건설 레벨 초기화
+            SetBuildingLevel(property, BuildingLevel.Land); // 건설 레벨 초기화
             
         }
 
@@ -1078,7 +1094,7 @@ public class GameManager : Singleton<GameManager>
 
             liquidated += PropertyManager.Instance.GetSellValue(state); // 매각가 합산
             SetOwnerId(state, null); // 주인 없는 땅으로
-            state.BuildingLevel = BuildingLevel.Land; // 건설 레벨 초기화
+            SetBuildingLevel(state, BuildingLevel.Land); // 건설 레벨 초기화
         }
 
         receiver.Money += payer.Money + liquidated; // 납부자 현금 전액 + 땅 매각가 합계
@@ -1193,6 +1209,14 @@ public class GameManager : Singleton<GameManager>
         
         int propertyId = state.PropertyId;
         BoardManager.Instance.UpdatePropertyTileColor(propertyId, playerId);
+    }
+    
+    private void SetBuildingLevel(PropertyState state, BuildingLevel buildingLevel)
+    {
+        state.BuildingLevel = buildingLevel;
+        
+        int propertyId = state.PropertyId;
+        BoardManager.Instance.UpdatePropertyBuildingVisual(propertyId, buildingLevel);
     }
 
     /// <summary>
