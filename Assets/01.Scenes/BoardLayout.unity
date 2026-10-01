@@ -384,8 +384,15 @@ MonoBehaviour:
   pawns:
   - {fileID: 959385828}
   - {fileID: 747579192}
+  - {fileID: 1877955607}
+  - {fileID: 1279938394}
   hopDuration: 0.25
   slideDuration: 0.6
+  slotOffsets:
+  - {x: -0.25, y: 0.25, z: 0}
+  - {x: 0.25, y: 0.25, z: 0}
+  - {x: -0.25, y: -0.25, z: 0}
+  - {x: 0.25, y: -0.25, z: 0}
 --- !u!4 &45369953
 Transform:
   m_ObjectHideFlags: 0
@@ -625,6 +632,16 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GameManager
   salaryAmount: 20000
+  startMoney: 500000
+  autoPlayAllPlayers: 1
+  botActionDelay: 1
+  playerSetups:
+  - playerId: 123
+    isBot: 0
+  - playerId: 456
+    isBot: 0
+  - playerId: 789
+    isBot: 0
 --- !u!4 &337382219
 Transform:
   m_ObjectHideFlags: 0
@@ -2404,6 +2421,17 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 1266910959943693191, guid: d4b5c650d149afd4aac1fa95bf65e131, type: 3}
   m_PrefabInstance: {fileID: 1279938391}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &1279938394 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 4046341195678712681, guid: d4b5c650d149afd4aac1fa95bf65e131, type: 3}
+  m_PrefabInstance: {fileID: 1279938391}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3e14708fa90e46ba8be6d1fbafee60ca, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerPawn
 --- !u!1001 &1326015104
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -3666,6 +3694,17 @@ SortingGroup:
   m_SortingOrder: 1
   m_SortAtRoot: 0
   m_Sort3DAs2D: 0
+--- !u!114 &1877955607 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 4046341195678712681, guid: d4b5c650d149afd4aac1fa95bf65e131, type: 3}
+  m_PrefabInstance: {fileID: 1850026454}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3e14708fa90e46ba8be6d1fbafee60ca, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerPawn
 --- !u!1001 &1886512403
 PrefabInstance:
   m_ObjectHideFlags: 0

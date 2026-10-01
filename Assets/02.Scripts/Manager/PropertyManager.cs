@@ -33,6 +33,8 @@ public class PropertyManager : Singleton<PropertyManager>
     [ContextMenu("Load Properties From JSON")]
     private void LoadPropertiesFromJson()
     {
+        Debug.Log("[PropertyManager] Load Properties From JSON...");
+        
         if (propertiesJson == null)
         {
             Debug.LogError("[PropertyManager] propertiesJson이 연결되지 않았습니다.", this);
@@ -58,8 +60,6 @@ public class PropertyManager : Singleton<PropertyManager>
     
     protected override void OnAwake()
     {
-        LoadPropertiesFromJson();
-        
         RegisterAllTiles();
     }
 
@@ -251,6 +251,8 @@ public class PropertyManager : Singleton<PropertyManager>
 
     public List<PropertyData> GetAllDataByMapId(int mapId)
     {
+        LoadPropertiesFromJson();
+        
         List<PropertyData> mapProperties = new List<PropertyData>();
         foreach (PropertyData property in properties) 
         {
