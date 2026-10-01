@@ -43,6 +43,7 @@ GameObject:
   - component: {fileID: 913559918821767492}
   - component: {fileID: 2348141544149210300}
   - component: {fileID: 9041873821325544295}
+  - component: {fileID: 4107680266248024367}
   m_Layer: 0
   m_Name: RightTopTile
   m_TagString: Untagged
@@ -116,7 +117,7 @@ SpriteRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_Sprite: {fileID: 327836805144445387, guid: b1800530ab6e20046b9291da2eca7bb4, type: 3}
-  m_Color: {r: 0, g: 1, b: 0.05348277, a: 1}
+  m_Color: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 1}
   m_FlipX: 1
   m_FlipY: 0
   m_DrawMode: 0
@@ -139,6 +140,61 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BoardTile
   spriteRenderer: {fileID: 2348141544149210300}
   tileText: {fileID: 941814910522187475}
+--- !u!60 &4107680266248024367
+PolygonCollider2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4967973253131959313}
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Density: 1
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_ForceSendLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ForceReceiveLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ContactCaptureLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_CallbackLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_IsTrigger: 0
+  m_UsedByEffector: 0
+  m_CompositeOperation: 0
+  m_CompositeOrder: 0
+  m_Offset: {x: 0, y: 0}
+  m_SpriteTilingProperty:
+    border: {x: 0, y: 0, z: 0, w: 0}
+    pivot: {x: 0.5, y: 0.5}
+    oldSize: {x: 2.57, y: 1.62}
+    newSize: {x: 0.16, y: 0.16}
+    adaptiveTilingThreshold: 0.5
+    drawMode: 0
+    adaptiveTiling: 0
+  m_AutoTiling: 0
+  m_Points:
+    m_Paths:
+    - - {x: -0.22466874, y: -0.59439}
+      - {x: 1.2143081, y: 0.23177311}
+      - {x: 1.1927681, y: 0.39124966}
+      - {x: 0.515303, y: 0.7520087}
+      - {x: 0.24632311, y: 0.7355309}
+      - {x: -1.183184, y: -0.054984525}
+      - {x: -1.2040251, y: -0.119366445}
+      - {x: -0.3363706, y: -0.6045793}
+  m_UseDelaunayMesh: 1
 --- !u!1 &7686670524701841919
 GameObject:
   m_ObjectHideFlags: 0

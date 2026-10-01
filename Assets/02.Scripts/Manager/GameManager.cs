@@ -211,7 +211,7 @@ public class GameManager : Singleton<GameManager>
         // 봇의 경우, 복지기금수령(16)을 목적지로 HandleDestinationChosen를 호출합니다. (빈 땅을 우선적으로 선택하는 등의 지능은 추후 개발)
         if ((IsBot(gameState.CurrentPlayerId)))
         {
-            HandleDestinationChosen(16);
+            ChooseDestination(16);
             return;
         }
         if (UIManager.Instance != null)
@@ -224,15 +224,20 @@ public class GameManager : Singleton<GameManager>
                 if (!UIManager.Instance.IsChoosingDestination) return; // 그 사이 직접 골랐다면 아무것도 하지 않는다
                 UIManager.Instance.HideChooseDestinationPopup();
                 Debug.Log("자유여행할 타일 선택 기능 미구현... 임시로 기부금수령 타일로 이동합니다.");
-                HandleDestinationChosen(16);
+                ChooseDestination(16);
             });
             return;
         }
         // 플레이어의 경우, 자유 여행할 타일을 선택하는 UI를 표시합니다.
         Debug.Log("자유여행할 타일 선택 기능 미구현... 임시로 기부금수령 타일로 이동합니다.");
-        HandleDestinationChosen(16);
+        ChooseDestination(16);
     }
 
+    public void ChooseDestination(int destinationPosition)
+    {
+        HandleDestinationChosen(destinationPosition);
+    }
+    
     /// <summary>
     /// 화면에서 자유 이동할 위치를 누르면 이 함수가 호출됩니다.
     /// </summary>
@@ -1187,7 +1192,7 @@ public class GameManager : Singleton<GameManager>
     /// </summary>
     /// 
     /// 플레이어 상태, 없으면 null. (호출한 쪽에서 null 확인 필요)
-    private PlayerState GetPlayerState(long playerId)
+    public PlayerState GetPlayerState(long playerId)
     {
         PlayerState playerState = gameState.PlayerStates.Find(p => p.PlayerId == playerId);
 
@@ -1203,7 +1208,7 @@ public class GameManager : Singleton<GameManager>
     /// 
     /// 땅 상태, 없으면 null. (호출한 쪽에서 null 확인 필요)
 
-    private PropertyState GetPropertyState(long propertyId)
+    public PropertyState GetPropertyState(long propertyId)
     {
         PropertyState propertyState = gameState.PropertyStates.Find(p => p.PropertyId == propertyId);
 
