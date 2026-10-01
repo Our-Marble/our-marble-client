@@ -42,9 +42,15 @@ public class CardDrawView : UIView
         confirmLabel = Find<TMP_Text>(c + "Front/ConfirmButton/Label");
     }
 
-    /// <summary>keepable: 보관 카드면 "보관하기", 즉시 발동이면 "확인".</summary>
-    public void Show(string cardName, string description, Sprite image, bool keepable, Action onConfirm)
+    /// <summary>
+    /// keepable: 보관 카드면 "보관하기", 즉시 발동이면 "확인".
+    /// autoCloseSeconds > 0: 확인 버튼 없이, 카드가 뒤집힌 뒤 그 시간만큼 보여주고 스스로 닫힌 다음 onConfirm을 호출한다. (다른 플레이어가 뽑은 카드)
+    /// </summary>
+    public void Show(string cardName, string description, Sprite image, bool keepable, Action onConfirm, float autoCloseSeconds = 0f)
     {
+        autoCloseTween?.Kill();
+        bool autoClose = autoCloseSeconds > 0f;
+
         if (cardNameText != null) cardNameText.text = cardName;
         if (descriptionText != null) descriptionText.text = description;
         if (image != null && cardImage != null) { cardImage.sprite = image; cardImage.color = Color.white; }
@@ -56,10 +62,25 @@ public class CardDrawView : UIView
             typeTagText.color = keepable ? KeepTagText : InstantTagText;
         }
         if (confirmLabel != null) confirmLabel.text = keepable ? "보관하기" : "확인";
+        if (confirmButton != null) confirmButton.gameObject.SetActive(!autoClose); // 자동으로 닫히는 카드는 확인 버튼을 숨긴다
         SetOnClick(confirmButton, () => { Close(); onConfirm?.Invoke(); });
 
         Open();
-        PlayReveal();
+        PlayReveal(autoClose ? () => ScheduleAutoClose(autoCloseSeconds, onConfirm) : (Action)null);
+    }
+
+    private Tween autoCloseTween;
+
+    /// <summary>seconds 뒤에 창을 닫고 onClosed를 호출한다.</summary>
+    private void ScheduleAutoClose(float seconds, Action onClosed)
+    {
+        autoCloseTween?.Kill();
+        autoCloseTween = DOVirtual.DelayedCall(seconds, () =>
+        {
+            autoCloseTween = null;
+            Close();
+            onClosed?.Invoke();
+        }).SetUpdate(true).SetLink(gameObject);
     }
 
     private const float RiseDistance = 320f;
@@ -68,10 +89,10 @@ public class CardDrawView : UIView
     private bool hasCardRest;
     private float glowRestAlpha = -1f;
 
-    /// <summary>카드가 아래에서 솟아오른 뒤 뒤집히고, 앞면이 나올 때 금빛이 번쩍인다.</summary>
-    private void PlayReveal()
+    /// <summary>카드가 아래에서 솟아오른 뒤 뒤집히고, 앞면이 나올 때 금빛이 번쩍인다. 연출이 끝나면 onRevealed를 호출한다.</summary>
+    private void PlayReveal(Action onRevealed = null)
     {
-        if (card == null) return;
+        if (card == null) { onRevealed?.Invoke(); return; }
         if (!hasCardRest) { cardRestPosition = card.anchoredPosition; hasCardRest = true; }
 
         var glow = card.Find("Glow") != null ? card.Find("Glow").GetComponent<Image>() : null;
@@ -110,6 +131,7 @@ public class CardDrawView : UIView
         {
             if (glow != null) SetAlpha(glow, glowRestAlpha);
             if (confirmButton != null) confirmButton.interactable = true;
+            onRevealed?.Invoke();
         });
     }
 
