@@ -26,7 +26,7 @@ public class TileData
     public int PropertyId => propertyId;
 }
 
-[CreateAssetMenu(fileName = "NewBoardInfo", menuName = "Board/BoardData")]
+[CreateAssetMenu(fileName = "NewBoardData", menuName = "Board/BoardData")]
 public class BoardData : ScriptableObject
 {
     [SerializeField, Min(1)] private int mapId = 1;
