@@ -36,11 +36,17 @@ public class GameManager : Singleton<GameManager>
     }
 
     [Header("Players")] [SerializeField] private List<PlayerSetup> playerSetups = new List<PlayerSetup>();
-
+    
+    
+    // 플레이어 색상 관련 필드
+    private Color[] playerColors = new Color[]{Color.red, Color.green, Color.blue, Color.yellow};
+    private Dictionary<long, Color> playerColorMap;
+    public Color GetPlayerColor(long playerId) => playerColorMap[playerId];
+    
     
     protected override void Awake()
     {
-        // gameState 초기화
+        // gameState 초기화. PropertyStates의 초기화는 Start에서 진행.
         gameState = new  GameState();
         gameState.TurnNumber = 0;
         gameState.CurrentPlayerId = 0;
@@ -49,24 +55,30 @@ public class GameManager : Singleton<GameManager>
         gameState.PlayerStates = new List<PlayerState>();
         foreach (PlayerSetup setup in playerSetups)
             gameState.PlayerStates.Add(new PlayerState(setup.playerId));
-        
-        gameState.PropertyStates = new List<PropertyState>();
-        foreach (PropertyData propertyData in  PropertyManager.Instance.GetAllDataByMapId(1))
-        {
-            gameState.PropertyStates.Add(new PropertyState(propertyData.Id));
-        }
-        
 
         // 그 외 필드 변수 초기화
         random = new System.Random();
         playerOrder = new List<long>();
         isDouble = false;
         consecutiveDoubleCount = 0;
+        
+        // player의 색상 지정. gameState.playerStates 의 순서대로 배정
+        playerColorMap = new Dictionary<long, Color>();
+        for (int i = 0; i < gameState.PlayerStates.Count; i++)
+        {
+            PlayerState playerState = gameState.PlayerStates[i];
+            playerColorMap.Add(playerState.PlayerId, playerColors[i]);
+        }
     }
 
     void Start()
     {
-        
+        // gameState.PropertyStates의 초기화는 PropertyManager의 초기화가 선행되어야 하기 때문에 Start에서 진행
+        gameState.PropertyStates = new List<PropertyState>();
+        foreach (PropertyData propertyData in  PropertyManager.Instance.GetAllDataByMapId(1))
+        {
+            gameState.PropertyStates.Add(new PropertyState(propertyData.Id));
+        }
         
         // MVP 단계에서 플레이어의 playerId는 123, 봇의 playerId는 456 입니다.
         PlayerManager.Instance.Initialize(playerOrder); // 다른 Monobehaviour 클래스를 참조하여 초기화할때는 Awake말고 Start에서 하는게 안전
@@ -211,7 +223,7 @@ public class GameManager : Singleton<GameManager>
         // 봇의 경우, 복지기금수령(16)을 목적지로 HandleDestinationChosen를 호출합니다. (빈 땅을 우선적으로 선택하는 등의 지능은 추후 개발)
         if ((IsBot(gameState.CurrentPlayerId)))
         {
-            HandleDestinationChosen(16);
+            ChooseDestination(16);
             return;
         }
         if (UIManager.Instance != null)
@@ -224,15 +236,20 @@ public class GameManager : Singleton<GameManager>
                 if (!UIManager.Instance.IsChoosingDestination) return; // 그 사이 직접 골랐다면 아무것도 하지 않는다
                 UIManager.Instance.HideChooseDestinationPopup();
                 Debug.Log("자유여행할 타일 선택 기능 미구현... 임시로 기부금수령 타일로 이동합니다.");
-                HandleDestinationChosen(16);
+                ChooseDestination(16);
             });
             return;
         }
         // 플레이어의 경우, 자유 여행할 타일을 선택하는 UI를 표시합니다.
         Debug.Log("자유여행할 타일 선택 기능 미구현... 임시로 기부금수령 타일로 이동합니다.");
-        HandleDestinationChosen(16);
+        ChooseDestination(16);
     }
 
+    public void ChooseDestination(int destinationPosition)
+    {
+        HandleDestinationChosen(destinationPosition);
+    }
+    
     /// <summary>
     /// 화면에서 자유 이동할 위치를 누르면 이 함수가 호출됩니다.
     /// </summary>
@@ -796,7 +813,7 @@ public class GameManager : Singleton<GameManager>
         if (player == null || property == null)  return;
 
         player.Money -= amount;
-        property.OwnerId = playerId;
+        SetOwnerId(property, playerId);
         property.BuildingLevel = BuildingLevel.Land; // 새로 산 땅은 건물 없음
         Log($"[구매] {P(playerId)}: {CityName(propertyId)} 구매 (-{Won(amount)}, 남은 현금 {Won(player.Money)})");
         
@@ -927,8 +944,8 @@ public class GameManager : Singleton<GameManager>
         
         acquirer.Money -= amount; //인수자 돈 차감
         owner.Money += amount; //소유자 돈 증가
-        property.OwnerId = playerId; //소유권 이전
-
+        SetOwnerId(property, playerId); //소유권 이전
+        
         // 인수 연출을 재생합니다.
         if (UIManager.Instance != null)
             UIManager.Instance.PlayMoneyTransfer(playerId, owner.PlayerId, amount, "인수", "인수 대금");
@@ -1038,7 +1055,7 @@ public class GameManager : Singleton<GameManager>
             var property = GetPropertyState(id);
             if (property == null || property.OwnerId != payerId)  continue; // 소유자가 맞는지 확인
             
-            property.OwnerId = null; // 주인 없는 땅으로
+            SetOwnerId(property, null); // 주인 없는 땅으로
             property.BuildingLevel = BuildingLevel.Land; // 건설 레벨 초기화
             
         }
@@ -1071,7 +1088,7 @@ public class GameManager : Singleton<GameManager>
             if (state.OwnerId != payerId) continue;
 
             liquidated += PropertyManager.Instance.GetSellValue(state); // 매각가 합산
-            state.OwnerId = null; // 주인 없는 땅으로
+            SetOwnerId(state, null); // 주인 없는 땅으로
             state.BuildingLevel = BuildingLevel.Land; // 건설 레벨 초기화
         }
 
@@ -1181,13 +1198,21 @@ public class GameManager : Singleton<GameManager>
         ExecuteCardEffect(card);
     }
 
+    private void SetOwnerId(PropertyState state, long? playerId)
+    {
+        state.OwnerId = playerId;
+        
+        int propertyId = state.PropertyId;
+        BoardManager.Instance.UpdatePropertyTileColor(propertyId, playerId);
+    }
+
     /// <summary>
     /// GameState.PlayerStates에서 playerId가 같은 플레이어 상태를 찾는다.
     /// 구매, 건설, 통행료, 인수, 매각 처리에서 돈을 바꿀 대상을 찾을 때 쓴다.
     /// </summary>
     /// 
     /// 플레이어 상태, 없으면 null. (호출한 쪽에서 null 확인 필요)
-    private PlayerState GetPlayerState(long playerId)
+    public PlayerState GetPlayerState(long playerId)
     {
         PlayerState playerState = gameState.PlayerStates.Find(p => p.PlayerId == playerId);
 
@@ -1203,7 +1228,7 @@ public class GameManager : Singleton<GameManager>
     /// 
     /// 땅 상태, 없으면 null. (호출한 쪽에서 null 확인 필요)
 
-    private PropertyState GetPropertyState(long propertyId)
+    public PropertyState GetPropertyState(long propertyId)
     {
         PropertyState propertyState = gameState.PropertyStates.Find(p => p.PropertyId == propertyId);
 

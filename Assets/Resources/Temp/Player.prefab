@@ -105,7 +105,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3e14708fa90e46ba8be6d1fbafee60ca, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerPawn
+  spriteRenderer: {fileID: 7686449618368046719}
   currentTileIndex: 0
+  hopHeight: 0.25
 --- !u!210 &4351393350918666399
 SortingGroup:
   m_ObjectHideFlags: 0

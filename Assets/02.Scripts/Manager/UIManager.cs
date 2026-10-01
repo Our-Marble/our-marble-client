@@ -1028,4 +1028,18 @@ public class UIManager : MonoBehaviour
     }
 
     #endregion
+    
+    
+    
+    // 컴파일 에러 안나기 위해 임시로 만든 함수입니다. 현규님 작업 끝나시면 이 함수는 삭제됩니다.
+    public void CheckTilesValidForTravel(List<int> tileIndexes)
+    {
+        return;
+    }
+    
+    // 컴파일 에러 안나기 위해 임시로 만든 함수입니다. 현규님 작업 끝나시면 이 함수는 삭제됩니다.
+    public void CheckTilesValidForSell(List<int> tileIndexes)
+    {
+        return;
+    }
 }

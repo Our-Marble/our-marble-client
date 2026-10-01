@@ -69,7 +69,13 @@ public class PlayerManager : Singleton<PlayerManager>
             pawnsByPlayerId[playerId] = pawn;
             slotByPlayerId[playerId] = slot;
             pawn.Move(0, GetPawnPosition(playerId, 0));
+            
+            // pawn 색상 초기화
+            Color playerColor = GameManager.Instance.GetPlayerColor(playerId);
+            pawn.SetSpriteColor(playerColor);
         }
+        
+        
     }
 
     public bool TryGetPawn(long playerId, out PlayerPawn pawn)

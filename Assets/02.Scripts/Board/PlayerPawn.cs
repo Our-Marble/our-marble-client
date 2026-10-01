@@ -3,6 +3,7 @@ using UnityEngine;
 
 public class PlayerPawn : MonoBehaviour
 {
+    [SerializeField] private SpriteRenderer spriteRenderer;
     [SerializeField] private int currentTileIndex = -1;
     [SerializeField] private float hopHeight = 0.25f;
 
@@ -38,5 +39,10 @@ public class PlayerPawn : MonoBehaviour
             yield return null;
         }
         Move(tileIndex, targetPosition);
+    }
+    
+    public void SetSpriteColor(Color color)
+    {
+        spriteRenderer.color = color;
     }
 }

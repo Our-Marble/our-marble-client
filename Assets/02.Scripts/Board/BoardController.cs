@@ -26,11 +26,6 @@ public class BoardController : MonoBehaviour
     [SerializeField] private Color cornerColor = Color.aliceBlue;
     public IReadOnlyList<BoardTile> BoardTiles => boardTiles;
     public int TileCount => boardTiles.Count;
-
-    void Start()
-    {
-        ApplyTileTexts();
-    }
     
     /// <summary>tileIndex번 타일의 월드 좌표 (말 이동용)</summary>
     public Vector3 GetTilePosition(int tileIndex)
@@ -61,12 +56,22 @@ public class BoardController : MonoBehaviour
     /// 각 타일의 글자를 BoardData / 재산 데이터(JSON)에 맞게 표시합니다.
     /// 땅(PROPERTY)이면 도시 이름, 그 외에는 칸 종류 이름을 보여줍니다.
     /// </summary>
-    public void ApplyTileTexts()
+    public void InitializeBoardTiles()
     {
         for (int i = 0; i < boardTiles.Count; i++)
         {
+            // 인덱스 설정
+            boardTiles[i].Index = i;
+            
+            // 글자 설정
             TileData tileData = BoardManager.Instance.GetTileData(i);
             boardTiles[i].SetText(defaultTextColor, GetTileLabel(tileData));
+            
+            // 색상 설정
+            if(i % 8 == 0)
+                boardTiles[i].SetSpriteColor(cornerColor);
+            else
+                boardTiles[i].SetSpriteColor(defaultColor);
         }
     }
 
@@ -88,5 +93,21 @@ public class BoardController : MonoBehaviour
             case TileType.WORLD_TRAVEL: return "세계여행";
             default:                    return tileData.Type.ToString();
         }
+    }
+    
+    
+    public void UpdatePropertyTileColor(int propertyId, long? playerId)
+    {
+        PropertyData propertyData = PropertyManager.Instance.GetData(propertyId);
+        
+        int tileIndex = propertyData.BoardIndex;
+
+        BoardTile boardTile = boardTiles[tileIndex];
+
+        Color newColor;
+        if (playerId == null) newColor = defaultColor;
+        else newColor = GameManager.Instance.GetPlayerColor(playerId.Value);
+        
+        boardTile.SetSpriteColor(newColor);
     }
 }
