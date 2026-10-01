@@ -160,7 +160,7 @@ public class GameManager : MonoBehaviour
         foreach (PlayerSetup setup in playerSetups)
             playerOrder.Add(setup.playerId);
 
-        playerManager.Initialize(playerOrder);
+        playerManager.Initialize(playerSetups.ConvertAll(s => s.playerId));
 
         // 모든 플레이어에게 초기자금 지급
         foreach (PlayerState playerState in gameState.PlayerStates)
@@ -527,6 +527,7 @@ public class GameManager : MonoBehaviour
             Log("[게임 종료] 남은 플레이어가 1명입니다.");
             // 게임 종료 함수를 호출합니다.
         }
+        playerManager.HidePawn(playerId);
     }
 
     public void HandleDiceRolled(int dice1, int dice2)
@@ -555,7 +556,7 @@ public class GameManager : MonoBehaviour
         // 2) 말 이동 연출 → 끝나면 도착 처리
         isMoving = true;
         playerManager.MoveBySteps(
-            playerId, steps,
+            playerId, fromPosition, steps,
             onTileReached: tileIndex =>
             {
                 if (shouldReceiveSalary && tileIndex == 0)
