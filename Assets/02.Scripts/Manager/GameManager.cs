@@ -588,11 +588,43 @@ public class GameManager : Singleton<GameManager>
 
 #region Card Effect
     // ────────────────────────── 황금 열쇠 CardEffect 실행 ──────────────────────────
-    // CardManager가 카드의 EffectType을 확인한 뒤 호출합니다.
+    // HandleCardDrawn → ExecuteCardEffect에서 카드의 EffectType을 확인한 뒤 호출합니다.
     // 대상은 현재 턴 플레이어(gameState.CurrentPlayerId)이며, 게임 상태 변경 후 다음 흐름(턴 종료, 도착 칸 처리)까지 진행합니다.
 
+    // 카드의 EffectType을 확인하고 해당 CardEffect 실행 메서드를 호출합니다.
+    private void ExecuteCardEffect(CardData card)
+    {
+        switch (card.effectType)
+        {
+            case CardEffectType.Bonus:
+                ExecuteBonusEffect(card.amount);
+                break;
+
+            case CardEffectType.Penalty:
+                ExecutePenaltyEffect(card.amount, card.penaltyToFestivalPool);
+                break;
+
+            case CardEffectType.MoveTo:
+                ExecuteMoveToEffect(card.targetTileId);
+                break;
+
+            case CardEffectType.MoveBy:
+                ExecuteMoveByEffect(card.steps);
+                break;
+
+            case CardEffectType.GoToInspection:
+                ExecuteGoToInspectionEffect();
+                break;
+
+            default:
+                Debug.LogError($"[GameManager] 처리하지 않은 CardEffectType: {card.effectType}");
+                ProcessEndTurn(); // 턴이 멈추지 않도록 종료
+                break;
+        }
+    }
+
     // CardEffect: Bonus - 은행에서 돈을 받는다
-    public void ExecuteBonusEffect(int amount)
+    private void ExecuteBonusEffect(int amount)
     {
         PlayerState player = GetPlayerState(gameState.CurrentPlayerId);
         if (player == null)
@@ -611,7 +643,7 @@ public class GameManager : Singleton<GameManager>
     }
 
     // CardEffect: Penalty - 은행 또는 기부금(WelfareFund)에 돈을 낸다
-    public void ExecutePenaltyEffect(int amount, bool toWelfareFund)
+    private void ExecutePenaltyEffect(int amount, bool toWelfareFund)
     {
         PlayerState player = GetPlayerState(gameState.CurrentPlayerId);
         if (player == null)
@@ -632,7 +664,7 @@ public class GameManager : Singleton<GameManager>
     }
 
     // CardEffect: MoveTo - 지정한 칸으로 앞으로 이동한다 (출발지를 지나면 월급)
-    public void ExecuteMoveToEffect(int targetTileId)
+    private void ExecuteMoveToEffect(int targetTileId)
     {
         PlayerState player = GetPlayerState(gameState.CurrentPlayerId);
         if (player == null)
@@ -652,7 +684,7 @@ public class GameManager : Singleton<GameManager>
     }
 
     // CardEffect: MoveBy - N칸 이동한다 (음수면 뒤로, 뒤로 갈 때는 월급 없음)
-    public void ExecuteMoveByEffect(int steps)
+    private void ExecuteMoveByEffect(int steps)
     {
         PlayerState player = GetPlayerState(gameState.CurrentPlayerId);
         int boardSize = BoardManager.Instance.BoardData.Tiles.Count;
@@ -677,7 +709,7 @@ public class GameManager : Singleton<GameManager>
     }
 
     // CardEffect: GoToInspection - 무인도로 바로 이동한다 (월급 없음, 더블이어도 추가 턴 없음)
-    public void ExecuteGoToInspectionEffect()
+    private void ExecuteGoToInspectionEffect()
     {
         PlayerState player = GetPlayerState(gameState.CurrentPlayerId);
         int islandPosition = FindIslandTileIndex();
@@ -1130,10 +1162,18 @@ public class GameManager : Singleton<GameManager>
 
     public void HandleCardDrawn(int cardId)
     {
-        // CardManager가 CardId로 카드를 조회하고, EffectType에 맞는 CardEffect 실행 메서드를 호출합니다.
-        bool played = CardManager.Instance.PlayCard(cardId);
-        if (!played)
+        // CardManager에서 CardId로 카드 데이터를 조회합니다.
+        CardData card = CardManager.Instance.FindCard(cardId);
+        if (card == null)
+        {
             ProcessEndTurn(); // 카드 조회 실패 시 턴이 멈추지 않도록 종료
+            return;
+        }
+
+        // TODO: 카드 연출
+
+        // EffectType에 맞는 CardEffect 실행 메서드를 호출합니다.
+        ExecuteCardEffect(card);
     }
 
     /// <summary>
