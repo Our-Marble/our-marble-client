@@ -58,6 +58,12 @@ public class SellPopupView : UIView
         if (sellCompleteButton != null) sellCompleteButton.interactable = balance >= 0;
     }
 
+    /// <summary>매각 완료 버튼을 직접 켜고 끈다. (창을 열 때 꺼진 상태로 시작하게 할 때 쓴다)</summary>
+    public void SetCompleteInteractable(bool interactable)
+    {
+        if (sellCompleteButton != null) sellCompleteButton.interactable = interactable;
+    }
+
     /// <summary>대출 후 현금이 늘었을 때.</summary>
     public void SetCash(long newCash, long selectedTotal)
     {

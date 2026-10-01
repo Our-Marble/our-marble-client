@@ -1,5 +1,7 @@
+using System;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 /// <summary>
 /// 목적지 선택 안내 배너. Canvas_DestinationSelect에 붙는다.
@@ -11,17 +13,27 @@ public class DestinationSelectView : UIView
 
     [SerializeField] private TMP_Text titleText;
     [SerializeField] private TMP_Text hintText;
+    [SerializeField] private Button completeButton;   // "여행지 선택 완료"
 
     public override void Bind()
     {
         titleText = Find<TMP_Text>("DestinationSelectPopup/Window/TitleText");
         hintText = Find<TMP_Text>("DestinationSelectPopup/Window/HintText");
+        completeButton = Find<Button>("DestinationSelectPopup/Window/CompleteButton");
     }
 
-    public void Show(string title = "세계여행", string hint = "보드에서 이동할 칸을 선택하세요")
+    /// <summary>창을 연다. 완료 버튼은 꺼진 채로 시작하고, 칸이 하나 골라지면 SetCompleteInteractable(true)로 켠다.</summary>
+    public void Show(Action onComplete, string title = "세계여행", string hint = "보드에서 이동할 칸을 선택하세요")
     {
         if (titleText != null) titleText.text = title;
         if (hintText != null) hintText.text = hint;
+        SetOnClick(completeButton, () => onComplete?.Invoke());
+        SetCompleteInteractable(false);
         Open();
+    }
+
+    public void SetCompleteInteractable(bool interactable)
+    {
+        if (completeButton != null) completeButton.interactable = interactable;
     }
 }

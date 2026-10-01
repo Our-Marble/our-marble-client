@@ -17,10 +17,15 @@ public static class GameUISetup
         var scene = SceneManager.GetActiveScene();
         int missing = 0;
 
+        // 캔버스가 "UI" 같은 부모 아래에 묶여 있어도 찾는다 (꺼져 있어도 찾는다)
         GameObject FindRoot(string rootName)
         {
             foreach (var root in scene.GetRootGameObjects())
+            {
                 if (root.name == rootName) return root;
+                foreach (var child in root.GetComponentsInChildren<Transform>(true))
+                    if (child.name == rootName) return child.gameObject;
+            }
             Debug.LogWarning($"[GameUISetup] '{rootName}' 캔버스가 씬에 없습니다.");
             missing++;
             return null;
@@ -94,9 +99,12 @@ public static class GameUISetup
         var infos = so.FindProperty("playerInfos");
         infos.arraySize = playerInfos.Length;
         for (int i = 0; i < playerInfos.Length; i++)
-            infos.GetArrayElementAtIndex(i).objectReferenceValue = playerInfos[i];
+            if (playerInfos[i] != null) infos.GetArrayElementAtIndex(i).objectReferenceValue = playerInfos[i];
         foreach (var (field, view) in views)
-            so.FindProperty(field).objectReferenceValue = view;
+        {
+            // 못 찾은 뷰는 기존 연결을 지우지 않는다
+            if (view != null) so.FindProperty(field).objectReferenceValue = view;
+        }
 
         // 황금열쇠 카드 덱: 비어 있으면 프로젝트의 CardDeckData를 찾아 연결한다 (카드 이름·설명·아이콘 조회용)
         var deckProperty = so.FindProperty("cardDeck");
