@@ -620,12 +620,11 @@ public class GameManager : Singleton<GameManager>
             return;
         }
 
-        // TODO: 현금이 벌금보다 적을 때 매각/파산 처리 (경제 담당과 협의)
-        long before = player.Money;
-        player.Money -= amount;
+        // 현금 한도 안에서만 냅니다. (매각/파산 없음)
+        long paid = DeductMoneyWithinBalance(player, amount);
         if (toWelfareFund)
-            gameState.WelfareFund += amount;
-        EconomyManager.NotifyMoneyChanged(player.PlayerId, before, player.Money);
+            gameState.WelfareFund += paid;
+        Log($"[카드:벌금] {P(player.PlayerId)}: 벌금 {Won(amount)} 중 {Won(paid)} 납부 (현금 {Won(player.Money)})");
 
         // 재화 손실 연출을 재생합니다.
 
@@ -1070,15 +1069,26 @@ public class GameManager : Singleton<GameManager>
         PlayerState player = GetPlayerState(playerId);
         if (player == null) return;
 
-        // TODO: 현금이 부족하면 통행료처럼 HandleSellPropertiesPrompt 흐름으로 보내기
-        long before = player.Money;
-        player.Money -= amount;
-        gameState.WelfareFund += amount;
-        EconomyManager.NotifyMoneyChanged(playerId, before, player.Money);
-        Log($"  [세무조사] {P(playerId)}: 벌금 {Won(amount)} 납부 (현금 {Won(player.Money)}, 적립금 {Won(gameState.WelfareFund)})");
+        // 현금 한도 안에서만 냅니다. (매각/파산 없음)
+        long paid = DeductMoneyWithinBalance(player, amount);
+        gameState.WelfareFund += paid;
+        Log($"  [세무조사] {P(playerId)}: 벌금 {Won(amount)} 중 {Won(paid)} 납부 (현금 {Won(player.Money)}, 적립금 {Won(gameState.WelfareFund)})");
 
         // 재화 손실 연출을 재생합니다.
-        SpecialTileManager.Instance.PlayTaxPaid(playerId, amount);
+        SpecialTileManager.Instance.PlayTaxPaid(playerId, paid);
+    }
+
+    /// <summary>
+    /// 현재 현금 한도 안에서만 돈을 뺀다. (카드 벌금, 세무조사처럼 매각/파산 없이 걷는 돈)
+    /// 실제로 낸 금액을 반환한다. (예: 벌금 1000, 현금 500 → 500 납부, 현금 0)
+    /// </summary>
+    private long DeductMoneyWithinBalance(PlayerState player, long amount)
+    {
+        long paid = Math.Min(amount, Math.Max(0, player.Money));
+        long before = player.Money;
+        player.Money -= paid;
+        EconomyManager.NotifyMoneyChanged(player.PlayerId, before, player.Money);
+        return paid;
     }
 
     public void HandleWelfareFundReceived(long playerId, long amount)
