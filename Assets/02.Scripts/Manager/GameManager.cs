@@ -18,6 +18,7 @@ public class GameManager : Singleton<GameManager>
     private const int IslandTurns = 3; // 무인도 영업정지 턴 수
     
     [SerializeField] private long salaryAmount = 100000;   // TODO: 월급 금액 확정 필요
+    [SerializeField] private long taxAmount = 100000;      // 세무조사 벌금 
     [SerializeField] private long startMoney = 500000;     // 초기 자금 (테스트할 때 인스펙터에서 늘려서 사용)
     
     private bool isMoving;
@@ -303,6 +304,7 @@ public class GameManager : Singleton<GameManager>
             player.IslandTurnsRemaining -= 1;
             
             Log($"[무인도] {P(playerId)}: 탈출 실패 (남은 영업정지 {player.IslandTurnsRemaining}턴)");
+            SpecialTileManager.Instance.PlayIslandEscapeFailed(playerId, player.IslandTurnsRemaining); // 탈출 실패 연출
             HandleTurnChanged(GetNextPlayerId()); // 강제로 턴을 넘깁니다.
             return;
         }
@@ -311,6 +313,7 @@ public class GameManager : Singleton<GameManager>
         {
             player.IslandTurnsRemaining = 0;
             Log($"[무인도 탈출] {P(playerId)}: 더블로 탈출했습니다!");
+            SpecialTileManager.Instance.PlayIslandEscaped(playerId); // 탈출 연출
             
             // isDouble을 false로 갱신하여 추가턴 진행을 막습니다.
             isDouble = false;
@@ -379,6 +382,7 @@ public class GameManager : Singleton<GameManager>
             });
     }
 
+#region ProcessArrival
     private void ProcessArrival(long playerId, int toPosition)
     {
         PlayerState player = GetPlayerState(playerId);
@@ -396,18 +400,17 @@ public class GameManager : Singleton<GameManager>
             case TileType.ISLAND: // 무인도에 도착
                 player.IslandTurnsRemaining = IslandTurns;
                 Log("  무인도: 턴이 넘어갑니다.");
+                SpecialTileManager.Instance.PlayIslandArrived(playerId); // 무인도 도착 연출
                 HandleTurnChanged(GetNextPlayerId()); // 강제로 턴을 넘깁니다.
                 break;
 
-            case TileType.CHARITY: // 기부금수령에 도착
-                // HandleWelfareFundReceived 호출 ( 호출에 필요한 매개변수는 GameState 와 Data를 조회하여 얻습니다. )
-                Log("  기부금 수령 칸 (아직 미구현)");
+            case TileType.CHARITY: // 기부금수령(푸드 페스티벌)에 도착
+                HandleWelfareFundReceived(playerId, gameState.WelfareFund); // 쌓인 적립금을 모두 받습니다.
                 ProcessEndTurn();
                 break;
 
-            case TileType.DONATION: // 기부금납부에 도착
-                // HandleDonationPaid 호출 ( 호출에 필요한 매개변수는 GameState 와 Data를 조회하여 얻습니다. )
-                Log("  기부금 납부 칸 (아직 미구현)");
+            case TileType.DONATION: // 기부금납부(세무조사)에 도착
+                HandleDonationPaid(playerId, taxAmount); // 벌금을 내고 적립금에 쌓습니다.
                 ProcessEndTurn();
                 break;
 
@@ -507,6 +510,7 @@ public class GameManager : Singleton<GameManager>
         }
         
     }
+#endregion
 
     /// <summary>
     /// 말이 목적지로 직접 이동합니다. (자유여행, 뒤로 이동 카드 등) 이동이 끝나면 도착 처리를 합니다.
@@ -603,6 +607,7 @@ public class GameManager : Singleton<GameManager>
         player.IslandTurnsRemaining = IslandTurns;
 
         // 무인도 이동 연출을 재생합니다. (순간이동, 월급 없음)
+        SpecialTileManager.Instance.PlaySentToIsland(playerId, fromPosition, islandPosition);
         isMoving = true;
         PlayerManager.Instance.MoveToTile(playerId, islandPosition, () =>
         {
@@ -715,8 +720,9 @@ public class GameManager : Singleton<GameManager>
             return;
         }
 
-        HandleSentToIsland(player.PlayerId, player.Position, islandPosition);
-        HandleTurnChanged(GetNextPlayerId()); // 추가 턴 없이 턴을 넘깁니다.
+        // 이동 연출이 끝난 뒤 추가 턴 없이 턴을 넘깁니다.
+        HandleSentToIsland(player.PlayerId, player.Position, islandPosition,
+            () => HandleTurnChanged(GetNextPlayerId()));
     }
 
     // 보드에서 무인도(ISLAND) 칸 번호를 찾는다. 없으면 -1
@@ -1090,16 +1096,41 @@ public class GameManager : Singleton<GameManager>
 
     public void HandleDonationPaid(long playerId, long amount)
     {
-        // GameState를 갱신합니다.
+        // GameState를 갱신합니다. (현금 감소, 적립금 증가)
+        PlayerState player = GetPlayerState(playerId);
+        if (player == null) return;
+
+        // TODO: 현금이 부족하면 통행료처럼 HandleSellPropertiesPrompt 흐름으로 보내기
+        long before = player.Money;
+        player.Money -= amount;
+        gameState.WelfareFund += amount;
+        EconomyManager.NotifyMoneyChanged(playerId, before, player.Money);
+        Log($"  [세무조사] {P(playerId)}: 벌금 {Won(amount)} 납부 (현금 {Won(player.Money)}, 적립금 {Won(gameState.WelfareFund)})");
 
         // 재화 손실 연출을 재생합니다.
+        SpecialTileManager.Instance.PlayTaxPaid(playerId, amount);
     }
 
     public void HandleWelfareFundReceived(long playerId, long amount)
     {
-        // GameState를 갱신합니다.
+        // GameState를 갱신합니다. (현금 증가, 적립금 감소)
+        PlayerState player = GetPlayerState(playerId);
+        if (player == null) return;
+
+        if (amount <= 0)
+        {
+            Log($"  [푸드 페스티벌] {P(playerId)}: 쌓인 적립금이 없습니다.");
+            return;
+        }
+
+        long before = player.Money;
+        player.Money += amount;
+        gameState.WelfareFund -= amount;
+        EconomyManager.NotifyMoneyChanged(playerId, before, player.Money);
+        Log($"  [푸드 페스티벌] {P(playerId)}: 적립금 {Won(amount)} 획득 (현금 {Won(player.Money)})");
 
         // 재화 획득 연출을 재생합니다.
+        SpecialTileManager.Instance.PlayWelfareFundReceived(playerId, amount);
     }
 
     public void DrawCard(long playerId)
