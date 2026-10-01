@@ -184,6 +184,20 @@ public class PropertyManager : Singleton<PropertyManager>
         return (long)(GetInvestedAmount(state) * SellRate);
     }
     
+    /// <summary>
+    /// 총자산 = 현금 + 가진 땅의 투자금(땅값 + 지은 건물 비용). 매각가가 아니라 투자금 기준이다.
+    /// 사용처: 순위 계산(PlayerRanking), UI 총자산 표시, 게임 결과
+    /// </summary>
+    public long GetTotalAsset(long playerId, long cash, List<PropertyState> propertyStates)
+    {
+        long total = cash;
+        foreach (var state in propertyStates)
+        {
+            if (state.OwnerId == playerId) total += GetInvestedAmount(state);
+        }
+        return total;
+    }
+
     /// <summary>플레이어가 가진 땅을 전부 팔면 받는 금액의 합계</summary>
     /// 사용처
     ///   - ProcessArrival: 통행료를 현금으로 못 낼 때 분기 판단
