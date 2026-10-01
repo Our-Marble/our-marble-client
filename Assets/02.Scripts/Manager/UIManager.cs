@@ -60,15 +60,6 @@ public class UIManager : MonoBehaviour
     /// </summary>
     public Func<int, string> PropertyEffectDescription { get; set; }
 
-    /// <summary>
-    /// 매각 창의 '자동 선택' 버튼이 부르는 함수 (payerId, 더 필요한 금액) → 팔 땅 번호들. 조합 계산은 UIManager가 하지 않으므로 PropertyManager/GameManager 쪽에서 지정합니다.
-    /// 지정하지 않으면 자동 선택 버튼은 아무것도 하지 않습니다.
-    /// </summary>
-    public Func<long, long, IEnumerable<int>> AutoSellSelector { get; set; }
-
-    /// <summary>매각 중 보드에서 땅을 고르거나 해제할 때 (propertyId, 선택됨). 보드가 선택 표시를 켜고 끌 때 쓴다.</summary>
-    public event Action<int, bool> SellSelectionChanged;
-
     /// <summary>매각 창의 '은행 대출' 버튼 (payerId, receiverId). 구독자가 없으면 버튼이 잠긴다.</summary>
     public event Action<long, long> BankLoanRequested;
 
@@ -108,13 +99,47 @@ public class UIManager : MonoBehaviour
     #region 창 띄우기 (GameManager가 호출)
 
     // 자유여행으로 가고싶은 칸을 선택하는 창을 띄워주는 함수입니다.
-    // 칸을 선택하면, GameManager.HandleDestinationChosen(int 해당칸인덱스) 를 호출합니다.
-    // 보드의 칸을 누르는 쪽에서는 OnBoardTileClicked(칸인덱스)를 불러주세요. 선택 중이면 자동으로 위 함수로 이어집니다.
+    // 보드가 칸을 눌릴 때마다 CheckTileValidForTravel(고른 칸 번호들)을 부르고, 하나만 골라졌을 때 "여행지 선택 완료" 버튼이 켜집니다.
+    // 완료 버튼을 누르면 GameManager로 목적지를 넘깁니다.
     public void ShowChooseDestinationPopup()
     {
         chooseDestinationMode = true;
+        travelTileIndex = -1;
         if (diceRoll != null) diceRoll.SetInteractable(false); // 목적지를 고르는 동안에는 주사위를 굴릴 수 없다
-        if (destinationSelect != null) destinationSelect.Show();
+
+        // TODO: BoardManager에 구현되면 주석을 풀어주세요. (보드를 여행지 선택 모드로 바꿉니다)
+        // BoardManager.Instance.ChangeToSelectTravelMode();
+
+        if (destinationSelect != null) destinationSelect.Show(CompleteDestination); // 완료 버튼은 꺼진 상태로 시작
+    }
+
+    /// <summary>
+    /// 보드의 칸을 누를 때마다 BoardManager가 부르는 함수입니다. tileIndexes: 지금 고른 칸 번호들.
+    /// 정확히 1개일 때만 "여행지 선택 완료" 버튼을 켭니다. (칸의 종류는 따로 보지 않습니다)
+    /// </summary>
+    public void CheckTileValidForTravel(List<int> tileIndexes)
+    {
+        bool valid = tileIndexes != null && tileIndexes.Count == 1;
+        travelTileIndex = valid ? tileIndexes[0] : -1;
+        if (destinationSelect != null) destinationSelect.SetCompleteInteractable(valid);
+    }
+
+    private int travelTileIndex = -1; // CheckTileValidForTravel이 마지막으로 확인한 여행지 칸
+
+    // "여행지 선택 완료" 버튼
+    private void CompleteDestination()
+    {
+        if (travelTileIndex < 0) return;
+        int destination = travelTileIndex;
+        chooseDestinationMode = false;
+        travelTileIndex = -1;
+        if (destinationSelect != null) destinationSelect.Close();
+
+        // TODO: BoardManager에 구현되면 주석을 풀어주세요. (보드를 다시 둘러보기 모드로 바꿉니다)
+        // BoardManager.Instance.ChangeToInspectMode();
+
+        // TODO: GameManager에 구현되면 주석을 풀어주세요.
+        // if (Game != null) Game.ChooseDestination(destination);
     }
 
     /// <summary>목적지 선택 창이 떠 있고 칸을 고르기를 기다리는 중인지</summary>
@@ -124,7 +149,9 @@ public class UIManager : MonoBehaviour
     public void HideChooseDestinationPopup()
     {
         chooseDestinationMode = false;
+        travelTileIndex = -1;
         if (destinationSelect != null) destinationSelect.Close();
+        // BoardManager.Instance.ChangeToInspectMode(); // TODO: BoardManager 구현 후 주석 해제
     }
 
     // 주사위 굴리기 버튼이 있는 창을 띄워주는 함수입니다.
@@ -285,8 +312,8 @@ public class UIManager : MonoBehaviour
 
     // 매각할 자산들을 선택할 수 있는 창을 띄워주는 함수입니다.
     // 선택 완료 버튼을 누르면 GameManager.SellProperties(payerId, receiverId, List<int> propertyIds, long requiredAmount) 를 호출합니다.
-    // 클라측에서 판단한 '선택한 자산 가치 총합' + 현금값이 requiredAmount보다 작으면 선택 완료 버튼이 활성화되지 않습니다.
-    // 팔 땅은 보드에서 고릅니다. 보드의 칸을 누르는 쪽에서는 OnBoardTileClicked(칸인덱스)를 불러주세요. (내 땅이면 선택/해제)
+    // 팔 땅은 보드에서 고릅니다. 보드가 칸을 눌릴 때마다 CheckTilesValidForSell(고른 칸 번호들)을 불러주세요.
+    // 고른 땅의 매각가 합 + 현금이 requiredAmount보다 작으면 선택 완료 버튼이 활성화되지 않습니다.
     public void ShowSellPropertiesPopup(long payerId, long receiverId, long requiredAmount)
     {
         if (sell == null) return;
@@ -295,13 +322,19 @@ public class UIManager : MonoBehaviour
         sellMode = true;
         sellPayerId = payerId;
         sellReceiverId = receiverId;
-        sellRequired = requiredAmount;
+        sellRequired = requiredAmount; // 필요한 금액을 보관해 두었다가 CheckTilesValidForSell에서 쓴다
+        selectedSellPropertyIds.Clear();
+
+        // TODO: BoardManager에 구현되면 주석을 풀어주세요. (보드를 매각 자산 선택 모드로 바꿉니다)
+        // BoardManager.Instance.ChangeToSelectSellMode();
 
         PlayerState payer = GetPlayer(payerId);
         bool loanAvailable = BankLoanRequested != null && !loanUsed.Contains(payerId);
 
+        // 자동 선택은 보드의 선택 표시를 바꿀 방법이 없어 연결하지 않는다
         sell.Show(requiredAmount, payer != null ? payer.Money : 0, loanAvailable,
-            AutoSelectSellProperties, RequestBankLoan, RequestBankrupt, CompleteSell);
+            null, RequestBankLoan, RequestBankrupt, CompleteSell);
+        sell.SetCompleteInteractable(false); // 아무것도 고르지 않은 처음에는 꺼진 상태
     }
 
     #endregion
@@ -309,32 +342,17 @@ public class UIManager : MonoBehaviour
     #region 보드 칸 클릭
 
     /// <summary>
-    /// 보드의 칸을 눌렀을 때 불러주세요. 지금 상황에 맞게 알아서 처리합니다.
-    /// 목적지를 고르는 중이면 그 칸으로 이동, 매각 중이면 내 땅 선택/해제, 그 외에는 땅 정보 창을 띄웁니다.
+    /// 둘러보기 모드에서 보드의 칸을 눌렀을 때 불러주세요. 땅이면 땅 정보 창을 띄웁니다.
+    /// (여행지·매각 자산 선택은 보드가 CheckTileValidForTravel / CheckTilesValidForSell로 알려줍니다.)
     /// </summary>
     public void OnBoardTileClicked(int tileIndex)
     {
-        if (chooseDestinationMode)
-        {
-            SelectDestination(tileIndex);
-            return;
-        }
-
         TileData tile = BoardManager.Instance.GetTileData(tileIndex);
         if (tile == null || tile.Type != TileType.PROPERTY) return;
-
-        if (sellMode) ToggleSellSelection(tile.PropertyId);
-        else ShowTileInfoPopup(tile.PropertyId);
+        ShowTileInfoPopup(tile.PropertyId);
     }
 
     private bool chooseDestinationMode;
-
-    private void SelectDestination(int tileIndex)
-    {
-        chooseDestinationMode = false;
-        if (destinationSelect != null) destinationSelect.Close();
-        if (Game != null) Game.HandleDestinationChosen(tileIndex);
-    }
 
     #endregion
 
@@ -344,58 +362,40 @@ public class UIManager : MonoBehaviour
     private long sellPayerId;
     private long sellReceiverId;
     private long sellRequired;
-    private readonly HashSet<int> selectedSell = new();
+    private readonly List<int> selectedSellPropertyIds = new(); // CheckTilesValidForSell이 마지막으로 구한, 팔 땅 번호들
     private long sellSelectedTotal; // 마지막으로 구한 선택 합계 (표시용)
     private readonly HashSet<long> loanUsed = new(); // 은행 대출은 1회
 
-    /// <summary>매각 중 고른 땅들</summary>
-    public IReadOnlyCollection<int> SelectedSellPropertyIds => selectedSell;
-
-    /// <summary>매각할 땅을 고르거나 해제한다. 매각 중이 아니거나 내 땅이 아니면 무시한다.</summary>
-    public void ToggleSellSelection(int propertyId)
+    /// <summary>
+    /// 보드의 칸을 누를 때마다 BoardManager가 부르는 함수입니다. tileIndexes: 지금 고른 칸 번호들.
+    /// 고른 땅들의 매각가 합(PropertyManager.GetSellValue)을 구해 창의 부족한 금액을 갱신하고,
+    /// 이 합 + 현금이 필요한 금액(requiredAmount)보다 작으면 "매각 완료" 버튼을 끄고 아니면 켭니다.
+    /// 내 땅이 아니거나 땅이 아닌 칸은 무시합니다.
+    /// </summary>
+    public void CheckTilesValidForSell(List<int> tileIndexes)
     {
-        if (!sellMode) return;
-        PropertyState state = GetProperty(propertyId);
-        if (state == null || state.OwnerId != sellPayerId) return;
+        if (!sellMode || sell == null) return;
 
-        bool selected = selectedSell.Add(propertyId);
-        if (!selected) selectedSell.Remove(propertyId);
-
-        SellSelectionChanged?.Invoke(propertyId, selected);
-        RefreshSellTotal();
-    }
-
-    // 고른 땅들의 매각가 합(PropertyManager.GetSellValue)을 구해 표시한다.
-    // 이 합 + 현금이 requiredAmount보다 작으면 매각 창의 '매각 완료' 버튼이 켜지지 않는다. (UIManager_temp 요구사항)
-    private void RefreshSellTotal()
-    {
+        selectedSellPropertyIds.Clear();
         long total = 0;
-        foreach (int id in selectedSell)
+        if (tileIndexes != null)
         {
-            PropertyState state = GetProperty(id);
-            if (state != null) total += PropertyManager.Instance.GetSellValue(state);
+            foreach (int tileIndex in tileIndexes)
+            {
+                TileData tile = BoardManager.Instance.GetTileData(tileIndex);
+                if (tile == null || tile.Type != TileType.PROPERTY) continue;
+
+                PropertyState state = GetProperty(tile.PropertyId);
+                if (state == null || state.OwnerId != sellPayerId) continue;
+                if (selectedSellPropertyIds.Contains(tile.PropertyId)) continue;
+
+                selectedSellPropertyIds.Add(tile.PropertyId);
+                total += PropertyManager.Instance.GetSellValue(state);
+            }
         }
+
         sellSelectedTotal = total;
-        if (sell != null) sell.SetSelectedTotal(sellSelectedTotal);
-    }
-
-    // '자동 선택' 버튼: 어떤 땅을 팔지는 AutoSellSelector가 정하고, 여기서는 선택 표시만 맞춘다
-    private void AutoSelectSellProperties()
-    {
-        PlayerState payer = GetPlayer(sellPayerId);
-        if (payer == null) return;
-        if (AutoSellSelector == null)
-        {
-            Debug.LogWarning("[UIManager] 자동 선택이 아직 연결되지 않았습니다. AutoSellSelector를 지정해주세요.");
-            return;
-        }
-
-        var picked = new HashSet<int>(AutoSellSelector(sellPayerId, sellRequired - payer.Money) ?? new List<int>());
-        foreach (int id in new List<int>(selectedSell))
-            if (!picked.Contains(id)) { selectedSell.Remove(id); SellSelectionChanged?.Invoke(id, false); }
-        foreach (int id in picked)
-            if (selectedSell.Add(id)) SellSelectionChanged?.Invoke(id, true);
-        RefreshSellTotal();
+        sell.SetSelectedTotal(total); // 부족한 금액 갱신 + 현금 + 합계 >= 필요 금액이면 완료 버튼 켜짐
     }
 
     private void RequestBankLoan()
@@ -419,22 +419,20 @@ public class UIManager : MonoBehaviour
         BankruptRequested.Invoke(payerId, receiverId);
     }
 
+    // "매각 완료" 버튼
     private void CompleteSell()
     {
         long payerId = sellPayerId, receiverId = sellReceiverId, required = sellRequired;
-        var propertyIds = new List<int>(selectedSell);
-        ExitSellMode();
+        var propertyIds = new List<int>(selectedSellPropertyIds); // 칸 번호가 아니라 땅 번호
+        ExitSellMode(); // 보드도 둘러보기 모드로 되돌린다
         if (Game != null) Game.SellProperties(payerId, receiverId, propertyIds, required);
     }
 
-    // 매각 모드를 끝내고 보드의 선택 표시도 모두 끈다
+    // 매각 모드를 끝내고 보드도 둘러보기 모드로 되돌린다
     private void ExitSellMode()
     {
-        if (selectedSell.Count > 0)
-        {
-            foreach (int id in new List<int>(selectedSell)) SellSelectionChanged?.Invoke(id, false);
-            selectedSell.Clear();
-        }
+        // if (sellMode) BoardManager.Instance.ChangeToInspectMode(); // TODO: BoardManager 구현 후 주석 해제
+        selectedSellPropertyIds.Clear();
         sellMode = false;
         sellSelectedTotal = 0;
     }

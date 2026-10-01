@@ -4,9 +4,10 @@ using DG.Tweening;
 using UnityEngine;
 
 /// <summary>
-/// [임시] UI 연출 확인용 테스트 버튼 창. 씬의 GameManager(GameState)를 그대로 읽어 UI를 채우고,
-/// GameManager에 이미 있는 함수(HandleTurnChanged, HandleTollPaid, ProcessBankruptcy, RollDice)만 실제로 부른다.
-/// GameManager는 아직 UIManager를 부르지 않으므로, 호출 뒤의 화면 갱신은 이 창이 UIManager로 대신한다.
+/// [임시] UI 확인용 테스트 버튼 창. 씬의 GameManager(GameState)를 읽어 UI를 채우고,
+/// GameManager가 이미 UIManager를 직접 부르므로 이 창은 상태를 만들고(땅 주인, 현금 등) 창을 띄워 보는 일만 한다.
+/// 보드(BoardManager)가 칸 선택을 연결하기 전에는, "보드 선택 시험"의 버튼이 보드 대신 칸 번호 목록을
+/// UIManager.CheckTileValidForTravel / CheckTilesValidForSell에 넘겨 준다.
 /// 에디터·개발 빌드에서만 그려진다. 확인이 끝나면 씬의 UIDebugPanel 오브젝트를 지우면 된다.
 /// F1: 창 접기/펼치기
 /// </summary>
@@ -144,7 +145,7 @@ public class UIDebugPanel : MonoBehaviour
         UI.ShowTurn(State.CurrentPlayerId);
     }
 
-    // GameManager.HandleTurnChanged를 실제로 부른다. (다음 사람 결정은 GetNextPlayerId가 아직 없어서 이 창이 한다)
+    // GameManager.HandleTurnChanged를 실제로 부른다. (다음 사람은 이 창이 정해서 넘긴다)
     private void NextTurn()
     {
         int next = turnIndex;
@@ -223,12 +224,71 @@ public class UIDebugPanel : MonoBehaviour
             ("봇 땅", () => SetOwner(data.Id, other, 0)));
         Row(("단계 +1", () => { if (state != null && state.BuildingLevel < BuildingLevel.Hotel) SetOwner(data.Id, state.OwnerId, (int)state.BuildingLevel + 1); }),
             ("내 돈 100,000", () => SetMyMoney(100000)), ("내 돈 100", () => SetMyMoney(100)));
-        GUILayout.Label("아래 팝업 버튼 → 누르면 GameManager.Purchase/Build/Acquire/Sell 호출");
+        GUILayout.Label("아래 창의 버튼 → GameManager.Purchase/Build/Acquire 호출. 매각은 아래 '보드 선택 시험'에서");
         Row(("구매 창", () => UI.ShowPurchasePropertyPopup(me, data.Id, (int)PropertyManager.Instance.GetLandPrice(data.Id))),
             ("건설 창", () => UI.ShowBuildPopup(me, data.Id)));
         Row(("인수 창", () => UI.ShowAcquirePropertyPopup(me, data.Id)),
-            ("매각 창 (통행료 30,000)", () => UI.ShowSellPropertiesPopup(me, other, 30000)));
-        if (GUILayout.Button("타일 정보")) UI.ShowTileInfoPopup(data.Id);
+            ("타일 정보", () => UI.ShowTileInfoPopup(data.Id)));
+
+        DrawBoardSelectSection(me, other);
+    }
+
+    // ───────────── 보드 선택 시험 (BoardManager 대신 칸 번호 목록을 넘긴다) ─────────────
+
+    private int tileCursor;                       // 시험용으로 가리키는 칸 번호
+    private readonly List<int> travelTiles = new(); // '보드에서 고른' 여행지 칸 번호들
+    private readonly List<int> sellTiles = new();   // '보드에서 고른' 매각할 칸 번호들
+    private static readonly long[] SellRequiredPresets = { 10000, 30000, 100000, 500000 };
+    private int sellPresetIndex = 1;
+
+    private void DrawBoardSelectSection(long me, long other)
+    {
+        Header("보드 선택 시험 (BoardManager 대신)");
+        GUILayout.Label("보드 모드 전환(ChangeTo~)은 BoardManager 구현 전이라 주석 상태입니다.");
+
+        int count = BoardManager.Instance.TileCount;
+        if (count <= 0) { GUILayout.Label("보드 데이터가 없습니다."); return; }
+        tileCursor = Mathf.Clamp(tileCursor, 0, count - 1);
+
+        GUILayout.BeginHorizontal();
+        if (GUILayout.Button("◀")) tileCursor = (tileCursor + count - 1) % count;
+        GUILayout.Label($"{DescribeTile(tileCursor)}", GUILayout.Width(200));
+        if (GUILayout.Button("▶")) tileCursor = (tileCursor + 1) % count;
+        GUILayout.EndHorizontal();
+
+        GUILayout.Label("<b>세계여행</b> (칸 종류와 상관없이 하나만 고르면 완료 버튼이 켜집니다)", new GUIStyle(GUI.skin.label) { richText = true });
+        Row(("창 열기", () => { travelTiles.Clear(); UI.ShowChooseDestinationPopup(); }),
+            ("창 닫기", () => UI.HideChooseDestinationPopup()));
+        Row(("이 칸 선택/해제", () => { Toggle(travelTiles, tileCursor); UI.CheckTileValidForTravel(new List<int>(travelTiles)); }),
+            ("모두 해제", () => { travelTiles.Clear(); UI.CheckTileValidForTravel(new List<int>()); }));
+        GUILayout.Label($"고른 칸: {ListText(travelTiles)}");
+
+        GUILayout.Label("<b>매각</b> (내 땅만 합산, 현금 + 매각가 합 ≥ 필요 금액이면 완료 버튼이 켜집니다)", new GUIStyle(GUI.skin.label) { richText = true });
+        Row(($"필요 금액 {SellRequiredPresets[sellPresetIndex]:N0} (눌러서 변경)", () => sellPresetIndex = (sellPresetIndex + 1) % SellRequiredPresets.Length),
+            ("창 열기", () => { sellTiles.Clear(); UI.ShowSellPropertiesPopup(me, other, SellRequiredPresets[sellPresetIndex]); }));
+        Row(("이 칸 선택/해제", () => { Toggle(sellTiles, tileCursor); UI.CheckTilesValidForSell(new List<int>(sellTiles)); }),
+            ("모두 해제", () => { sellTiles.Clear(); UI.CheckTilesValidForSell(new List<int>()); }));
+        GUILayout.Label($"고른 칸: {ListText(sellTiles)}");
+
+        GUILayout.Label("<b>둘러보기</b>", new GUIStyle(GUI.skin.label) { richText = true });
+        if (GUILayout.Button("이 칸 클릭 (땅이면 정보창)")) UI.OnBoardTileClicked(tileCursor);
+    }
+
+    private static void Toggle(List<int> list, int value)
+    {
+        if (!list.Remove(value)) list.Add(value);
+    }
+
+    private static string ListText(List<int> list) => list.Count == 0 ? "없음" : string.Join(", ", list);
+
+    // 칸 번호의 종류(땅이면 도시 이름)
+    private static string DescribeTile(int index)
+    {
+        TileData tile = BoardManager.Instance.GetTileData(index);
+        if (tile == null) return $"{index}번 (없음)";
+        if (tile.Type != TileType.PROPERTY) return $"{index}번 {tile.Type}";
+        PropertyData data = PropertyManager.Instance.GetData(tile.PropertyId);
+        return $"{index}번 {(data != null ? data.CityName : "땅 " + tile.PropertyId)}";
     }
 
     private void SetOwner(int propertyId, long? owner, int level)
