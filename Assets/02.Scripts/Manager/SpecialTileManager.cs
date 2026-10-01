@@ -22,11 +22,6 @@ public class SpecialTileManager : Singleton<SpecialTileManager>
         // TODO: 무인도 도착 연출
     }
 
-    public void PlaySentToIsland(long playerId, int fromPosition, int islandPosition)
-    {
-        // TODO: 무인도로 순간이동하는 연출
-    }
-
     public void PlayIslandEscapeFailed(long playerId, int remainingTurns)
     {
         // TODO: 무인도 탈출 실패 연출

@@ -339,8 +339,7 @@ public class GameManager : Singleton<GameManager>
                 Log($"[3연속 더블] {P(playerId)}: 무인도로 이동합니다.");
                 isDouble = false;
                 consecutiveDoubleCount = 0;
-                HandleSentToIsland(playerId, player.Position, islandPosition,
-                    () => HandleTurnChanged(GetNextPlayerId()));
+                MovePlayerDirectly(playerId, islandPosition); // 순간이동 (월급 없음) → 도착 처리에서 영업정지 설정 + 턴 넘김
                 return;
             }
         }
@@ -522,7 +521,7 @@ public class GameManager : Singleton<GameManager>
 #endregion
 
     /// <summary>
-    /// 말이 목적지로 직접 이동합니다. (자유여행, 뒤로 이동 카드 등) 이동이 끝나면 도착 처리를 합니다.
+    /// 말이 목적지로 직접 이동합니다. (자유여행, 뒤로 이동 카드, 무인도행 등) 월급은 없으며, 이동이 끝나면 도착 처리를 합니다.
     /// </summary>
     private void MovePlayerDirectly(long playerId, int toPosition)
     {
@@ -596,43 +595,45 @@ public class GameManager : Singleton<GameManager>
         PlayerManager.Instance.HidePawn(playerId);
     }
 
-    /// <summary>
-    /// 플레이어를 무인도로 바로 보낸다. (황금 열쇠 무인도 카드, 3연속 더블)
-    /// 걸어서 이동하는 것이 아니므로 출발지를 지나도 월급이 없다.
-    /// </summary>
-    public void HandleSentToIsland(long playerId, int fromPosition, int islandPosition, Action onCompleted = null)
-    {
-        // GameState를 갱신합니다. (위치를 무인도로, 영업정지 턴 설정)
-        var player = GetPlayerState(playerId);
-        if (player == null)
-        {
-            Debug.LogError($"[GameManager] 무인도 이동 실패: 플레이어 {playerId} 없음");
-            return;
-        }
-
-        Log($"[무인도] {P(playerId)}: {TileName(fromPosition)} → 무인도 (영업정지 {IslandTurns}턴)");
-        
-        player.Position = islandPosition;
-        player.IslandTurnsRemaining = IslandTurns;
-
-        // 무인도 이동 연출을 재생합니다. (순간이동, 월급 없음)
-        SpecialTileManager.Instance.PlaySentToIsland(playerId, fromPosition, islandPosition);
-        isMoving = true;
-        PlayerManager.Instance.MoveToTile(playerId, islandPosition, () =>
-        {
-            isMoving = false;
-            onCompleted?.Invoke();
-        });
-    }
-
-
 #region Card Effect
     // ────────────────────────── 황금 열쇠 CardEffect 실행 ──────────────────────────
-    // CardManager가 카드의 EffectType을 확인한 뒤 호출합니다.
+    // HandleCardDrawn → ExecuteCardEffect에서 카드의 EffectType을 확인한 뒤 호출합니다.
     // 대상은 현재 턴 플레이어(gameState.CurrentPlayerId)이며, 게임 상태 변경 후 다음 흐름(턴 종료, 도착 칸 처리)까지 진행합니다.
 
+    // 카드의 EffectType을 확인하고 해당 CardEffect 실행 메서드를 호출합니다.
+    private void ExecuteCardEffect(CardData card)
+    {
+        switch (card.effectType)
+        {
+            case CardEffectType.Bonus:
+                ExecuteBonusEffect(card.amount);
+                break;
+
+            case CardEffectType.Penalty:
+                ExecutePenaltyEffect(card.amount, card.penaltyToFestivalPool);
+                break;
+
+            case CardEffectType.MoveTo:
+                ExecuteMoveToEffect(card.targetTileId);
+                break;
+
+            case CardEffectType.MoveBy:
+                ExecuteMoveByEffect(card.steps);
+                break;
+
+            case CardEffectType.GoToInspection:
+                ExecuteGoToInspectionEffect();
+                break;
+
+            default:
+                Debug.LogError($"[GameManager] 처리하지 않은 CardEffectType: {card.effectType}");
+                ProcessEndTurn(); // 턴이 멈추지 않도록 종료
+                break;
+        }
+    }
+
     // CardEffect: Bonus - 은행에서 돈을 받는다
-    public void ExecuteBonusEffect(int amount)
+    private void ExecuteBonusEffect(int amount)
     {
         PlayerState player = GetPlayerState(gameState.CurrentPlayerId);
         if (player == null)
@@ -651,7 +652,7 @@ public class GameManager : Singleton<GameManager>
     }
 
     // CardEffect: Penalty - 은행 또는 기부금(WelfareFund)에 돈을 낸다
-    public void ExecutePenaltyEffect(int amount, bool toWelfareFund)
+    private void ExecutePenaltyEffect(int amount, bool toWelfareFund)
     {
         PlayerState player = GetPlayerState(gameState.CurrentPlayerId);
         if (player == null)
@@ -660,12 +661,11 @@ public class GameManager : Singleton<GameManager>
             return;
         }
 
-        // TODO: 현금이 벌금보다 적을 때 매각/파산 처리 (경제 담당과 협의)
-        long before = player.Money;
-        player.Money -= amount;
+        // 현금 한도 안에서만 냅니다. (매각/파산 없음)
+        long paid = DeductMoneyWithinBalance(player, amount);
         if (toWelfareFund)
-            gameState.WelfareFund += amount;
-        EconomyManager.NotifyMoneyChanged(player.PlayerId, before, player.Money);
+            gameState.WelfareFund += paid;
+        Log($"[카드:벌금] {P(player.PlayerId)}: 벌금 {Won(amount)} 중 {Won(paid)} 납부 (현금 {Won(player.Money)})");
 
         // 재화 손실 연출을 재생합니다.
 
@@ -673,7 +673,7 @@ public class GameManager : Singleton<GameManager>
     }
 
     // CardEffect: MoveTo - 지정한 칸으로 앞으로 이동한다 (출발지를 지나면 월급)
-    public void ExecuteMoveToEffect(int targetTileId)
+    private void ExecuteMoveToEffect(int targetTileId)
     {
         PlayerState player = GetPlayerState(gameState.CurrentPlayerId);
         if (player == null)
@@ -693,7 +693,7 @@ public class GameManager : Singleton<GameManager>
     }
 
     // CardEffect: MoveBy - N칸 이동한다 (음수면 뒤로, 뒤로 갈 때는 월급 없음)
-    public void ExecuteMoveByEffect(int steps)
+    private void ExecuteMoveByEffect(int steps)
     {
         PlayerState player = GetPlayerState(gameState.CurrentPlayerId);
         int boardSize = BoardManager.Instance.BoardData.Tiles.Count;
@@ -718,7 +718,7 @@ public class GameManager : Singleton<GameManager>
     }
 
     // CardEffect: GoToInspection - 무인도로 바로 이동한다 (월급 없음, 더블이어도 추가 턴 없음)
-    public void ExecuteGoToInspectionEffect()
+    private void ExecuteGoToInspectionEffect()
     {
         PlayerState player = GetPlayerState(gameState.CurrentPlayerId);
         int islandPosition = FindIslandTileIndex();
@@ -729,9 +729,10 @@ public class GameManager : Singleton<GameManager>
             return;
         }
 
-        // 이동 연출이 끝난 뒤 추가 턴 없이 턴을 넘깁니다.
-        HandleSentToIsland(player.PlayerId, player.Position, islandPosition,
-            () => HandleTurnChanged(GetNextPlayerId()));
+        Log($"[카드:무인도] {P(player.PlayerId)}: 무인도로 이동합니다.");
+
+        // 순간이동 (월급 없음) → 도착 처리에서 영업정지 설정 + 추가 턴 없이 턴 넘김
+        MovePlayerDirectly(player.PlayerId, islandPosition);
     }
 
     // 보드에서 무인도(ISLAND) 칸 번호를 찾는다. 없으면 -1
@@ -1105,15 +1106,26 @@ public class GameManager : Singleton<GameManager>
         PlayerState player = GetPlayerState(playerId);
         if (player == null) return;
 
-        // TODO: 현금이 부족하면 통행료처럼 HandleSellPropertiesPrompt 흐름으로 보내기
-        long before = player.Money;
-        player.Money -= amount;
-        gameState.WelfareFund += amount;
-        EconomyManager.NotifyMoneyChanged(playerId, before, player.Money);
-        Log($"  [세무조사] {P(playerId)}: 벌금 {Won(amount)} 납부 (현금 {Won(player.Money)}, 적립금 {Won(gameState.WelfareFund)})");
+        // 현금 한도 안에서만 냅니다. (매각/파산 없음)
+        long paid = DeductMoneyWithinBalance(player, amount);
+        gameState.WelfareFund += paid;
+        Log($"  [세무조사] {P(playerId)}: 벌금 {Won(amount)} 중 {Won(paid)} 납부 (현금 {Won(player.Money)}, 적립금 {Won(gameState.WelfareFund)})");
 
         // 재화 손실 연출을 재생합니다.
-        SpecialTileManager.Instance.PlayTaxPaid(playerId, amount);
+        SpecialTileManager.Instance.PlayTaxPaid(playerId, paid);
+    }
+
+    /// <summary>
+    /// 현재 현금 한도 안에서만 돈을 뺀다. (카드 벌금, 세무조사처럼 매각/파산 없이 걷는 돈)
+    /// 실제로 낸 금액을 반환한다. (예: 벌금 1000, 현금 500 → 500 납부, 현금 0)
+    /// </summary>
+    private long DeductMoneyWithinBalance(PlayerState player, long amount)
+    {
+        long paid = Math.Min(amount, Math.Max(0, player.Money));
+        long before = player.Money;
+        player.Money -= paid;
+        EconomyManager.NotifyMoneyChanged(player.PlayerId, before, player.Money);
+        return paid;
     }
 
     public void HandleWelfareFundReceived(long playerId, long amount)
@@ -1155,10 +1167,18 @@ public class GameManager : Singleton<GameManager>
 
     public void HandleCardDrawn(int cardId)
     {
-        // CardManager가 CardId로 카드를 조회하고, EffectType에 맞는 CardEffect 실행 메서드를 호출합니다.
-        bool played = CardManager.Instance.PlayCard(cardId);
-        if (!played)
+        // CardManager에서 CardId로 카드 데이터를 조회합니다.
+        CardData card = CardManager.Instance.FindCard(cardId);
+        if (card == null)
+        {
             ProcessEndTurn(); // 카드 조회 실패 시 턴이 멈추지 않도록 종료
+            return;
+        }
+
+        // TODO: 카드 연출
+
+        // EffectType에 맞는 CardEffect 실행 메서드를 호출합니다.
+        ExecuteCardEffect(card);
     }
 
     /// <summary>
