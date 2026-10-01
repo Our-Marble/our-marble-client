@@ -36,11 +36,17 @@ public class GameManager : Singleton<GameManager>
     }
 
     [Header("Players")] [SerializeField] private List<PlayerSetup> playerSetups = new List<PlayerSetup>();
-
+    
+    
+    // 플레이어 색상 관련 필드
+    private Color[] playerColors = new Color[]{Color.red, Color.green, Color.blue, Color.yellow};
+    private Dictionary<long, Color> playerColorMap;
+    public Color GetPlayerColor(long playerId) => playerColorMap[playerId];
+    
     
     protected override void Awake()
     {
-        // gameState 초기화
+        // gameState 초기화. PropertyStates의 초기화는 Start에서 진행.
         gameState = new  GameState();
         gameState.TurnNumber = 0;
         gameState.CurrentPlayerId = 0;
@@ -49,24 +55,30 @@ public class GameManager : Singleton<GameManager>
         gameState.PlayerStates = new List<PlayerState>();
         foreach (PlayerSetup setup in playerSetups)
             gameState.PlayerStates.Add(new PlayerState(setup.playerId));
-        
-        gameState.PropertyStates = new List<PropertyState>();
-        foreach (PropertyData propertyData in  PropertyManager.Instance.GetAllDataByMapId(1))
-        {
-            gameState.PropertyStates.Add(new PropertyState(propertyData.Id));
-        }
-        
 
         // 그 외 필드 변수 초기화
         random = new System.Random();
         playerOrder = new List<long>();
         isDouble = false;
         consecutiveDoubleCount = 0;
+        
+        // player의 색상 지정. gameState.playerStates 의 순서대로 배정
+        playerColorMap = new Dictionary<long, Color>();
+        for (int i = 0; i < gameState.PlayerStates.Count; i++)
+        {
+            PlayerState playerState = gameState.PlayerStates[i];
+            playerColorMap.Add(playerState.PlayerId, playerColors[i]);
+        }
     }
 
     void Start()
     {
-        
+        // gameState.PropertyStates의 초기화는 PropertyManager의 초기화가 선행되어야 하기 때문에 Start에서 진행
+        gameState.PropertyStates = new List<PropertyState>();
+        foreach (PropertyData propertyData in  PropertyManager.Instance.GetAllDataByMapId(1))
+        {
+            gameState.PropertyStates.Add(new PropertyState(propertyData.Id));
+        }
         
         // MVP 단계에서 플레이어의 playerId는 123, 봇의 playerId는 456 입니다.
         PlayerManager.Instance.Initialize(playerOrder); // 다른 Monobehaviour 클래스를 참조하여 초기화할때는 Awake말고 Start에서 하는게 안전
@@ -801,7 +813,7 @@ public class GameManager : Singleton<GameManager>
         if (player == null || property == null)  return;
 
         player.Money -= amount;
-        property.OwnerId = playerId;
+        SetOwnerId(property, playerId);
         property.BuildingLevel = BuildingLevel.Land; // 새로 산 땅은 건물 없음
         Log($"[구매] {P(playerId)}: {CityName(propertyId)} 구매 (-{Won(amount)}, 남은 현금 {Won(player.Money)})");
         
@@ -932,8 +944,8 @@ public class GameManager : Singleton<GameManager>
         
         acquirer.Money -= amount; //인수자 돈 차감
         owner.Money += amount; //소유자 돈 증가
-        property.OwnerId = playerId; //소유권 이전
-
+        SetOwnerId(property, playerId); //소유권 이전
+        
         // 인수 연출을 재생합니다.
         if (UIManager.Instance != null)
             UIManager.Instance.PlayMoneyTransfer(playerId, owner.PlayerId, amount, "인수", "인수 대금");
@@ -1043,7 +1055,7 @@ public class GameManager : Singleton<GameManager>
             var property = GetPropertyState(id);
             if (property == null || property.OwnerId != payerId)  continue; // 소유자가 맞는지 확인
             
-            property.OwnerId = null; // 주인 없는 땅으로
+            SetOwnerId(property, null); // 주인 없는 땅으로
             property.BuildingLevel = BuildingLevel.Land; // 건설 레벨 초기화
             
         }
@@ -1076,7 +1088,7 @@ public class GameManager : Singleton<GameManager>
             if (state.OwnerId != payerId) continue;
 
             liquidated += PropertyManager.Instance.GetSellValue(state); // 매각가 합산
-            state.OwnerId = null; // 주인 없는 땅으로
+            SetOwnerId(state, null); // 주인 없는 땅으로
             state.BuildingLevel = BuildingLevel.Land; // 건설 레벨 초기화
         }
 
@@ -1184,6 +1196,14 @@ public class GameManager : Singleton<GameManager>
 
         // EffectType에 맞는 CardEffect 실행 메서드를 호출합니다.
         ExecuteCardEffect(card);
+    }
+
+    private void SetOwnerId(PropertyState state, long? playerId)
+    {
+        state.OwnerId = playerId;
+        
+        int propertyId = state.PropertyId;
+        BoardManager.Instance.UpdatePropertyTileColor(propertyId, playerId);
     }
 
     /// <summary>

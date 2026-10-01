@@ -110,6 +110,16 @@ public class BoardManager : Singleton<BoardManager>
 
 
 
+    public void UpdatePropertyTileColor(int propertyId, long? playerId)
+    {
+         boardController.UpdatePropertyTileColor(propertyId, playerId);
+    }
+
+
+
+
+
+
     protected override void Awake()
     {
         ChangeToInspectMode();
