@@ -165,6 +165,14 @@ public class GameManager : Singleton<GameManager>
         
         Log($"게임 시작! 플레이어 {gameState.PlayerStates.Count}명, 초기 자금 {Won(startMoney)}, 자동 진행(전원) = {autoPlayAllPlayers}");
         
+        // UI를 초기화합니다. (이 화면을 조작하는 사람 플레이어를 지정하고, 플레이어 정보 카드를 GameState에 맞춰 채웁니다.)
+        if (UIManager.Instance != null)
+        {
+            PlayerSetup human = playerSetups.Find(s => !s.isBot);
+            if (human != null) UIManager.Instance.SetLocalPlayer(human.playerId);
+            UIManager.Instance.InitPlayers();
+        }
+
         // 첫 번째 순서부터 턴 시작
         HandleTurnChanged(playerOrder[0]);
     }
@@ -178,6 +186,8 @@ public class GameManager : Singleton<GameManager>
         // 'OO의 턴'이라는 UI를 표시합니다.
         PlayerState playerState = GetPlayerState(playerId);
         Log($"===== {gameState.TurnNumber}번째 턴: {P(playerId)} 차례 (현금 {Won(playerState.Money)}, 위치 {TileName(playerState.Position)}) =====");
+        if (UIManager.Instance != null)
+            UIManager.Instance.ShowTurn(playerId);
 
         // 필드 변수를 갱신합니다.
         isDouble = false;
@@ -201,6 +211,11 @@ public class GameManager : Singleton<GameManager>
         if ((IsBot(gameState.CurrentPlayerId)))
         {
             HandleDestinationChosen(16);
+            return;
+        }
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.ShowChooseDestinationPopup();
             return;
         }
         // 플레이어의 경우, 자유 여행할 타일을 선택하는 UI를 표시합니다.
@@ -233,6 +248,11 @@ public class GameManager : Singleton<GameManager>
             return;
         }
 
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.ShowRollDicePopup();
+            return;
+        }
         // 플레이어인 경우 주사위 굴림 UI를 표시합니다.
         Debug.Log("주사위 굴림 창 뜨는 기능 미구현... 인스펙터에서 RollDiceTest를 직접 호출하세요");
     }
@@ -259,6 +279,8 @@ public class GameManager : Singleton<GameManager>
         PlayerState player = GetPlayerState(playerId);
         
         Log($"[주사위] {P(playerId)}: {dice1}+{dice2}={dice1 + dice2}{(dice1 == dice2 ? " (더블!)" : "")}");
+        if (UIManager.Instance != null)
+            UIManager.Instance.ShowDiceResult(dice1, dice2);
         
         // 더블 처리
         if (dice1 == dice2)
@@ -554,6 +576,8 @@ public class GameManager : Singleton<GameManager>
         {
             Log("[게임 종료] 남은 플레이어가 1명입니다.");
             // 게임 종료 함수를 호출합니다.
+            if (UIManager.Instance != null)
+                UIManager.Instance.ShowGameResultPopup();
         }
         
         PlayerManager.Instance.HidePawn(playerId);
@@ -723,6 +747,11 @@ public class GameManager : Singleton<GameManager>
             return;
         }
 
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.ShowPurchasePropertyPopup(playerId, propertyId, (int)amount);
+            return;
+        }
         // 플레이어의 경우, 땅을 구매할 것인지 선택 가능한 UI를 표시합니다.
         Debug.Log("땅 구매 결정 창 뜨는 기능 미구현...");
     }
@@ -758,6 +787,8 @@ public class GameManager : Singleton<GameManager>
         Log($"[구매] {P(playerId)}: {CityName(propertyId)} 구매 (-{Won(amount)}, 남은 현금 {Won(player.Money)})");
         
         // 자산 구매 연출을 재생합니다.
+        if (UIManager.Instance != null)
+            UIManager.Instance.PlayMoneyChange(playerId, -amount, "땅 구매");
 
         // 턴을 종료합니다.
         ProcessEndTurn();
@@ -778,6 +809,11 @@ public class GameManager : Singleton<GameManager>
             return;
         }
         
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.ShowBuildPopup(playerId, propertyId);
+            return;
+        }
         // 플레이어의 경우, 건설할 것인지 선택 가능한 UI를 표시합니다.
         Debug.Log("건설 결정 창 뜨는 기능 미구현...");
     }
@@ -818,6 +854,8 @@ public class GameManager : Singleton<GameManager>
         property.BuildingLevel += 1; // 건설 레벨 증가
 
         // 건설 연출을 재생합니다.
+        if (UIManager.Instance != null)
+            UIManager.Instance.PlayMoneyChange(playerId, -amount, "건설");
 
         // 턴을 종료합니다.
         ProcessEndTurn();
@@ -838,6 +876,11 @@ public class GameManager : Singleton<GameManager>
             return;
         }
         
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.ShowAcquirePropertyPopup(playerId, propertyId);
+            return;
+        }
         // 플레이어의 경우, 인수할 것인지 선택 가능한 UI를 표시합니다.
         Debug.Log("인수 결정 창 뜨는 기능 미구현...");
     }
@@ -875,6 +918,8 @@ public class GameManager : Singleton<GameManager>
         property.OwnerId = playerId; //소유권 이전
 
         // 인수 연출을 재생합니다.
+        if (UIManager.Instance != null)
+            UIManager.Instance.PlayMoneyTransfer(playerId, owner.PlayerId, amount, "인수", "인수 대금");
 
         // 턴을 종료합니다.
         ProcessEndTurn();
@@ -892,6 +937,11 @@ public class GameManager : Singleton<GameManager>
             return;
         }
         
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.ShowSellPropertiesPopup(payerId, receiverId, requiredAmount);
+            return;
+        }
         // 플레이어의 경우, 청산할 자산들을 선택 가능한 UI를 표시합니다.
         Debug.Log("매각 결정 창 뜨는 기능 미구현...");
     }
@@ -986,6 +1036,8 @@ public class GameManager : Singleton<GameManager>
         receiver.Money += toll; //통행료 전액 지급
 
         // 자산 청산 및 재화 이동 연출을 재생합니다.
+        if (UIManager.Instance != null)
+            UIManager.Instance.PlayMoneyTransfer(payerId, receiverId, toll, "통행료", "통행료 수입");
 
         // 턴을 종료합니다.
         ProcessEndTurn();
@@ -1015,6 +1067,8 @@ public class GameManager : Singleton<GameManager>
         payer.Money = 0; // 납부자 현금 0
 
         // 파산 연출을 재생합니다.
+        if (UIManager.Instance != null)
+            UIManager.Instance.PlayBankruptEffect(payerId);
         ProcessBankruptcy(payerId); // 납부자 파산 처리
 
         // 턴 넘기기는 ProcessArrival에서 처리 (HandleTurnChanged(GetNextPlayerId()) 호출)
@@ -1030,6 +1084,8 @@ public class GameManager : Singleton<GameManager>
         receiver.Money += amount; // 통행료 수령
 
         // 재화 이동 연출을 재생합니다.
+        if (UIManager.Instance != null)
+            UIManager.Instance.PlayTollEffect(payerId, receiverId, amount);
     }
 
     public void HandleDonationPaid(long playerId, long amount)

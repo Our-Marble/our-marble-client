@@ -16,9 +16,7 @@ public class UIDebugPanel : MonoBehaviour
     private static readonly string[] Names = { "나", "봇", "플레이어3", "플레이어4" };
 
     private int turnCount = 1;
-    private bool holdTurn = true; // 턴 고정: 팝업 흐름이 끝나도 같은 사람이 계속 (GetNextPlayerId가 아직 0을 돌려줘서)
     private int propertyCursor;
-    private readonly Dictionary<long, long> moneySnapshot = new();
     private float speed = 1f;
     private bool expanded = true;
     private bool placed;
@@ -44,12 +42,9 @@ public class UIDebugPanel : MonoBehaviour
         UI.SetLocalPlayer(Players[LocalPlayer].PlayerId);
         UI.DiceRoll?.SetIslandTurns(0);
         UI.BuildLockReason = LapLockReason;
-        SnapshotMoney();
         ready = true;
 
         FillHud(animate: false);
-        // 시작은 내 차례이므로 주사위 버튼을 켠다. 다른 사람 차례에는 잠긴다
-        if (IsLocalTurn) OpenDiceRoll();
     }
 
     private void OnDisable()
@@ -111,7 +106,7 @@ public class UIDebugPanel : MonoBehaviour
         if (GUILayout.Button("파산 켜기/끄기 (차례인 사람)")) ToggleBankrupt();
 
         Header("주사위");
-        if (GUILayout.Button("주사위 굴리기 UI 열기 (버튼 → GameManager.RollDice)")) OpenDiceRoll();
+        if (GUILayout.Button("주사위 굴리기 창 열기 (버튼 → GameManager.RollDice)")) UI.ShowRollDicePopup();
 
         DrawPropertySection();
 
@@ -161,16 +156,9 @@ public class UIDebugPanel : MonoBehaviour
         }
         if (next == 0) turnCount = Mathf.Min(turnCount + 1, 30);
 
-        Game.HandleTurnChanged(Players[next].PlayerId); // GameState 갱신 (차례, 턴 번호)
-        UI.ShowTurn(Players[next].PlayerId);            // GameManager가 아직 UI를 부르지 않아 여기서 대신 호출
-
-        // 내 차례에만 주사위 버튼이 켜진다 (ShowTurn이 남의 차례에는 잠근다)
-        if (IsLocalTurn)
-        {
-            OpenDiceRoll();
-            Log($"{Names[next]} 차례 (내 차례: 주사위 버튼 켜짐)");
-        }
-        else Log($"{Names[next]} 차례 (주사위 버튼 잠김)");
+        // 차례 표시, 주사위 창은 GameManager가 UIManager로 직접 띄운다
+        Game.HandleTurnChanged(Players[next].PlayerId);
+        Log($"{Names[next]} 차례");
     }
 
     // GameState의 돈을 바꾸고 EconomyManager로 알린다 (돈 변화 표시는 이 경로 하나만 쓴다)
@@ -179,7 +167,6 @@ public class UIDebugPanel : MonoBehaviour
         PlayerState player = Players[index];
         long before = player.Money;
         player.Money += amount;
-        moneySnapshot[player.PlayerId] = player.Money; // 아래 알림이 표시를 맡으므로 Update 감시가 또 띄우지 않게
         UI.SetNextMoneyReason(player.PlayerId, reason);
         EconomyManager.NotifyMoneyChanged(player.PlayerId, before, player.Money);
     }
@@ -192,8 +179,6 @@ public class UIDebugPanel : MonoBehaviour
         if (receiver == payer || Cash(payer) < toll) { Log("통행료를 낼 돈이 부족합니다"); return; }
 
         Game.HandleTollPaid(Players[payer].PlayerId, Players[receiver].PlayerId, toll); // GameState 갱신
-        SnapshotMoney();                                                                // 연출이 표시를 맡는다
-        UI.PlayTollEffect(Players[payer].PlayerId, Players[receiver].PlayerId, toll);   // 코인 이동 연출
         Log($"통행료 {toll:N0}: {Names[payer]} → {Names[receiver]}");
     }
 
@@ -212,28 +197,6 @@ public class UIDebugPanel : MonoBehaviour
             UI.RefreshAllPlayers();
             Log($"{Names[turnIndex]} 파산 해제 (표시만 되돌립니다)");
         }
-    }
-
-    // ───────────── 주사위 ─────────────
-
-    // 굴리기 버튼을 누르면: 구르기 시작 → 실제 GameManager.RollDice() 요청 → (서버 응답 대신) 잠시 뒤 결과 표시.
-    // 지금 GameManager는 결과를 UI로 넘기지 않아서, 응답 역할을 이 창이 한다.
-    private void OpenDiceRoll()
-    {
-        UI.DiceRoll.Show(power =>
-        {
-            UI.DiceResult.StartRolling();
-            Game.RollDice();
-            DOVirtual.DelayedCall(1f, ShowDice, ignoreTimeScale: false);
-        }, 0);
-    }
-
-    private void ShowDice()
-    {
-        int a = Random.Range(1, 7);
-        int b = Random.Range(1, 7);
-        UI.ShowDiceResult(a, b);
-        Log($"주사위 {a} + {b} = {a + b}");
     }
 
     private int lap = 1; // 현재 바퀴 (별 1개는 2바퀴, 2개는 3바퀴, 3개는 4바퀴부터)
@@ -283,7 +246,6 @@ public class UIDebugPanel : MonoBehaviour
         Row(("인수 창", () => UI.ShowAcquirePropertyPopup(me, data.Id)),
             ("매각 창 (통행료 30,000)", () => UI.ShowSellPropertiesPopup(me, other, 30000)));
         if (GUILayout.Button("타일 정보")) UI.ShowTileInfoPopup(data.Id);
-        holdTurn = GUILayout.Toggle(holdTurn, "턴 고정 (팝업이 끝나도 차례를 넘기지 않음)");
     }
 
     private void SetOwner(int propertyId, long? owner, int level)
@@ -297,28 +259,6 @@ public class UIDebugPanel : MonoBehaviour
     }
 
     private void SetMyMoney(long amount) => ChangeMoney(LocalPlayer, amount - Players[LocalPlayer].Money, "설정");
-
-    private void SnapshotMoney()
-    {
-        foreach (PlayerState p in Players) moneySnapshot[p.PlayerId] = p.Money;
-    }
-
-    // GameManager가 UI를 아직 부르지 않으므로, 구매·건설·인수·매각으로 돈이 바뀌면 여기서 감지해 화면에 반영한다
-    private void Update()
-    {
-        if (!ready || Game == null) return;
-
-        if (holdTurn)
-            typeof(GameManager).GetField("isDouble", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)?.SetValue(Game, true);
-
-        foreach (PlayerState p in Players)
-        {
-            if (!moneySnapshot.TryGetValue(p.PlayerId, out long before)) before = p.Money;
-            if (before == p.Money) continue;
-            moneySnapshot[p.PlayerId] = p.Money;
-            UI.PlayMoneyChange(p.PlayerId, p.Money - before, p.Money > before ? "입금" : "출금");
-        }
-    }
 
     // from 다음 차례의 (파산하지 않은) 플레이어
     private int NextPlayer(int from)

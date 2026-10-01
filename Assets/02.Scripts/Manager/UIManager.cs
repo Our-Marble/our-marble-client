@@ -119,6 +119,7 @@ public class UIManager : MonoBehaviour
     public void ShowChooseDestinationPopup()
     {
         chooseDestinationMode = true;
+        if (diceRoll != null) diceRoll.SetInteractable(false); // 목적지를 고르는 동안에는 주사위를 굴릴 수 없다
         if (destinationSelect != null) destinationSelect.Show();
     }
 
