@@ -942,10 +942,13 @@ public class GameManager : Singleton<GameManager>
             if (isBuildable)
             {
                 Build(playerId, propertyId);
+                return;
             }
-
-            ProcessEndTurn();
-            return;
+            else
+            {
+                ProcessEndTurn();
+                return;
+            }
         }
         // 플레이어의 경우, 건설할 것인지 선택 가능한 UI를 표시합니다.
         if (UIManager.Instance != null)
