@@ -20,8 +20,10 @@ public class GameManager : Singleton<GameManager>
     [SerializeField] private long salaryAmount = 100000;   // TODO: 월급 금액 확정 필요
     [SerializeField] private long taxAmount = 100000;      // 세무조사 벌금 
     [SerializeField] private long startMoney = 500000;     // 초기 자금 (테스트할 때 인스펙터에서 늘려서 사용)
+    [SerializeField, Min(1)] private int maxRound = 30;     // 최대 라운드 (모든 플레이어가 한 번씩 하면 1라운드). 넘으면 게임 종료
     
     private bool isMoving;
+    private bool isGameOver; // 게임이 끝났으면 더 이상 턴을 진행하지 않습니다.
     
     // ────────────────────────── 기능 테스트용 주사위 값 지정 필드 ──────────────────────────
     [Header("기능 테스트용 주사위 값 강제")]
@@ -53,6 +55,7 @@ public class GameManager : Singleton<GameManager>
         // gameState 초기화. PropertyStates의 초기화는 Start에서 진행.
         gameState = new  GameState();
         gameState.TurnNumber = 0;
+        gameState.RoundNumber = 0;
         gameState.CurrentPlayerId = 0;
         gameState.WelfareFund = 0;
         
@@ -161,6 +164,47 @@ public class GameManager : Singleton<GameManager>
             if (!p.IsBankrupt) remaining++;
         return remaining <= 1;
     }
+
+    // nextPlayerId의 차례가 몇 번째 라운드인지 계산합니다.
+    // 턴 순서(playerOrder)가 처음으로 돌아오면 1 증가합니다. 파산한 플레이어는 GetNextPlayerId가 건너뛰므로 남은 플레이어 기준으로 셉니다.
+    private int GetNextRound(long nextPlayerId)
+    {
+        if (gameState.RoundNumber == 0) return 1; // 게임의 첫 차례
+
+        int prevIndex = playerOrder.IndexOf(gameState.CurrentPlayerId);
+        int nextIndex = playerOrder.IndexOf(nextPlayerId);
+        return nextIndex <= prevIndex ? gameState.RoundNumber + 1 : gameState.RoundNumber;
+    }
+
+    // 최종 순위를 로그로 남깁니다. (결과 창과 같은 기준: PlayerRanking)
+    private void LogRanking()
+    {
+        List<PlayerState> ranked = PlayerRanking.Rank(gameState.PlayerStates, gameState.PropertyStates);
+        for (int i = 0; i < ranked.Count; i++)
+        {
+            PlayerState player = ranked[i];
+            long totalAsset = PropertyManager.Instance.GetTotalAsset(player.PlayerId, player.Money, gameState.PropertyStates);
+            string result = player.IsBankrupt ? "파산" : (i == 0 ? "승리" : "패배");
+            Log($"  {i + 1}위 {P(player.PlayerId)}: 총자산 {Won(totalAsset)} (현금 {Won(player.Money)}) - {result}");
+        }
+    }
+
+    /// <summary>
+    /// 게임을 종료합니다. (남은 플레이어 1명 이하, 최대 라운드 도달)
+    /// 결과 창은 한 번만 띄우고, 이후에는 턴을 진행하지 않습니다.
+    /// </summary>
+    private void EndGame(string reason)
+    {
+        if (isGameOver) return;
+        isGameOver = true;
+
+        Log($"[게임 종료] {reason}");
+        LogRanking();
+
+        // 게임 결과 창을 띄웁니다. (총자산 순으로 순위 표시)
+        if (UIManager.Instance != null)
+            UIManager.Instance.ShowGameResultPopup();
+    }
     
     // ────────────────────────── 게임 진행 ──────────────────────────
     
@@ -187,6 +231,7 @@ public class GameManager : Singleton<GameManager>
         {
             PlayerSetup human = playerSetups.Find(s => !s.isBot);
             if (human != null) UIManager.Instance.SetLocalPlayer(human.playerId);
+            UIManager.Instance.SetMaxRound(maxRound); // 최대 라운드는 GameManager가 관리하고 UI에 알려줍니다.
             UIManager.Instance.InitPlayers();
         }
 
@@ -196,13 +241,28 @@ public class GameManager : Singleton<GameManager>
 
     public void HandleTurnChanged(long playerId)
     {
-        // gameState.CurrentPlayerId 를 playerId로 갱신합니다. gameState.TurnNumber를 1 증가시킵니다.
+        // 게임 종료 판정: 새 턴을 시작하기 전에 확인합니다.
+        if (isGameOver) return;
+        if (IsGameOver())
+        {
+            EndGame("남은 플레이어가 1명입니다.");
+            return;
+        }
+        int nextRound = GetNextRound(playerId);
+        if (nextRound > maxRound)
+        {
+            EndGame($"최대 라운드({maxRound}라운드)에 도달했습니다.");
+            return;
+        }
+
+        // gameState.CurrentPlayerId 를 playerId로 갱신합니다. gameState.TurnNumber를 1 증가시키고, 라운드 수를 갱신합니다.
         gameState.CurrentPlayerId = playerId;
         gameState.TurnNumber += 1;
+        gameState.RoundNumber = nextRound;
         
         // 'OO의 턴'이라는 UI를 표시합니다.
         PlayerState playerState = GetPlayerState(playerId);
-        Log($"===== {gameState.TurnNumber}번째 턴: {P(playerId)} 차례 (현금 {Won(playerState.Money)}, 위치 {TileName(playerState.Position)}) =====");
+        Log($"===== {gameState.RoundNumber}/{maxRound}라운드 ({gameState.TurnNumber}번째 턴): {P(playerId)} 차례 (현금 {Won(playerState.Money)}, 위치 {TileName(playerState.Position)}) =====");
         if (UIManager.Instance != null)
             UIManager.Instance.ShowTurn(playerId);
 
@@ -609,10 +669,8 @@ public class GameManager : Singleton<GameManager>
         }
         if (remaining <= 1)
         {
-            Log("[게임 종료] 남은 플레이어가 1명입니다.");
             // 게임 종료 함수를 호출합니다.
-            if (UIManager.Instance != null)
-                UIManager.Instance.ShowGameResultPopup();
+            EndGame("남은 플레이어가 1명입니다.");
         }
         
         PlayerManager.Instance.HidePawn(playerId);

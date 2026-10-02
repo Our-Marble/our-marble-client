@@ -37,8 +37,7 @@ public class UIManager : MonoBehaviour
     [SerializeField] private CardDeckData cardDeck;
     [Tooltip("다른 플레이어가 뽑은 황금열쇠 카드를 보여주는 시간(초). 카드가 뒤집힌 뒤부터 센다.")]
     [SerializeField] private float otherCardShowSeconds = 2f;
-    [Tooltip("상단바에 '턴 N / 최대'로 보여줄 최대 턴")]
-    [SerializeField] private int maxTurn = 30;
+    private int maxRound = 30; // 상단바에 '라운드 N / 최대'로 보여줄 최대 라운드. 값은 GameManager가 SetMaxRound로 알려준다.
 
     public TopBarView TopBar => topBar;
     public CurrentTurnView CurrentTurn => currentTurn;
@@ -444,14 +443,14 @@ public class UIManager : MonoBehaviour
     #region 턴 · 주사위
 
     // 'OO의 턴'이라는 UI를 표시합니다. GameManager.HandleTurnChanged에서 부릅니다.
-    // 차례 표시, 플레이어 카드 강조, 상단바 턴 수를 함께 바꾸고, 내 차례가 아니면 주사위 굴리기 버튼을 잠급니다.
+    // 차례 표시, 플레이어 카드 강조, 상단바 라운드 수를 함께 바꾸고, 내 차례가 아니면 주사위 굴리기 버튼을 잠급니다.
     public void ShowTurn(long playerId)
     {
         int index = IndexOf(playerId);
         if (index < 0) return;
 
         SetTurn(index, NameOf(playerId), PortraitOf(playerId));
-        if (topBar != null) topBar.SetTurn(DisplayTurn(), maxTurn);
+        if (topBar != null) topBar.SetRound(DisplayRound(), maxRound);
         if (playerId != LocalPlayerId && diceRoll != null) diceRoll.SetInteractable(false);
     }
 
@@ -543,6 +542,13 @@ public class UIManager : MonoBehaviour
     /// 게임을 시작할 때 한 번 부릅니다. GameState의 플레이어 수에 맞춰 카드를 채웁니다.
     /// (플레이어 이름은 그 전에 SetPlayerProfile로 넣어주세요.)
     /// </summary>
+    // 상단바에 보여줄 최대 라운드를 지정합니다. 게임 시작 시 GameManager가 부릅니다. (최대 라운드 값은 GameManager가 관리)
+    public void SetMaxRound(int value)
+    {
+        maxRound = value;
+        if (topBar != null) topBar.SetRound(DisplayRound(), maxRound);
+    }
+
     public void InitPlayers()
     {
         GameState state = State;
@@ -565,7 +571,7 @@ public class UIManager : MonoBehaviour
         if (topBar != null)
         {
             topBar.SetPlayerCount(count, playerInfos.Length);
-            topBar.SetTurn(DisplayTurn(), maxTurn);
+            topBar.SetRound(DisplayRound(), maxRound);
         }
     }
 
@@ -678,17 +684,12 @@ public class UIManager : MonoBehaviour
 
     private bool IsBankrupt(PlayerState player) => player.IsBankrupt || bankruptShown.Contains(player.PlayerId);
 
-    // 총 자산 = 현금 + 가진 땅의 투자금(땅값 + 지은 건물 비용)
+    // 총 자산 = 현금 + 가진 땅의 투자금(땅값 + 지은 건물 비용). 계산은 PropertyManager.GetTotalAsset (게임 결과와 같은 기준)
     private long TotalAssetOf(long playerId, long cash)
     {
-        long total = cash;
         GameState state = State;
-        if (state == null) return total;
-
-        foreach (PropertyState property in state.PropertyStates)
-            if (property.OwnerId == playerId)
-                total += PropertyManager.Instance.GetInvestedAmount(property);
-        return total;
+        if (state == null) return cash;
+        return PropertyManager.Instance.GetTotalAsset(playerId, cash, state.PropertyStates);
     }
 
     // 총 자산 순으로 등수를 매긴다. 파산한 사람은 맨 뒤.
@@ -702,9 +703,8 @@ public class UIManager : MonoBehaviour
         order.Sort((a, b) =>
         {
             PlayerState pa = state.PlayerStates[a], pb = state.PlayerStates[b];
-            if (IsBankrupt(pa) != IsBankrupt(pb)) return IsBankrupt(pa) ? 1 : -1;
-            int byAsset = TotalAssetOf(pb.PlayerId, pb.Money).CompareTo(TotalAssetOf(pa.PlayerId, pa.Money));
-            return byAsset != 0 ? byAsset : a.CompareTo(b);
+            int result = PlayerRanking.Compare(pa, IsBankrupt(pa), pb, IsBankrupt(pb), state.PropertyStates); // 파산 → 총자산 → 현금 순
+            return result != 0 ? result : a.CompareTo(b);
         });
 
         for (int rank = 0; rank < order.Count; rank++)
@@ -714,12 +714,12 @@ public class UIManager : MonoBehaviour
         }
     }
 
-    // 상단바에 보여줄 턴. GameState.TurnNumber는 플레이어 한 명의 차례마다 늘어나므로 한 바퀴를 1턴으로 센다.
-    private int DisplayTurn()
+    // 상단바에 보여줄 라운드. GameManager가 계산한 GameState.RoundNumber(살아 있는 플레이어가 모두 한 번씩 하면 1라운드)를 그대로 쓴다.
+    private int DisplayRound()
     {
         GameState state = State;
-        if (state == null || state.PlayerStates.Count == 0) return 1;
-        return Mathf.Max(1, (state.TurnNumber - 1) / state.PlayerStates.Count + 1);
+        if (state == null) return 1;
+        return Mathf.Max(1, state.RoundNumber);
     }
 
     /// <summary>플레이어 순서(0~3)의 정보 카드.</summary>
@@ -800,12 +800,17 @@ public class UIManager : MonoBehaviour
         GameState state = State;
         if (gameResult == null || state == null) return;
 
-        var ranked = new List<PlayerState>(state.PlayerStates);
-        ranked.Sort((a, b) =>
+        // 순위: 파산 → 총자산 → 현금 순, 모두 같으면 원래 순서 (GameManager 종료 로그와 같은 기준)
+        var order = new List<int>();
+        for (int i = 0; i < state.PlayerStates.Count; i++) order.Add(i);
+        order.Sort((x, y) =>
         {
-            if (IsBankrupt(a) != IsBankrupt(b)) return IsBankrupt(a) ? 1 : -1;
-            return TotalAssetOf(b.PlayerId, b.Money).CompareTo(TotalAssetOf(a.PlayerId, a.Money));
+            PlayerState px = state.PlayerStates[x], py = state.PlayerStates[y];
+            int result = PlayerRanking.Compare(px, IsBankrupt(px), py, IsBankrupt(py), state.PropertyStates);
+            return result != 0 ? result : x.CompareTo(y);
         });
+        var ranked = new List<PlayerState>();
+        foreach (int index in order) ranked.Add(state.PlayerStates[index]);
 
         var entries = new List<GameResultView.Entry>();
         for (int i = 0; i < ranked.Count; i++)
