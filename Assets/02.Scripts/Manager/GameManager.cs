@@ -176,16 +176,29 @@ public class GameManager : Singleton<GameManager>
         return nextIndex <= prevIndex ? gameState.RoundNumber + 1 : gameState.RoundNumber;
     }
 
-    // 최종 순위를 로그로 남깁니다. (결과 창과 같은 기준: PlayerRanking)
-    private void LogRanking()
+    // 살아남은 플레이어의 최종 등수를 정합니다. (파산한 플레이어는 파산할 때 이미 등수가 정해짐)
+    // PlayerRanking 순서대로 1위부터 부여합니다. (총자산 → 현금 → 원래 순서)
+    private void AssignSurvivorRanks()
     {
         List<PlayerState> ranked = PlayerRanking.Rank(gameState.PlayerStates, gameState.PropertyStates);
-        for (int i = 0; i < ranked.Count; i++)
+        int rank = 1;
+        foreach (PlayerState player in ranked)
         {
-            PlayerState player = ranked[i];
+            if (player.IsBankrupt) continue;
+            player.FinalRank = rank++;
+        }
+    }
+
+    // 최종 순위를 FinalRank 순으로 로그에 남깁니다.
+    private void LogRanking()
+    {
+        var ranked = new List<PlayerState>(gameState.PlayerStates);
+        ranked.Sort((a, b) => a.FinalRank.CompareTo(b.FinalRank));
+        foreach (PlayerState player in ranked)
+        {
             long totalAsset = PropertyManager.Instance.GetTotalAsset(player.PlayerId, player.Money, gameState.PropertyStates);
-            string result = player.IsBankrupt ? "파산" : (i == 0 ? "승리" : "패배");
-            Log($"  {i + 1}위 {P(player.PlayerId)}: 총자산 {Won(totalAsset)} (현금 {Won(player.Money)}) - {result}");
+            string result = player.IsBankrupt ? "파산" : (player.FinalRank == 1 ? "승리" : "패배");
+            Log($"  {player.FinalRank}위 {P(player.PlayerId)}: 총자산 {Won(totalAsset)} (현금 {Won(player.Money)}) - {result}");
         }
     }
 
@@ -199,6 +212,7 @@ public class GameManager : Singleton<GameManager>
         isGameOver = true;
 
         Log($"[게임 종료] {reason}");
+        AssignSurvivorRanks(); // 생존자 최종 등수 확정 (파산자는 이미 정해짐)
         LogRanking();
 
         // 게임 결과 창을 띄웁니다. (총자산 순으로 순위 표시)
@@ -657,11 +671,26 @@ public class GameManager : Singleton<GameManager>
     {
         // playerId에 해당하는 GameState.PlayerStates의 PlayerState.IsBankrupt 값을 true로 갱신합니다.
         var player = GetPlayerState(playerId);
-        if (player == null) return;
+        if (player == null || player.IsBankrupt) return; // 이미 파산한 플레이어는 다시 처리하지 않습니다.
+
+        // 최종 등수를 정합니다. 파산하는 시점에 남아 있던 인원 수가 등수입니다. (예: 4명 중 첫 파산 → 4위)
+        int aliveCount = 0;
+        foreach (var p in gameState.PlayerStates)
+        {
+            if (!p.IsBankrupt) aliveCount++;
+        }
+        player.FinalRank = aliveCount;
+
         player.IsBankrupt = true;
-        Log($"[파산] {P(playerId)}가 파산했습니다.");
+        Log($"[파산] {P(playerId)}가 파산했습니다. (최종 {player.FinalRank}위)");
+
+        // 파산 연출을 재생합니다. (GameState를 먼저 갱신한 뒤 부르므로 UI는 IsBankrupt를 그대로 읽으면 됨)
+        if (UIManager.Instance != null)
+            UIManager.Instance.PlayBankruptEffect(playerId);
+        PlayerManager.Instance.HidePawn(playerId);
 
         // 남은 플레이어 수가 1이라면 게임 종료 함수를 호출합니다. (팀전의 경우 조건이 바뀔 수 있음.)
+        // 파산 연출 뒤에 판정해서, 결과 창이 파산 연출보다 먼저 뜨지 않게 합니다.
         int remaining = 0;
         foreach (var p in gameState.PlayerStates)
         {
@@ -672,8 +701,6 @@ public class GameManager : Singleton<GameManager>
             // 게임 종료 함수를 호출합니다.
             EndGame("남은 플레이어가 1명입니다.");
         }
-        
-        PlayerManager.Instance.HidePawn(playerId);
     }
 
 #region Card Effect
@@ -1158,10 +1185,7 @@ public class GameManager : Singleton<GameManager>
         receiver.Money += payer.Money + liquidated; // 납부자 현금 전액 + 땅 매각가 합계
         payer.Money = 0; // 납부자 현금 0
 
-        // 파산 연출을 재생합니다.
-        if (UIManager.Instance != null)
-            UIManager.Instance.PlayBankruptEffect(payerId);
-        ProcessBankruptcy(payerId); // 납부자 파산 처리
+        ProcessBankruptcy(payerId); // 납부자 파산 처리 (GameState 갱신 → 파산 연출 → 게임 종료 판정)
 
         // 턴 넘기기는 ProcessArrival에서 처리 (HandleTurnChanged(GetNextPlayerId()) 호출)
     }

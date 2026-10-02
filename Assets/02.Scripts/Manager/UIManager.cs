@@ -498,7 +498,6 @@ public class UIManager : MonoBehaviour
 
     private readonly Dictionary<long, string> nextMoneyReason = new();
     private readonly HashSet<long> transferPlayers = new();   // 이동 연출이 돈 표시를 대신 처리하는 동안
-    private readonly HashSet<long> bankruptShown = new();     // 파산 연출을 이미 보여준 플레이어
     private readonly Dictionary<long, long> bankruptShortfall = new();
 
     private class Profile
@@ -554,7 +553,6 @@ public class UIManager : MonoBehaviour
         GameState state = State;
         if (state == null) return;
 
-        bankruptShown.Clear();
         bankruptShortfall.Clear();
         transferPlayers.Clear();
 
@@ -587,7 +585,7 @@ public class UIManager : MonoBehaviour
             if (view == null) continue;
             PlayerState player = state.PlayerStates[i];
             view.SetMoney(player.Money, TotalAssetOf(player.PlayerId, player.Money), animate);
-            view.SetBankrupt(IsBankrupt(player), animate);
+            view.SetBankrupt(player.IsBankrupt, animate);
         }
         UpdateRanks();
     }
@@ -674,15 +672,12 @@ public class UIManager : MonoBehaviour
     // shortfall은 못 낸 금액으로, 게임 결과 창에 마이너스 자산으로 표시됩니다. (모르면 생략)
     public void PlayBankruptEffect(long playerId, long shortfall = 0)
     {
-        bankruptShown.Add(playerId);
         if (shortfall > 0) bankruptShortfall[playerId] = shortfall;
 
         PlayerInfoView view = GetPlayerInfo(IndexOf(playerId));
         if (view != null) view.SetBankrupt(true);
         RefreshAllPlayers();
     }
-
-    private bool IsBankrupt(PlayerState player) => player.IsBankrupt || bankruptShown.Contains(player.PlayerId);
 
     // 총 자산 = 현금 + 가진 땅의 투자금(땅값 + 지은 건물 비용). 계산은 PropertyManager.GetTotalAsset (게임 결과와 같은 기준)
     private long TotalAssetOf(long playerId, long cash)
@@ -703,7 +698,7 @@ public class UIManager : MonoBehaviour
         order.Sort((a, b) =>
         {
             PlayerState pa = state.PlayerStates[a], pb = state.PlayerStates[b];
-            int result = PlayerRanking.Compare(pa, IsBankrupt(pa), pb, IsBankrupt(pb), state.PropertyStates); // 파산 → 총자산 → 현금 순
+            int result = PlayerRanking.Compare(pa, pb, state.PropertyStates); // 파산(나중 파산 우선) → 총자산 → 현금 순
             return result != 0 ? result : a.CompareTo(b);
         });
 
@@ -806,7 +801,7 @@ public class UIManager : MonoBehaviour
         order.Sort((x, y) =>
         {
             PlayerState px = state.PlayerStates[x], py = state.PlayerStates[y];
-            int result = PlayerRanking.Compare(px, IsBankrupt(px), py, IsBankrupt(py), state.PropertyStates);
+            int result = PlayerRanking.Compare(px, py, state.PropertyStates);
             return result != 0 ? result : x.CompareTo(y);
         });
         var ranked = new List<PlayerState>();
@@ -816,7 +811,7 @@ public class UIManager : MonoBehaviour
         for (int i = 0; i < ranked.Count; i++)
         {
             PlayerState player = ranked[i];
-            bool bankrupt = IsBankrupt(player);
+            bool bankrupt = player.IsBankrupt;
             long shortfall = bankruptShortfall.TryGetValue(player.PlayerId, out long value) ? value : 0;
             entries.Add(new GameResultView.Entry
             {

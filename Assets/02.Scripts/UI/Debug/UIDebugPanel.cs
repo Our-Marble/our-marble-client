@@ -187,13 +187,13 @@ public class UIDebugPanel : MonoBehaviour
         PlayerState player = Players[turnIndex];
         if (!player.IsBankrupt)
         {
-            Game.ProcessBankruptcy(player.PlayerId); // GameState: IsBankrupt = true
-            UI.PlayBankruptEffect(player.PlayerId);
+            Game.ProcessBankruptcy(player.PlayerId); // GameState: IsBankrupt = true, FinalRank 기록 → 파산 연출까지 재생
             Log($"{Names[turnIndex]} 파산");
         }
         else
         {
             player.IsBankrupt = false;
+            player.FinalRank = 0;
             UI.RefreshAllPlayers();
             Log($"{Names[turnIndex]} 파산 해제 (표시만 되돌립니다)");
         }
