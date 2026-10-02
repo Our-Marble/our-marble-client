@@ -882,9 +882,13 @@ public class GameManager : Singleton<GameManager>
             if (isPurchasable)
             {
                 RunAfterDelay(() => PurchaseProperty(playerId, propertyId));
+                return;
             }
-
-            return;
+            else
+            {
+                ProcessEndTurn();
+                return;
+            }
         }
         // 플레이어의 경우, 땅을 구매할 것인지 선택 가능한 UI를 표시합니다.
         if (UIManager.Instance != null)
