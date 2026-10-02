@@ -121,4 +121,131 @@ public class BoardController : MonoBehaviour
 
         boardTile.SetBuildingSpriteRenderers(buildingLevel);
     }
+    
+    
+    
+    
+    // 타일 선택 기능
+    
+    private TileClickMode mode = TileClickMode.Inspect;
+    
+    public List<int> selectedIndexes = new List<int>();
+    int maxSelectCount = 0;
+
+    public void ChangeToSelectTravelMode()
+    {
+        mode = TileClickMode.SelectTravel;
+
+        maxSelectCount = 1;
+        selectedIndexes.Clear();
+    }
+
+    public void ChangeToSelectSellMode()
+    {
+        mode = TileClickMode.SelectSell;
+
+        maxSelectCount = 32;
+        selectedIndexes.Clear();
+    }
+
+    public void ChangeToInspectMode()
+    {
+        mode = TileClickMode.Inspect;
+        
+        ClearTileHighlights();
+        
+        maxSelectCount = 0;
+        selectedIndexes.Clear();
+    }
+
+    public void OnBoardTileClicked(int tileIndex)
+    {
+        switch (mode)
+        {
+            case TileClickMode.Inspect:
+                // 타일 정보 띄우는 함수를 호출
+                Debug.Log("타일 정보 : ~~~");
+                return;
+            
+            case TileClickMode.SelectTravel:
+                // tileIndex가 여행 가능한 타일인지 확인 (자유여행칸으로 이동은 안됨.)
+                if (tileIndex == 24) return;
+                
+                // selectedIndexes에 이미 있는 값인지 확인 
+                if (selectedIndexes.Contains(tileIndex))
+                {
+                    RemoveFromSelectedIndexes(tileIndex);
+                    UIManager.Instance.CheckTileValidForTravel(selectedIndexes);
+                    return;
+                }
+
+                // 이미 선택된 타일 개수가 최대인지 확인
+                if (selectedIndexes.Count >= maxSelectCount)
+                {
+                    int firxtIndex =  selectedIndexes[0];
+                    RemoveFromSelectedIndexes(firxtIndex);
+                    AddToSelectedIndexes(tileIndex);
+                    UIManager.Instance.CheckTileValidForTravel(selectedIndexes);
+                    return;
+                }
+                
+                // selectedIndexes에 값 추가
+                AddToSelectedIndexes(tileIndex);
+                UIManager.Instance.CheckTileValidForTravel(selectedIndexes);
+                return;
+            
+            case TileClickMode.SelectSell:
+                // selectedIndexes에 이미 있는 값인지 확인 
+                if (selectedIndexes.Contains(tileIndex))
+                {
+                    RemoveFromSelectedIndexes(tileIndex);
+                    UIManager.Instance.CheckTilesValidForSell(selectedIndexes);
+                    return;
+                }
+                
+                // 이미 선택된 타일 개수가 최대인지 확인
+                if (selectedIndexes.Count >= maxSelectCount) return;
+                
+                // tileIndex가 자산 타일인지 확인
+                TileData tileDatadata = BoardManager.Instance.GetTileData(tileIndex);
+                if (tileDatadata.Type != TileType.PROPERTY) return;
+                
+                // tileIndex가 현재 차례인 플레이어 소유인지 확인
+                int propertyId = tileDatadata.PropertyId;
+                PropertyState propertyState = GameManager.Instance.GetPropertyState(propertyId);
+                if (propertyState.OwnerId != GameManager.Instance.gameState.CurrentPlayerId) return;
+                
+                // selectedIndexes에 값 추가
+                AddToSelectedIndexes(tileIndex);
+                UIManager.Instance.CheckTilesValidForSell(selectedIndexes);
+                return;
+        }
+    }
+
+    private void AddToSelectedIndexes(int index)
+    {
+        selectedIndexes.Add(index);
+        boardTiles[index].SetTileHighlight(true);
+    }
+
+    private void RemoveFromSelectedIndexes(int index)
+    {
+        selectedIndexes.Remove(index);
+        boardTiles[index].SetTileHighlight(false);
+    }
+    
+    private void ClearTileHighlights()
+    {
+        foreach (BoardTile boardTile in boardTiles)
+        {
+            boardTile.SetTileHighlight(false);
+        }
+    }
+}
+
+enum TileClickMode
+{
+    Inspect,
+    SelectTravel,
+    SelectSell
 }
