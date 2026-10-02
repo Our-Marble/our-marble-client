@@ -178,21 +178,28 @@ public class UIManager : MonoBehaviour
     // 사지않기 버튼을 누르면 GameManager.DeclinePropertyPurchase(playerId, propertyId) 를 호출합니다.
     // 이 창은 빈 땅 전용입니다. (내 땅의 건설은 GameManager가 ShowBuildPopup으로 따로 부릅니다.)
     // 땅 구매 창은 '건물(땅 구매)'만 고를 수 있고, 별 카드는 구매 뒤 건설 단계라 잠겨서 보입니다.
-    public void ShowPurchasePropertyPopup(long playerId, long propertyId, int amount)
+    // isPurchasable: 구매할 수 있는지 여부입니다. GameManager가 판단해서 넘겨주세요. (UIManager는 판단하지 않습니다)
+    //   false이면 건물 카드가 "금액 부족"으로 잠기고, 창이 뜰 때 아무것도 선택되지 않은 상태로 시작하며,
+    //   구매 버튼은 켜지지 않습니다. (사지않기는 누를 수 있습니다)
+    public void ShowPurchasePropertyPopup(long playerId, long propertyId, bool isPurchasable)
     {
         if (purchase == null) return;
 
         int id = (int)propertyId;
         PropertyData data = PropertyManager.Instance.GetData(id);
         PlayerState player = GetPlayer(playerId);
+        long landPrice = PropertyManager.Instance.GetLandPrice(id); // 구매 비용은 땅값 (PropertyManager에서 조회)
 
         var options = new List<PurchasePopupView.Option>
         {
             new PurchasePopupView.Option
             {
                 TargetLevel = BuildingLevel.Land,
-                Cost = amount,
+                Cost = landPrice,
                 Toll = data != null ? data.GetToll(BuildingLevel.Land) : 0,
+                Locked = !isPurchasable,
+                LockReason = isPurchasable ? null : "금액 부족",
+                ShowInfoWhenNone = !isPurchasable, // 구매할 수 없어도 이용료·구매 비용은 보여준다
             }
         };
 
@@ -233,7 +240,10 @@ public class UIManager : MonoBehaviour
     // 건설하기 버튼을 누르면 GameManager.Build(playerId, propertyId) 를 호출합니다.
     // 건설하지않기 버튼을 누르면 GameManager.DeclineBuild(playerId, propertyId) 를 호출합니다.
     // 건물 → 별 1개 → 2개 → 3개 카드가 모두 보이고, 지금 지을 수 있는 다음 단계만 고를 수 있습니다.
-    public void ShowBuildPopup(long playerId, int propertyId)
+    // isBuildable: 건설할 수 있는지 여부입니다. GameManager가 판단해서 넘겨주세요. (UIManager는 판단하지 않습니다)
+    //   false이면 다음 단계 카드가 "금액 부족"으로 잠기고, 창이 뜰 때 아무것도 선택되지 않은 상태로 시작하며,
+    //   건설 버튼은 켜지지 않습니다. (건설하지않기는 누를 수 있습니다)
+    public void ShowBuildPopup(long playerId, int propertyId, bool isBuildable)
     {
         if (purchase == null) return;
 
@@ -241,6 +251,28 @@ public class UIManager : MonoBehaviour
         PropertyData data = PropertyManager.Instance.GetData(propertyId);
         PlayerState player = GetPlayer(playerId);
         if (state == null || data == null) return;
+
+        // 특수 칸(PropertyData.CanBuild == false)은 별 건설이 없어서, 구매창처럼 특수 칸 모양(배지·효과 설명)으로 보여준다.
+        // 지을 수 있는 단계가 없으니 건설 버튼은 꺼져 있고 "건설하지않기"만 누를 수 있다. 정보칸에는 현재 이용료를 보여준다.
+        if (!data.CanBuild)
+        {
+            var specialOptions = new List<PurchasePopupView.Option>
+            {
+                new PurchasePopupView.Option
+                {
+                    TargetLevel = BuildingLevel.Land,
+                    Toll = data.GetToll(state.BuildingLevel),
+                    Locked = true,
+                    LockReason = "보유 중",
+                    ShowInfoWhenNone = true,
+                }
+            };
+            purchase.Show(TileName(propertyId), null, specialOptions, player != null ? player.Money : 0,
+                level => { if (Game != null) Game.Build(playerId, propertyId); },
+                () => { if (Game != null) Game.DeclineBuild(playerId, propertyId); },
+                OwnerLabel(state), SpecialDescription(propertyId));
+            return;
+        }
 
         int current = (int)state.BuildingLevel;
         var options = new List<PurchasePopupView.Option>();
@@ -255,6 +287,14 @@ public class UIManager : MonoBehaviour
             {
                 option.Locked = true;
                 option.LockReason = "보유 중";
+                option.Owned = true; // 별 단계 표시에 보유한 단계까지 채워 보여준다
+
+                // 이미 최고 단계(호텔)라 더 지을 곳이 없어도, 정보창에는 호텔의 이용료를 보여준다. (구매 비용은 없다)
+                if (level == BuildingLevel.Hotel)
+                {
+                    option.Cost = 0;
+                    option.ShowInfoWhenNone = true;
+                }
             }
             else
             {
@@ -265,6 +305,12 @@ public class UIManager : MonoBehaviour
                 {
                     option.Locked = true;
                     option.LockReason = "다음 단계";
+                }
+                else if (!isBuildable)
+                {
+                    option.Locked = true;
+                    option.LockReason = "금액 부족";
+                    option.ShowInfoWhenNone = true; // 지을 수 없어도 이용료·건설 비용은 보여준다
                 }
             }
             options.Add(option);
@@ -305,10 +351,12 @@ public class UIManager : MonoBehaviour
         long ownerId = state.OwnerId ?? 0;
         long price = PropertyManager.Instance.GetAcquireValue(state);
 
+        // 특수 칸(별 건설 없음)은 별 단계 대신 "특수 칸" 배지와 땅 효과 설명으로 보여준다
         takeover.Show(TileName(propertyId), null, state.BuildingLevel,
             NameOf(ownerId), ColorIndexOf(ownerId), price, player != null ? player.Money : 0,
             () => { if (Game != null) Game.AcquireProperty(playerId, propertyId); },
-            () => { if (Game != null) Game.DeclineAcquireProperty(playerId, propertyId); });
+            () => { if (Game != null) Game.DeclineAcquireProperty(playerId, propertyId); },
+            PropertyManager.Instance.GetData(propertyId) is { CanBuild: false } ? SpecialDescription(propertyId) : null);
     }
 
     // 매각할 자산들을 선택할 수 있는 창을 띄워주는 함수입니다.

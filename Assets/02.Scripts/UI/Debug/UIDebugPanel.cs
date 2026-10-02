@@ -225,8 +225,10 @@ public class UIDebugPanel : MonoBehaviour
         Row(("단계 +1", () => { if (state != null && state.BuildingLevel < BuildingLevel.Hotel) SetOwner(data.Id, state.OwnerId, (int)state.BuildingLevel + 1); }),
             ("내 돈 100,000", () => SetMyMoney(100000)), ("내 돈 100", () => SetMyMoney(100)));
         GUILayout.Label("아래 창의 버튼 → GameManager.Purchase/Build/Acquire 호출. 매각은 아래 '보드 선택 시험'에서");
-        Row(("구매 창", () => UI.ShowPurchasePropertyPopup(me, data.Id, (int)PropertyManager.Instance.GetLandPrice(data.Id))),
-            ("건설 창", () => UI.ShowBuildPopup(me, data.Id)));
+        Row(("구매 창", () => UI.ShowPurchasePropertyPopup(me, data.Id, isPurchasable: true)),
+            ("건설 창", () => UI.ShowBuildPopup(me, data.Id, isBuildable: true)));
+        Row(("구매 창 (금액 부족)", () => UI.ShowPurchasePropertyPopup(me, data.Id, isPurchasable: false)),
+            ("건설 창 (금액 부족)", () => UI.ShowBuildPopup(me, data.Id, isBuildable: false)));
         Row(("인수 창", () => UI.ShowAcquirePropertyPopup(me, data.Id)),
             ("타일 정보", () => UI.ShowTileInfoPopup(data.Id)));
 

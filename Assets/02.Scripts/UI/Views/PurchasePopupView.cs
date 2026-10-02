@@ -23,6 +23,8 @@ public class PurchasePopupView : UIView
         public long Toll;
         public bool Locked;
         public string LockReason;   // 잠겼을 때 카드에 표시. 예) "2바퀴부터", "보유 중"
+        public bool ShowInfoWhenNone; // 아무것도 선택되지 않은 상태(금액 부족 등)에서도 이 카드의 이용료·비용을 보여준다
+        public bool Owned;          // 이미 지어 둔(보유 중인) 단계. 별 단계 표시에 보유한 만큼 채워 보여준다
     }
 
     [Serializable]
@@ -55,6 +57,7 @@ public class PurchasePopupView : UIView
 
     private readonly Option?[] options = new Option?[OptionCount];
     private Option selected;
+    private bool hasSelection;   // 선택된 카드가 있는지 (살 수 있는 카드가 없으면 아무것도 선택하지 않은 채로 시작한다)
     private long cash;
     private Sequence boughtSequence;
 
@@ -124,6 +127,7 @@ public class PurchasePopupView : UIView
             if (ownerText.transform.parent != null) ownerText.transform.parent.gameObject.SetActive(!string.IsNullOrEmpty(ownerLabel));
         }
         if (cashText != null) cashText.text = UIPalette.Money(cash);
+        if (costText != null) costText.color = Color.black; // 구매(건설) 비용은 검정색
 
         int first = -1, firstUnlocked = -1;
         for (int i = 0; i < OptionCount; i++)
@@ -133,15 +137,17 @@ public class PurchasePopupView : UIView
             if (first < 0) first = i;
             if (firstUnlocked < 0 && !this.options[i].Value.Locked) firstUnlocked = i;
         }
-        int pick = firstUnlocked >= 0 ? firstUnlocked : first;
+        // 살 수 있는(잠기지 않은) 첫 단계를 고른다. 하나도 없으면(금액 부족 등) 아무것도 선택하지 않는다
+        int pick = firstUnlocked;
         if (pick >= 0) Select(pick, notifyToggle: true);
+        else ClearSelection();
 
-        SetOnClick(buyButton, () => PlayBought(selected.TargetLevel, onBuy));
+        SetOnClick(buyButton, () => { if (hasSelection) PlayBought(selected.TargetLevel, onBuy); });
         SetOnClick(cancelButton, () => { Close(); onCancel?.Invoke(); });
         Open();
 
-        // 창이 열린 뒤에 기본 선택을 한 번 더 확실히 켠다. (닫혀 있는 동안 켠 토글은 선택 표시가 갱신되지 않을 수 있다)
-        // 지금 살 수 있는 첫 단계가 선택된 상태로 보이게 한다.
+        // 창이 열린 뒤에 기본 선택을 한 번 더 확실히 맞춘다. (닫혀 있는 동안 바꾼 토글은 선택 표시가 갱신되지 않을 수 있다)
+        // 살 수 있는 첫 단계가 선택된 상태로, 없으면 아무것도 선택되지 않은 상태로 보이게 한다.
         if (pick >= 0 && optionCards[pick] != null && optionCards[pick].toggle != null)
         {
             var pickToggle = optionCards[pick].toggle;
@@ -149,6 +155,42 @@ public class PurchasePopupView : UIView
             pickToggle.isOn = true;
             Select(pick, notifyToggle: false);
         }
+        else if (pick < 0)
+        {
+            ClearSelection();
+        }
+    }
+
+    // 모든 카드의 선택을 끈다. 이용료·비용은 "-"로 두고 구매 버튼도 끈다.
+    private void ClearSelection()
+    {
+        hasSelection = false;
+        foreach (var refs in optionCards)
+        {
+            var toggle = refs != null ? refs.toggle : null;
+            if (toggle == null) continue;
+            // 토글 그룹이 "하나는 꼭 켜져 있어야" 하는 설정이면 끌 수 없으므로 잠깐 풀었다가 되돌린다
+            var group = toggle.group;
+            bool allowSwitchOff = group != null && group.allowSwitchOff;
+            if (group != null) group.allowSwitchOff = true;
+            toggle.isOn = false; // 선택 표시(배경·테두리)는 영구 리스너가 끈다
+            if (group != null) group.allowSwitchOff = allowSwitchOff;
+        }
+        // 선택이 없어도 별 단계 표시에는 이미 보유한 단계까지 채워 보여준다 (예: 호텔이면 별 3개)
+        BuildingLevel owned = BuildingLevel.Land;
+        foreach (var o in options)
+            if (o.HasValue && o.Value.Owned && o.Value.TargetLevel > owned) owned = o.Value.TargetLevel;
+        stageTrack.Set(owned, false);
+
+        // 선택은 없어도, 살 수 있었을 카드(금액 부족)의 이용료와 비용은 보여준다. 없으면 "-"
+        Option? info = null;
+        foreach (var o in options)
+            if (o.HasValue && o.Value.ShowInfoWhenNone) { info = o; break; }
+        if (tollText != null) tollText.text = info.HasValue ? UIPalette.Money(info.Value.Toll) : "-";
+        // 비용이 없는 카드(이미 최고 단계 등)는 "-"
+        if (costText != null) costText.text = info.HasValue && info.Value.Cost > 0 ? UIPalette.Money(info.Value.Cost) : "-";
+        if (buyButton != null) buyButton.interactable = false;
+        UpdateCashColor(info.HasValue ? info.Value.Cost : 0);
     }
 
     private void SetupCard(int index)
@@ -160,7 +202,8 @@ public class PurchasePopupView : UIView
         if (!option.HasValue || refs.toggle == null) return;
 
         var o = option.Value;
-        if (refs.costText != null) refs.costText.text = UIPalette.Money(o.Cost);
+        // 비용이 없는 카드(이미 보유 중인 단계)는 "-"
+        if (refs.costText != null) refs.costText.text = o.Cost > 0 ? UIPalette.Money(o.Cost) : "-";
         SetActive(refs.lockOverlay, o.Locked);
         if (refs.lockText != null) refs.lockText.text = string.IsNullOrEmpty(o.LockReason) ? "선택 불가" : o.LockReason;
         refs.toggle.interactable = !o.Locked;
@@ -174,6 +217,7 @@ public class PurchasePopupView : UIView
         var option = options[index];
         if (!option.HasValue) return;
         selected = option.Value;
+        hasSelection = true;
         // 토글을 켜면 선택 표시(배경·테두리)가 영구 리스너로 따라 켜진다
         var toggle = optionCards[index] != null ? optionCards[index].toggle : null;
         if (notifyToggle && toggle != null) toggle.isOn = true;
@@ -186,6 +230,13 @@ public class PurchasePopupView : UIView
         if (tollText != null) tollText.text = UIPalette.Money(selected.Toll);
         if (costText != null) costText.text = UIPalette.Money(selected.Cost);
         if (buyButton != null) buyButton.interactable = !selected.Locked && cash >= selected.Cost;
+        UpdateCashColor(selected.Cost);
+    }
+
+    // 보유 현금 글자색: 필요한 비용을 낼 수 있으면 초록, 모자라면 빨강
+    private void UpdateCashColor(long requiredCost)
+    {
+        if (cashText != null) cashText.color = cash >= requiredCost ? UIPalette.GainText : UIPalette.Red;
     }
 
     /// <summary>구매 확정: 새 별(건물만이면 "건물" 칩)이 튀어오르며 반짝인 뒤 창을 닫는다.</summary>
