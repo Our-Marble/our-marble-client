@@ -10934,6 +10934,7 @@ MonoBehaviour:
   salaryAmount: 20000
   taxAmount: 100000
   startMoney: 1500000
+  maxRound: 30
   forceDice1: -1
   forceDice2: -1
   autoPlayAllPlayers: 0
@@ -26509,7 +26510,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "\uD134"
+  m_text: "\uB77C\uC6B4\uB4DC"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 310f6cd3139b81c4199fc0e175244fc5, type: 2}
   m_sharedMaterial: {fileID: -4144461782606068256, guid: 310f6cd3139b81c4199fc0e175244fc5, type: 2}
@@ -48657,7 +48658,7 @@ MonoBehaviour:
   tileInfo: {fileID: 783557065}
   gameResult: {fileID: 168766783}
   cardDeck: {fileID: 11400000, guid: 28d3ca2c6729ed246a6df82e701ba38a, type: 2}
-  maxTurn: 30
+  otherCardShowSeconds: 2
 --- !u!4 &1470332513
 Transform:
   m_ObjectHideFlags: 0

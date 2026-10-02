@@ -20,7 +20,7 @@ public class GameManager : Singleton<GameManager>
     [SerializeField] private long salaryAmount = 100000;   // TODO: 월급 금액 확정 필요
     [SerializeField] private long taxAmount = 100000;      // 세무조사 벌금 
     [SerializeField] private long startMoney = 500000;     // 초기 자금 (테스트할 때 인스펙터에서 늘려서 사용)
-    [SerializeField, Min(1)] private int maxTurn = 30;     // 최대 턴 (모든 플레이어가 한 번씩 하면 1턴). 넘으면 게임 종료
+    [SerializeField, Min(1)] private int maxRound = 30;     // 최대 라운드 (모든 플레이어가 한 번씩 하면 1라운드). 넘으면 게임 종료
     
     private bool isMoving;
     private bool isGameOver; // 게임이 끝났으면 더 이상 턴을 진행하지 않습니다.
@@ -165,7 +165,7 @@ public class GameManager : Singleton<GameManager>
         return remaining <= 1;
     }
 
-    // nextPlayerId의 차례가 몇 번째 턴(바퀴)인지 계산합니다.
+    // nextPlayerId의 차례가 몇 번째 라운드인지 계산합니다.
     // 턴 순서(playerOrder)가 처음으로 돌아오면 1 증가합니다. 파산한 플레이어는 GetNextPlayerId가 건너뛰므로 남은 플레이어 기준으로 셉니다.
     private int GetNextRound(long nextPlayerId)
     {
@@ -190,7 +190,7 @@ public class GameManager : Singleton<GameManager>
     }
 
     /// <summary>
-    /// 게임을 종료합니다. (남은 플레이어 1명 이하, 최대 턴 도달)
+    /// 게임을 종료합니다. (남은 플레이어 1명 이하, 최대 라운드 도달)
     /// 결과 창은 한 번만 띄우고, 이후에는 턴을 진행하지 않습니다.
     /// </summary>
     private void EndGame(string reason)
@@ -231,7 +231,7 @@ public class GameManager : Singleton<GameManager>
         {
             PlayerSetup human = playerSetups.Find(s => !s.isBot);
             if (human != null) UIManager.Instance.SetLocalPlayer(human.playerId);
-            UIManager.Instance.SetMaxTurn(maxTurn); // 최대 턴은 GameManager가 관리하고 UI에 알려줍니다.
+            UIManager.Instance.SetMaxRound(maxRound); // 최대 라운드는 GameManager가 관리하고 UI에 알려줍니다.
             UIManager.Instance.InitPlayers();
         }
 
@@ -249,20 +249,20 @@ public class GameManager : Singleton<GameManager>
             return;
         }
         int nextRound = GetNextRound(playerId);
-        if (nextRound > maxTurn)
+        if (nextRound > maxRound)
         {
-            EndGame($"최대 턴({maxTurn}턴)에 도달했습니다.");
+            EndGame($"최대 라운드({maxRound}라운드)에 도달했습니다.");
             return;
         }
 
-        // gameState.CurrentPlayerId 를 playerId로 갱신합니다. gameState.TurnNumber를 1 증가시키고, 턴(바퀴) 수를 갱신합니다.
+        // gameState.CurrentPlayerId 를 playerId로 갱신합니다. gameState.TurnNumber를 1 증가시키고, 라운드 수를 갱신합니다.
         gameState.CurrentPlayerId = playerId;
         gameState.TurnNumber += 1;
         gameState.RoundNumber = nextRound;
         
         // 'OO의 턴'이라는 UI를 표시합니다.
         PlayerState playerState = GetPlayerState(playerId);
-        Log($"===== {gameState.RoundNumber}/{maxTurn}턴 ({gameState.TurnNumber}번째 차례): {P(playerId)} 차례 (현금 {Won(playerState.Money)}, 위치 {TileName(playerState.Position)}) =====");
+        Log($"===== {gameState.RoundNumber}/{maxRound}라운드 ({gameState.TurnNumber}번째 턴): {P(playerId)} 차례 (현금 {Won(playerState.Money)}, 위치 {TileName(playerState.Position)}) =====");
         if (UIManager.Instance != null)
             UIManager.Instance.ShowTurn(playerId);
 

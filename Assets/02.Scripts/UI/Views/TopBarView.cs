@@ -3,7 +3,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-/// <summary>상단바: 방 정보, 턴 수, 설정·나가기 버튼. Canvas_TopBar에 붙는다.</summary>
+/// <summary>상단바: 방 정보, 라운드 수, 설정·나가기 버튼. Canvas_TopBar에 붙는다.</summary>
 public class TopBarView : UIView
 {
     [SerializeField] private TMP_Text roomNameText;
@@ -36,9 +36,10 @@ public class TopBarView : UIView
         if (playerCountText != null) playerCountText.text = $"{current} / {max}명";
     }
 
-    public void SetTurn(int turn, int maxTurn)
+    // 현재 라운드 / 최대 라운드를 표시합니다. (turnText는 씬 오브젝트 연결용 이름이라 그대로 둠)
+    public void SetRound(int round, int maxRound)
     {
-        if (turnText != null) turnText.text = $"{turn} <size=70%><color=#C9A770>/ {maxTurn}</color></size>";
+        if (turnText != null) turnText.text = $"{round} <size=70%><color=#C9A770>/ {maxRound}</color></size>";
     }
 
     public void SetCallbacks(Action onSettings, Action onExit)
