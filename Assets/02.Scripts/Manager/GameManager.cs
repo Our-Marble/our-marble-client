@@ -536,18 +536,18 @@ public class GameManager : Singleton<GameManager>
                     if (canAffordToPurchase) // 땅 구매할 돈이 충분하면
                     {
                         Log($"  빈 땅: {CityName(propertyId)} 구매 가능 (땅값 {Won(landPrice)})");
-                        HandlePurchasePropertyPrompt(playerId, propertyId, landPrice, true);
+                        HandlePurchasePropertyPrompt(playerId, propertyId, true);
                     }
                     else // 땅 구매할 돈이 충분하지 않으면
                     {
                         Log($"  빈 땅: {CityName(propertyId)} 구매 불가능 (땅값 {Won(landPrice)})");
-                        HandlePurchasePropertyPrompt(playerId, propertyId, landPrice, false);
+                        HandlePurchasePropertyPrompt(playerId, propertyId, false);
                     }
                 }
                 else if (propertyState.OwnerId.Value == playerId) // 본인 소유의 땅인 경우
                 {
                     BuildingLevel currentLevel = propertyState.BuildingLevel;
-                    bool canBuild = propertyData.CanBuild && currentLevel;
+                    bool canBuild = propertyData.CanBuild;
                     bool isMaxLevel = currentLevel != BuildingLevel.Hotel;
                     long buildCost = (canBuild && isMaxLevel) ? PropertyManager.Instance.GetBuildCost(propertyId, (BuildingLevel)(currentLevel + 1)) : 0;
                     bool canAffordToBuild = canBuild && isMaxLevel && player.Money >= buildCost;
@@ -555,14 +555,14 @@ public class GameManager : Singleton<GameManager>
                     {
                         // HandleBuildPrompt 호출 ( 호출에 필요한 매개변수는 GameState 와 Data를 조회하여 얻습니다. )
                         Log($"  내 땅: {CityName(propertyId)} (현재 {currentLevel}) 건설 가능 (비용 {Won(buildCost)})");
-                        HandleBuildPrompt(playerId, propertyId, buildCost, true);
+                        HandleBuildPrompt(playerId, propertyId, true);
                     }
                     else
                     {
                         string reason = !propertyData.CanBuild ? "건설 불가 칸" : currentLevel == BuildingLevel.Hotel ? "이미 최고 단계" : $"현금 부족 (비용 {Won(buildCost)})";
                         Log($"  내 땅: {CityName(propertyId)} (현재 {currentLevel}) 건설 불가능 - {reason}");
                         
-                        HandleBuildPrompt(playerId, propertyId, buildCost, false);
+                        HandleBuildPrompt(playerId, propertyId, false);
                     }
                 }
                 else // 타인 소유의 땅인 경우
@@ -833,12 +833,12 @@ public class GameManager : Singleton<GameManager>
 
 
     // ────────────────────────── 토지 구매 ──────────────────────────
-    public void HandlePurchasePropertyPrompt(long playerId, int propertyId, long amount)
+    public void HandlePurchasePropertyPrompt(long playerId, int propertyId, bool isPurchasable)
     {
         // 봇의 경우, 돈이 있다면 무조건 구매합니다.
         if (IsBot(playerId))
         {
-            if (GetPlayerState(playerId).Money >= amount)
+            if (isPurchasable)
             {
                 RunAfterDelay(() => PurchaseProperty(playerId, propertyId));
             }
@@ -848,7 +848,7 @@ public class GameManager : Singleton<GameManager>
         // 플레이어의 경우, 땅을 구매할 것인지 선택 가능한 UI를 표시합니다.
         if (UIManager.Instance != null)
         {
-            UIManager.Instance.ShowPurchasePropertyPopup(playerId, propertyId, (int)amount);
+            UIManager.Instance.ShowPurchasePropertyPopup(playerId, propertyId, isPurchasable);
             return;
         }
     }
@@ -893,7 +893,7 @@ public class GameManager : Singleton<GameManager>
 
 
     // ────────────────────────── 건물 건설 ──────────────────────────
-    public void HandleBuildPrompt(long playerId, int propertyId, bool isBuildable )
+    public void HandleBuildPrompt(long playerId, int propertyId, bool isBuildable)
     {
         // 봇의 경우, 돈이 있다면 무조건 건설합니다.
         if (IsBot(playerId))
