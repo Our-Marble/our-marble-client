@@ -668,14 +668,15 @@ public class UIManager : MonoBehaviour
         DOVirtual.DelayedCall(3f, Finish, ignoreTimeScale: true);
     }
 
-    // 파산 연출을 재생합니다. GameManager.HandleBankruptcy에서 부릅니다.
+    // 파산 연출을 재생합니다. GameManager.ProcessBankruptcy가 GameState를 갱신한 뒤 부릅니다.
     // shortfall은 못 낸 금액으로, 게임 결과 창에 마이너스 자산으로 표시됩니다. (모르면 생략)
     public void PlayBankruptEffect(long playerId, long shortfall = 0)
     {
         if (shortfall > 0) bankruptShortfall[playerId] = shortfall;
 
-        PlayerInfoView view = GetPlayerInfo(IndexOf(playerId));
-        if (view != null) view.SetBankrupt(true);
+        // GameState(IsBankrupt)가 이미 갱신된 뒤 호출되므로, 전체 갱신 한 번이면 됩니다.
+        // 방금 파산한 플레이어의 카드만 파산 표시가 꺼짐 → 켜짐으로 바뀌면서 도장 연출이 재생됩니다.
+        // (SetBankrupt를 따로 한 번 더 부르면, 두 번째 호출이 진행 중인 도장 연출을 멈추고 최종 모습으로 바꿔 버림)
         RefreshAllPlayers();
     }
 
