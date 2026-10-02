@@ -475,7 +475,8 @@ public class GameManager : Singleton<GameManager>
                     }
                     else
                     {
-                        ProcessEndTurn();
+                        Log($"  빈 땅: {CityName(propertyId)} 구매 불가능 (땅값 {Won(landPrice)})");
+                        HandlePurchasePropertyPrompt(playerId, propertyId, landPrice);
                     }
                 }
                 else if (propertyState.OwnerId.Value == playerId) // 본인 소유의 땅인 경우
@@ -493,8 +494,11 @@ public class GameManager : Singleton<GameManager>
                     else
                     {
                         string reason = !propertyData.CanBuild ? "건설 불가 칸" : currentLevel == BuildingLevel.Hotel ? "이미 최고 단계" : $"현금 부족 (비용 {Won(buildCost)})";
-                        Log($"  내 땅: {CityName(propertyId)} (현재 {currentLevel}) 건설 안 함 - {reason}");
-                        ProcessEndTurn();
+                        Log($"  내 땅: {CityName(propertyId)} (현재 {currentLevel}) 건설 불가능 - {reason}");
+                        if(canBuild)
+                            HandleBuildPrompt(playerId, propertyId, buildCost);
+                        else
+                            ProcessEndTurn();
                     }
                 }
                 else // 타인 소유의 땅인 경우
@@ -515,7 +519,7 @@ public class GameManager : Singleton<GameManager>
                         else
                         {
                             Log($"  인수 불가 (인수가 {Won(acquireValue)}, 현금 {Won(player.Money)})");
-                            ProcessEndTurn();
+                            HandleAcquirePropertyPrompt(playerId, propertyId, acquireValue); // 인수 선택지 UI를 표시합니다. ( 호출에 필요한 매개변수는 GameState 와 Data를 조회하여 얻습니다. )
                         }
                     }
                     else if (player.Money + PropertyManager.Instance.GetTotalSellValue(playerId, gameState.PropertyStates) >= toll) // 통행료 납부 불가지만, 자산을 팔면 납부 가능하면
