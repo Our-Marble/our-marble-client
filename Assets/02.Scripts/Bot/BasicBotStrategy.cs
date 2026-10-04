@@ -9,6 +9,19 @@ public class BasicBotStrategy : IBotStrategy
 {
     private const int DefaultTravelDestination = 16; // 기부금수령 칸 (기존 동작 유지)
 
+    private readonly IReadOnlyList<TileData> tiles;           // 보드 칸 배치 (칸 번호 → 땅 번호)
+    private readonly Func<PropertyState, long> getToll;       // 통행료 계산
+    private readonly Func<int, long> getLandPrice;            // 땅값 조회
+
+    public BasicBotStrategy(IReadOnlyList<TileData> tiles,
+                            Func<PropertyState, long> getToll,
+                            Func<int, long> getLandPrice)
+    {
+        this.tiles = tiles;
+        this.getToll = getToll;
+        this.getLandPrice = getLandPrice;
+    }
+
     public bool ShouldPurchase(GameState state, long botId, int propertyId, long price)
     {
         return GetMoney(state, botId) >= price;

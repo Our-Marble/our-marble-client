@@ -34,7 +34,7 @@ public class GameManager : Singleton<GameManager>
     [Header("Bot (Test)")]
     [SerializeField] private bool autoPlayAllPlayers = false;   // 테스트용: 켜면 사람도 자동 진행
     [SerializeField] private float botActionDelay = 3f;         // 봇이 행동하기 전 대기 시간(초)
-    private IBotStrategy botStrategy = new BasicBotStrategy();
+    private IBotStrategy botStrategy; // 봇의 결정을 담당합니다. 보드·가격 정보가 필요해서 Start에서 생성합니다.
     [System.Serializable]
     private class PlayerSetup
     {
@@ -87,7 +87,12 @@ public class GameManager : Singleton<GameManager>
         {
             gameState.PropertyStates.Add(new PropertyState(propertyData.Id));
         }
-        
+        // 봇 전략 생성 (보드 배치와 가격 계산이 필요해서 매니저 초기화 이후에 생성)
+        botStrategy = new BasicBotStrategy(
+            BoardManager.Instance.BoardData.Tiles,
+            PropertyManager.Instance.GetToll,
+            PropertyManager.Instance.GetLandPrice);
+            
         // MVP 단계에서 플레이어의 playerId는 123, 봇의 playerId는 456 입니다.
         PlayerManager.Instance.Initialize(playerOrder); // 다른 Monobehaviour 클래스를 참조하여 초기화할때는 Awake말고 Start에서 하는게 안전
         
@@ -299,7 +304,7 @@ public class GameManager : Singleton<GameManager>
 
     public void HandleChooseDestinationPrompt()
     {
-        // 봇의 경우, 복지기금수령(16)을 목적지로 HandleDestinationChosen를 호출합니다. (빈 땅을 우선적으로 선택하는 등의 지능은 추후 개발)
+        // 봇의 경우, botStrategy가 고른 목적지로 이동합니다.
         long playerId = gameState.CurrentPlayerId;
         if (IsBot(playerId))
         {
@@ -883,7 +888,7 @@ public class GameManager : Singleton<GameManager>
     // ────────────────────────── 토지 구매 ──────────────────────────
     public void HandlePurchasePropertyPrompt(long playerId, int propertyId, bool isPurchasable)
     {
-        // 봇의 경우, 돈이 있다면 무조건 구매합니다.
+        // 봇의 경우, 살 수 있으면 botStrategy의 판단에 따라 구매하거나 거절합니다.
         if (IsBot(playerId))
         {
             if (!isPurchasable)
@@ -952,7 +957,7 @@ public class GameManager : Singleton<GameManager>
     // ────────────────────────── 건물 건설 ──────────────────────────
     public void HandleBuildPrompt(long playerId, int propertyId, bool isBuildable)
     {
-        // 봇의 경우, 돈이 있다면 무조건 건설합니다.
+        // 봇의 경우, 지을 수 있으면 botStrategy의 판단에 따라 건설하거나 거절합니다.
         if (IsBot(playerId))
         {
             if (!isBuildable)
@@ -1026,7 +1031,7 @@ public class GameManager : Singleton<GameManager>
     // ────────────────────────── 자산 인수 ──────────────────────────
     public void HandleAcquirePropertyPrompt(long playerId, int propertyId, long amount)
     {
-        // 봇의 경우, 돈이 있다면 무조건 인수합니다.
+        // 봇의 경우, botStrategy의 판단에 따라 인수하거나 거절합니다.
         if (IsBot(playerId))
         {
             RunAfterDelay(() =>
@@ -1092,7 +1097,7 @@ public class GameManager : Singleton<GameManager>
     // ────────────────────────── 자산 매각 ──────────────────────────
     public void HandleSellPropertiesPrompt(long payerId, long receiverId, long requiredAmount)
     {
-        // 봇의 경우, 매각가 합이 부족분 이상이 되도록 자산을 골라 팝니다.
+        // 봇의 경우, botStrategy가 고른 땅을 팝니다.
         if (IsBot(payerId))
         {
             RunAfterDelay(() =>
