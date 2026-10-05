@@ -1007,6 +1007,7 @@ public class GameManager : Singleton<GameManager>
     /// </summary>
     public void DeclineBuild(long playerId, int propertyId) // 거절 함수를 분리한 이유는, chatGPT한테 물어본 결과 bool매개변수를 사용하여 수락/거절을 표현하기보다 함수 자체를 분리하는것을 추천했기 때문입니다.
     {
+        Log($"[건설 안 함] {P(playerId)}: {CityName(propertyId)}");
         ProcessEndTurn();
     }
 
