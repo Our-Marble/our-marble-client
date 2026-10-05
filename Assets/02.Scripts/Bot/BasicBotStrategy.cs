@@ -8,6 +8,7 @@ using System.Collections.Generic;
 /// 매각할 때는 상대가 밟을 확률까지 고려해 기대 통행료 손실이 적은 땅부터 팝니다.
 /// 건설·인수는 늘어나는 통행료로 비용을 회수하는 기간(라운드)을 따져 결정합니다.
 /// 돈을 쓰면 다음 턴에 만날 더 좋은 땅을 못 사게 될 확률이 크면 이번에는 아낍니다.
+/// 막판에는 구매·건설을 적극적으로 하고, 남은 라운드 안에 회수 못 할 인수는 하지 않습니다.
 /// </summary>
 public class BasicBotStrategy : IBotStrategy
 {
@@ -21,15 +22,18 @@ public class BasicBotStrategy : IBotStrategy
     private const double MaxPaybackRounds = 10;            // 투자 비용을 이 라운드 안에 통행료로 회수할 수 있으면 건설·인수
     private const double BetterLandMargin = 0.2;           // 구매 시 지금 땅보다 수익 비율이 이만큼 높아야 "더 좋은 땅"
     private const double MaxMissedChance = 0.15;           // 더 좋은 땅을 놓칠 확률이 이보다 크면 돈을 아낌
+    private const int EndGameRounds = 3;                   // 남은 라운드가 이 이하면 막판 (구매·건설 기준 완화)
 
     private readonly TileData[] tileByIndex;                  // 칸 번호 → 칸 정보
     private readonly Func<PropertyState, long> getToll;       // 통행료 계산
     private readonly Func<int, PropertyData> getPropertyData; // 가격표 조회 (땅값, 건설비, 통행료, 건설 가능 여부)
     private readonly Action<string> log;                      // 판단 근거 로그 (없으면 출력 안 함)
+    private readonly int maxRound;                            // 최대 라운드 (0이면 제한 없음)
 
     public BasicBotStrategy(IReadOnlyList<TileData> tiles,
                             Func<PropertyState, long> getToll,
                             Func<int, PropertyData> getPropertyData,
+                            int maxRound = 0,
                             Action<string> log = null)
     {
         // 리스트 순서와 칸 번호가 달라도 안전하도록 Index 기준으로 다시 배치합니다.
@@ -43,6 +47,7 @@ public class BasicBotStrategy : IBotStrategy
         this.getToll = getToll;
         this.getPropertyData = getPropertyData;
         this.log = log;
+        this.maxRound = maxRound;
     }
 
     #region 판단 (IBotStrategy)
@@ -60,7 +65,7 @@ public class BasicBotStrategy : IBotStrategy
         double landReturn = GetMaxTollReturn(data);
         long cashAfter = bot.Money - price;
         bool isGoodLand = landReturn >= GoodLandReturn;
-        bool buy = IsWorthBuying(data, cashAfter);
+        bool buy = IsWorthBuying(state, data, cashAfter);
 
         // 3) 사면 다음 턴에 만날 더 좋은 땅을 못 사게 될 확률이 크면 아낍니다.
         double missed = buy ? MissedBetterLandChance(state, bot, price, landReturn + BetterLandMargin) : 0;
@@ -88,7 +93,7 @@ public class BasicBotStrategy : IBotStrategy
         long tollGain = data.GetToll(next) - data.GetToll(property.BuildingLevel);
         double payback = PaybackRounds(state, botId, propertyId, cost, tollGain);
         long cashAfter = bot.Money - cost;
-        bool build = payback <= MaxPaybackRounds || cashAfter >= SafeCashReserve;
+        bool build = payback <= MaxPaybackRounds || cashAfter >= SafeCashReserve || IsEndGame(state);
 
         // 3) 지으면 다음 턴에 만날 좋은 땅을 못 사게 될 확률이 크면 아낍니다.
         double missed = build ? MissedBetterLandChance(state, bot, cost, GoodLandReturn) : 0;
@@ -113,7 +118,7 @@ public class BasicBotStrategy : IBotStrategy
         // 2) 인수가가 비싸므로, 통행료 수입으로 빨리 회수할 수 있는 땅만 인수합니다.
         long toll = getToll(property);
         double payback = PaybackRounds(state, botId, propertyId, price, toll);
-        bool acquire = payback <= MaxPaybackRounds;
+        bool acquire = payback <= Math.Min(MaxPaybackRounds, RemainingRounds(state));
 
         // 3) 인수하면 다음 턴에 만날 좋은 땅을 못 사게 될 확률이 크면 아낍니다.
         double missed = acquire ? MissedBetterLandChance(state, bot, price, GoodLandReturn) : 0;
@@ -281,10 +286,11 @@ public class BasicBotStrategy : IBotStrategy
 
     /// <summary>
     /// 구매 규칙: 좋은 땅이면 사고, 보통 땅은 사고 나서 현금이 넉넉히 남을 때만 삽니다.
+    /// 막판에는 땅값이 그대로 총자산에 잡혀 손해가 없으므로 보통 땅도 삽니다.
     /// </summary>
-    private static bool IsWorthBuying(PropertyData data, long cashAfter)
+    private bool IsWorthBuying(GameState state, PropertyData data, long cashAfter)
     {
-        return GetMaxTollReturn(data) >= GoodLandReturn || cashAfter >= SafeCashReserve;
+        return GetMaxTollReturn(data) >= GoodLandReturn || cashAfter >= SafeCashReserve || IsEndGame(state);
     }
 
     /// <summary>
@@ -445,7 +451,7 @@ public class BasicBotStrategy : IBotStrategy
         if (property.OwnerId == null)
         {
             long price = data.LandPrice;
-            if (IsSafeToSpendAt(state, bot, position, price) && IsWorthBuying(data, bot.Money - price))
+            if (IsSafeToSpendAt(state, bot, position, price) && IsWorthBuying(state, data, bot.Money - price))
             {
                 tier = 2;
                 score = GetMaxTollReturn(data);
@@ -493,6 +499,19 @@ public class BasicBotStrategy : IBotStrategy
     private static string FormatPayback(double payback)
     {
         return payback == double.MaxValue ? "불가" : $"{payback:F1}라운드";
+    }
+
+    /// <summary>
+    /// 이번 라운드 이후 남은 라운드 수입니다. 최대 라운드가 없으면 제한 없음으로 봅니다.
+    /// </summary>
+    private int RemainingRounds(GameState state)
+    {
+        return maxRound > 0 ? Math.Max(0, maxRound - state.RoundNumber) : int.MaxValue;
+    }
+
+    private bool IsEndGame(GameState state)
+    {
+        return RemainingRounds(state) <= EndGameRounds;
     }
 
     #endregion

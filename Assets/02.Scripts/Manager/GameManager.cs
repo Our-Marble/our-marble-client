@@ -92,6 +92,7 @@ public class GameManager : Singleton<GameManager>
             BoardManager.Instance.BoardData.Tiles,
             PropertyManager.Instance.GetToll,
             PropertyManager.Instance.GetData,
+            maxRound,
             Log);
             
         // MVP 단계에서 플레이어의 playerId는 123, 봇의 playerId는 456 입니다.
