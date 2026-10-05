@@ -173,10 +173,23 @@ public class BasicBotStrategy : IBotStrategy
             if (opponent.PlayerId == botId || opponent.IsBankrupt) continue;
 
             int distance = (tilePosition - opponent.Position + tileByIndex.Length) % tileByIndex.Length;
-            double nextTurn = distance >= 2 && distance <= 12 ? DiceSumProbability(distance) : 0;
-            rate += AverageHitRate + nextTurn;
+            rate += AverageHitRate + NextRollHitProbability(opponent, distance);
         }
         return rate;
+    }
+
+    /// <summary>
+    /// 상대가 다음 주사위 한 번으로 distance칸 앞에 도착할 확률입니다.
+    /// 무인도에 갇힌 상대는 더블이 나와야만 움직이므로, 짝수 거리(2~12)만 각각 1/36입니다.
+    /// </summary>
+    private static double NextRollHitProbability(PlayerState opponent, int distance)
+    {
+        if (distance < 2 || distance > 12) return 0;
+
+        if (opponent.IslandTurnsRemaining > 0)
+            return distance % 2 == 0 ? 1.0 / 36 : 0;
+
+        return DiceSumProbability(distance);
     }
 
     /// <summary>
@@ -314,7 +327,7 @@ public class BasicBotStrategy : IBotStrategy
 
     /// <summary>
     /// cost를 낼 현금이 있고, 낸 뒤 다음 턴에 통행료를 현금으로 못 낼 확률이 기준 이하인지 확인합니다.
-    /// </summary> 
+    /// </summary>
     private bool CanAffordSafely(GameState state, long botId, long cost)
     {
         PlayerState bot = state.PlayerStates.Find(p => p.PlayerId == botId);
