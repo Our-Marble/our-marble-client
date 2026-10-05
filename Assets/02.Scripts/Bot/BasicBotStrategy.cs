@@ -69,6 +69,7 @@ public class BasicBotStrategy : IBotStrategy
         PropertyState property = state.PropertyStates.Find(p => p.PropertyId == propertyId);
         PropertyData data = getPropertyData(propertyId);
         if (property == null || data == null) return true;
+        if (!data.CanBuild || property.BuildingLevel >= BuildingLevel.Hotel) return false;
 
         // 2) 통행료 상승분으로 건설비를 빨리 회수할 수 있거나, 현금이 넉넉하면 짓습니다.
         BuildingLevel next = property.BuildingLevel + 1;
@@ -313,8 +314,7 @@ public class BasicBotStrategy : IBotStrategy
 
     /// <summary>
     /// cost를 낼 현금이 있고, 낸 뒤 다음 턴에 통행료를 현금으로 못 낼 확률이 기준 이하인지 확인합니다.
-    /// </summary>
-   
+    /// </summary> 
     private bool CanAffordSafely(GameState state, long botId, long cost)
     {
         PlayerState bot = state.PlayerStates.Find(p => p.PlayerId == botId);
