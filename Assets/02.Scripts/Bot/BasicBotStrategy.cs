@@ -6,6 +6,7 @@ using System.Collections.Generic;
 /// 돈을 쓰고 난 뒤 다음 턴에 통행료를 현금으로 못 낼 위험이 크면 구매·건설·인수를 하지 않고,
 /// 땅은 수익 비율이 좋은 땅 위주로 삽니다.
 /// 매각할 때는 상대가 밟을 확률까지 고려해 기대 통행료 손실이 적은 땅부터 팝니다.
+/// 건설·인수는 늘어나는 통행료로 비용을 회수하는 기간(라운드)을 따져 결정합니다.
 /// </summary>
 public class BasicBotStrategy : IBotStrategy
 {
@@ -13,9 +14,10 @@ public class BasicBotStrategy : IBotStrategy
     private const double MaxCashShortProbability = 0.2;    // 다음 턴 현금 부족 확률이 이보다 크면 돈을 쓰지 않음
                                                            // 소심하면 올리고, 파산이 잦으면 낮춘다.
     private const double GoodLandReturn = 0.75;            // 최대 통행료 ÷ 총 투자금이 이 이상이면 좋은 땅
-    private const long SafeCashReserve = 200000;           // 보통 땅은 사고 나서 이만큼 현금이 남을 때만 구매
+    private const long SafeCashReserve = 200000;           // 보통 땅 구매·회수가 느린 건설은 이만큼 현금이 남을 때만 진행
     private const double AverageHitRate = 1.0 / 7;         // 주사위 평균 7칸 → 한 번 굴릴 때 특정 칸에 도착할 평균 확률
     private const long WelfareFundWorthTrip = 200000;      // 적립금이 이 이상이면 세계여행 최우선 목적지
+    private const double MaxPaybackRounds = 10;            // 투자 비용을 이 라운드 안에 통행료로 회수할 수 있으면 건설·인수
 
     private readonly TileData[] tileByIndex;                  // 칸 번호 → 칸 정보
     private readonly Func<PropertyState, long> getToll;       // 통행료 계산
@@ -61,12 +63,42 @@ public class BasicBotStrategy : IBotStrategy
 
     public bool ShouldBuild(GameState state, long botId, int propertyId, long cost)
     {
-        return CanAffordSafely(state, botId, cost);
+        // 1) 통행료 위험이 크면 짓지 않습니다.
+        if (!CanAffordSafely(state, botId, cost)) return false;
+
+        PropertyState property = state.PropertyStates.Find(p => p.PropertyId == propertyId);
+        PropertyData data = getPropertyData(propertyId);
+        if (property == null || data == null) return true;
+
+        // 2) 통행료 상승분으로 건설비를 빨리 회수할 수 있거나, 현금이 넉넉하면 짓습니다.
+        BuildingLevel next = property.BuildingLevel + 1;
+        long tollGain = data.GetToll(next) - data.GetToll(property.BuildingLevel);
+        double payback = PaybackRounds(state, botId, propertyId, cost, tollGain);
+        long cashAfter = GetMoney(state, botId) - cost;
+        bool build = payback <= MaxPaybackRounds || cashAfter >= SafeCashReserve;
+
+        log?.Invoke($"[봇 판단] {botId}: {data.CityName} {next} 건설, 통행료 +{tollGain:N0}, " +
+                    $"회수 {FormatPayback(payback)}, 남는 현금 {cashAfter:N0} → {(build ? "건설" : "포기")}");
+        return build;
     }
 
     public bool ShouldAcquire(GameState state, long botId, int propertyId, long price)
     {
-        return CanAffordSafely(state, botId, price);
+        // 1) 통행료 위험이 크면 인수하지 않습니다.
+        if (!CanAffordSafely(state, botId, price)) return false;
+
+        PropertyState property = state.PropertyStates.Find(p => p.PropertyId == propertyId);
+        PropertyData data = getPropertyData(propertyId);
+        if (property == null || data == null) return true;
+
+        // 2) 인수가가 비싸므로, 통행료 수입으로 빨리 회수할 수 있는 땅만 인수합니다.
+        long toll = getToll(property);
+        double payback = PaybackRounds(state, botId, propertyId, price, toll);
+        bool acquire = payback <= MaxPaybackRounds;
+
+        log?.Invoke($"[봇 판단] {botId}: {data.CityName} 인수가 {price:N0}, 통행료 {toll:N0}, " +
+                    $"회수 {FormatPayback(payback)} → {(acquire ? "인수" : "포기")}");
+        return acquire;
     }
 
     /// <summary>
@@ -144,6 +176,21 @@ public class BasicBotStrategy : IBotStrategy
             rate += AverageHitRate + nextTurn;
         }
         return rate;
+    }
+
+    /// <summary>
+    /// 투자 비용을 통행료로 회수하는 데 걸리는 라운드 수입니다.
+    /// 한 라운드 기대 수입 = 통행료 × 상대들이 한 라운드에 이 땅을 밟을 확률의 합
+    /// </summary>
+    private double PaybackRounds(GameState state, long botId, int propertyId, long cost, long toll)
+    {
+        double incomePerRound = toll * OpponentHitRate(state, botId, propertyId);
+        return incomePerRound > 0 ? cost / incomePerRound : double.MaxValue;
+    }
+
+    private static string FormatPayback(double payback)
+    {
+        return payback == double.MaxValue ? "불가" : $"{payback:F1}라운드";
     }
  
     /// <summary>
