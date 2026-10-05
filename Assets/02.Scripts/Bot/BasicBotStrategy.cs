@@ -8,15 +8,19 @@ using System.Collections.Generic;
 public class BasicBotStrategy : IBotStrategy
 {
     private const int DefaultTravelDestination = 16;       // 기부금수령 칸 (기존 동작 유지)
-    private const double MaxCashShortProbability = 0.2;    // 다음 턴 현금 부족 확률이 이보다 크면 돈을 쓰지 않음
+    private const double MaxCashShortProbability = 0.2;    // 다음 턴 현금 부족 확률이 이보다 크면 돈을 쓰지 않음 
+                                                           // 소심하면 올리고, 파산이 잦으면 낮춘다.
 
     private readonly TileData[] tileByIndex;               // 칸 번호 → 칸 정보
     private readonly Func<PropertyState, long> getToll;    // 통행료 계산
     private readonly Func<int, long> getLandPrice;         // 땅값 조회
 
+    private readonly Action<string> log;                   // 판단 근거 로그 (없으면 출력 안 함)
+
     public BasicBotStrategy(IReadOnlyList<TileData> tiles,
                             Func<PropertyState, long> getToll,
-                            Func<int, long> getLandPrice)
+                            Func<int, long> getLandPrice,
+                            Action<string> log = null)
     {
         // 리스트 순서와 칸 번호가 달라도 안전하도록 Index 기준으로 다시 배치합니다.
         tileByIndex = new TileData[tiles.Count];
@@ -28,6 +32,7 @@ public class BasicBotStrategy : IBotStrategy
 
         this.getToll = getToll;
         this.getLandPrice = getLandPrice;
+        this.log = log;
     }
 
     public bool ShouldPurchase(GameState state, long botId, int propertyId, long price)
@@ -93,13 +98,19 @@ public class BasicBotStrategy : IBotStrategy
     /// <summary>
     /// cost를 낼 현금이 있고, 낸 뒤 다음 턴에 통행료를 현금으로 못 낼 확률이 기준 이하인지 확인합니다.
     /// </summary>
+   
     private bool CanAffordSafely(GameState state, long botId, long cost)
     {
         PlayerState bot = state.PlayerStates.Find(p => p.PlayerId == botId);
         if (bot == null || bot.Money < cost) return false;
 
         long cashAfter = bot.Money - cost;
-        return CashShortProbability(state, botId, bot.Position, cashAfter) <= MaxCashShortProbability;
+        double risk = CashShortProbability(state, botId, bot.Position, cashAfter);
+        bool safe = risk <= MaxCashShortProbability;
+
+        log?.Invoke($"[봇 판단] {botId}: 비용 {cost:N0}, 남는 현금 {cashAfter:N0}, " +
+                    $"다음 턴 현금 부족 확률 {risk:P1} → {(safe ? "진행" : "포기")}");
+        return safe;
     }
 
     /// <summary>

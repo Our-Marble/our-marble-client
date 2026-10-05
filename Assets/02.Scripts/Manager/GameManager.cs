@@ -91,7 +91,8 @@ public class GameManager : Singleton<GameManager>
         botStrategy = new BasicBotStrategy(
             BoardManager.Instance.BoardData.Tiles,
             PropertyManager.Instance.GetToll,
-            PropertyManager.Instance.GetLandPrice);
+            PropertyManager.Instance.GetLandPrice,
+            Log);
             
         // MVP 단계에서 플레이어의 playerId는 123, 봇의 playerId는 456 입니다.
         PlayerManager.Instance.Initialize(playerOrder); // 다른 Monobehaviour 클래스를 참조하여 초기화할때는 Awake말고 Start에서 하는게 안전
