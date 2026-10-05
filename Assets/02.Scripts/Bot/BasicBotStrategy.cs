@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 
 /// <summary>
-/// 기본 봇 전략입니다.
+/// 기본 봇 전략입니다. 판단 기준값은 BotSettings에서 읽으므로, 성향마다 같은 로직을 다른 값으로 씁니다.
 /// 돈을 쓰고 난 뒤 다음 턴에 통행료를 현금으로 못 낼 위험이 크면 구매·건설·인수를 하지 않고,
 /// 땅은 수익 비율이 좋은 땅 위주로 삽니다.
 /// 매각할 때는 상대가 밟을 확률까지 고려해 기대 통행료 손실이 적은 땅부터 팝니다.
@@ -12,27 +12,21 @@ using System.Collections.Generic;
 /// </summary>
 public class BasicBotStrategy : IBotStrategy
 {
-    private const int DefaultTravelDestination = 16;       // 기부금수령 칸 (기존 동작 유지)
-    private const double MaxCashShortProbability = 0.2;    // 다음 턴 현금 부족 확률이 이보다 크면 돈을 쓰지 않음
-                                                           // 소심하면 올리고, 파산이 잦으면 낮춘다.
-    private const double GoodLandReturn = 0.75;            // 최대 통행료 ÷ 총 투자금이 이 이상이면 좋은 땅
-    private const long SafeCashReserve = 200000;           // 보통 땅 구매·회수가 느린 건설은 이만큼 현금이 남을 때만 진행
+    // 성향과 무관한 게임 규칙 값
+    private const int DefaultTravelDestination = 16;       // 기부금수령 칸 (갈 곳이 없을 때 기본 목적지)
     private const double AverageHitRate = 1.0 / 7;         // 주사위 평균 7칸 → 한 번 굴릴 때 특정 칸에 도착할 평균 확률
-    private const long WelfareFundWorthTrip = 200000;      // 적립금이 이 이상이면 세계여행 최우선 목적지
-    private const double MaxPaybackRounds = 10;            // 투자 비용을 이 라운드 안에 통행료로 회수할 수 있으면 건설·인수
-    private const double BetterLandMargin = 0.2;           // 구매 시 지금 땅보다 수익 비율이 이만큼 높아야 "더 좋은 땅"
-    private const double MaxMissedChance = 0.15;           // 더 좋은 땅을 놓칠 확률이 이보다 크면 돈을 아낌
-    private const int EndGameRounds = 3;                   // 남은 라운드가 이 이하면 막판 (구매·건설 기준 완화)
 
     private readonly TileData[] tileByIndex;                  // 칸 번호 → 칸 정보
     private readonly Func<PropertyState, long> getToll;       // 통행료 계산
     private readonly Func<int, PropertyData> getPropertyData; // 가격표 조회 (땅값, 건설비, 통행료, 건설 가능 여부)
-    private readonly Action<string> log;                      // 판단 근거 로그 (없으면 출력 안 함)
+    private readonly BotSettings settings;                    // 성향별 판단 기준값
     private readonly int maxRound;                            // 최대 라운드 (0이면 제한 없음)
+    private readonly Action<string> log;                      // 판단 근거 로그 (없으면 출력 안 함)
 
     public BasicBotStrategy(IReadOnlyList<TileData> tiles,
                             Func<PropertyState, long> getToll,
                             Func<int, PropertyData> getPropertyData,
+                            BotSettings settings = null,
                             int maxRound = 0,
                             Action<string> log = null)
     {
@@ -46,8 +40,9 @@ public class BasicBotStrategy : IBotStrategy
 
         this.getToll = getToll;
         this.getPropertyData = getPropertyData;
-        this.log = log;
+        this.settings = settings ?? BotSettings.Balanced();
         this.maxRound = maxRound;
+        this.log = log;
     }
 
     #region 판단 (IBotStrategy)
@@ -64,16 +59,16 @@ public class BasicBotStrategy : IBotStrategy
         // 2) 좋은 땅은 사고, 보통 땅은 현금이 넉넉히 남을 때만 삽니다.
         double landReturn = GetMaxTollReturn(data);
         long cashAfter = bot.Money - price;
-        bool isGoodLand = landReturn >= GoodLandReturn;
+        bool isGoodLand = landReturn >= settings.GoodLandReturn;
         bool buy = IsWorthBuying(state, data, cashAfter);
 
         // 3) 사면 다음 턴에 만날 더 좋은 땅을 못 사게 될 확률이 크면 아낍니다.
-        double missed = buy ? MissedBetterLandChance(state, bot, price, landReturn + BetterLandMargin) : 0;
-        if (missed > MaxMissedChance) buy = false;
+        double missed = buy ? MissedBetterLandChance(state, bot, price, landReturn + settings.BetterLandMargin) : 0;
+        if (missed > settings.MaxMissedChance) buy = false;
 
-        log?.Invoke($"[봇 판단] {botId}: {data.CityName} 수익 비율 {landReturn:F2}" +
-                    $"({(isGoodLand ? "좋은 땅" : "보통 땅")}), 남는 현금 {cashAfter:N0}, " +
-                    $"더 좋은 땅 놓칠 확률 {missed:P1} → {(buy ? "구매" : "포기")}");
+        Log(botId, $"{data.CityName} 수익 비율 {landReturn:F2}" +
+                   $"({(isGoodLand ? "좋은 땅" : "보통 땅")}), 남는 현금 {cashAfter:N0}, " +
+                   $"더 좋은 땅 놓칠 확률 {missed:P1} → {(buy ? "구매" : "포기")}");
         return buy;
     }
 
@@ -93,15 +88,15 @@ public class BasicBotStrategy : IBotStrategy
         long tollGain = data.GetToll(next) - data.GetToll(property.BuildingLevel);
         double payback = PaybackRounds(state, botId, propertyId, cost, tollGain);
         long cashAfter = bot.Money - cost;
-        bool build = payback <= MaxPaybackRounds || cashAfter >= SafeCashReserve || IsEndGame(state);
+        bool build = payback <= settings.MaxPaybackRounds || cashAfter >= settings.SafeCashReserve || IsEndGame(state);
 
         // 3) 지으면 다음 턴에 만날 좋은 땅을 못 사게 될 확률이 크면 아낍니다.
-        double missed = build ? MissedBetterLandChance(state, bot, cost, GoodLandReturn) : 0;
-        if (missed > MaxMissedChance) build = false;
+        double missed = build ? MissedBetterLandChance(state, bot, cost, settings.GoodLandReturn) : 0;
+        if (missed > settings.MaxMissedChance) build = false;
 
-        log?.Invoke($"[봇 판단] {botId}: {data.CityName} {next} 건설, 통행료 +{tollGain:N0}, " +
-                    $"회수 {FormatPayback(payback)}, 남는 현금 {cashAfter:N0}, " +
-                    $"좋은 땅 놓칠 확률 {missed:P1} → {(build ? "건설" : "포기")}");
+        Log(botId, $"{data.CityName} {next} 건설, 통행료 +{tollGain:N0}, " +
+                   $"회수 {FormatPayback(payback)}, 남는 현금 {cashAfter:N0}, " +
+                   $"좋은 땅 놓칠 확률 {missed:P1} → {(build ? "건설" : "포기")}");
         return build;
     }
 
@@ -118,14 +113,14 @@ public class BasicBotStrategy : IBotStrategy
         // 2) 인수가가 비싸므로, 통행료 수입으로 빨리 회수할 수 있는 땅만 인수합니다.
         long toll = getToll(property);
         double payback = PaybackRounds(state, botId, propertyId, price, toll);
-        bool acquire = payback <= Math.Min(MaxPaybackRounds, RemainingRounds(state));
+        bool acquire = payback <= Math.Min(settings.MaxPaybackRounds, RemainingRounds(state));
 
         // 3) 인수하면 다음 턴에 만날 좋은 땅을 못 사게 될 확률이 크면 아낍니다.
-        double missed = acquire ? MissedBetterLandChance(state, bot, price, GoodLandReturn) : 0;
-        if (missed > MaxMissedChance) acquire = false;
+        double missed = acquire ? MissedBetterLandChance(state, bot, price, settings.GoodLandReturn) : 0;
+        if (missed > settings.MaxMissedChance) acquire = false;
 
-        log?.Invoke($"[봇 판단] {botId}: {data.CityName} 인수가 {price:N0}, 통행료 {toll:N0}, " +
-                    $"회수 {FormatPayback(payback)}, 좋은 땅 놓칠 확률 {missed:P1} → {(acquire ? "인수" : "포기")}");
+        Log(botId, $"{data.CityName} 인수가 {price:N0}, 통행료 {toll:N0}, " +
+                   $"회수 {FormatPayback(payback)}, 좋은 땅 놓칠 확률 {missed:P1} → {(acquire ? "인수" : "포기")}");
         return acquire;
     }
 
@@ -168,7 +163,7 @@ public class BasicBotStrategy : IBotStrategy
             }
         }
 
-        log?.Invoke($"[봇 판단] {botId}: 부족분 {shortage:N0} → 매각 {selected.Count}개 (매각가 합 {sum:N0})");
+        Log(botId, $"부족분 {shortage:N0} → 매각 {selected.Count}개 (매각가 합 {sum:N0})");
         return selected.ConvertAll(p => p.PropertyId);
     }
 
@@ -199,7 +194,7 @@ public class BasicBotStrategy : IBotStrategy
         }
 
         if (bestPosition < 0) bestPosition = DefaultTravelDestination;
-        log?.Invoke($"[봇 판단] {botId}: 세계여행 목적지 {bestPosition}번 (순위 {bestTier}, 점수 {bestScore:F2})");
+        Log(botId, $"세계여행 목적지 {bestPosition}번 (순위 {bestTier}, 점수 {bestScore:F2})");
         return bestPosition;
     }
 
@@ -217,10 +212,10 @@ public class BasicBotStrategy : IBotStrategy
 
         long cashAfter = bot.Money - cost;
         double risk = CashShortProbability(state, botId, bot.Position, cashAfter);
-        bool safe = risk <= MaxCashShortProbability;
+        bool safe = risk <= settings.MaxCashShortProbability;
 
-        log?.Invoke($"[봇 판단] {botId}: 비용 {cost:N0}, 남는 현금 {cashAfter:N0}, " +
-                    $"다음 턴 현금 부족 확률 {risk:P1} → {(safe ? "진행" : "포기")}");
+        Log(botId, $"비용 {cost:N0}, 남는 현금 {cashAfter:N0}, " +
+                   $"다음 턴 현금 부족 확률 {risk:P1} → {(safe ? "진행" : "포기")}");
         return safe;
     }
 
@@ -230,7 +225,7 @@ public class BasicBotStrategy : IBotStrategy
     private bool IsSafeToSpendAt(GameState state, PlayerState bot, int position, long cost)
     {
         if (bot.Money < cost) return false;
-        return CashShortProbability(state, bot.PlayerId, position, bot.Money - cost) <= MaxCashShortProbability;
+        return CashShortProbability(state, bot.PlayerId, position, bot.Money - cost) <= settings.MaxCashShortProbability;
     }
 
     /// <summary>
@@ -290,7 +285,9 @@ public class BasicBotStrategy : IBotStrategy
     /// </summary>
     private bool IsWorthBuying(GameState state, PropertyData data, long cashAfter)
     {
-        return GetMaxTollReturn(data) >= GoodLandReturn || cashAfter >= SafeCashReserve || IsEndGame(state);
+        return GetMaxTollReturn(data) >= settings.GoodLandReturn
+               || cashAfter >= settings.SafeCashReserve
+               || IsEndGame(state);
     }
 
     /// <summary>
@@ -418,7 +415,7 @@ public class BasicBotStrategy : IBotStrategy
         {
             case TileType.CHARITY:
                 if (state.WelfareFund <= 0) return true;                       // 받을 게 없으면 중립
-                tier = state.WelfareFund >= WelfareFundWorthTrip ? 1 : 4;
+                tier = state.WelfareFund >= settings.WelfareFundWorthTrip ? 1 : 4;
                 score = state.WelfareFund;
                 return true;
 
@@ -511,7 +508,15 @@ public class BasicBotStrategy : IBotStrategy
 
     private bool IsEndGame(GameState state)
     {
-        return RemainingRounds(state) <= EndGameRounds;
+        return RemainingRounds(state) <= settings.EndGameRounds;
+    }
+
+    /// <summary>
+    /// 판단 근거 로그. 성향 이름을 붙여서 어떤 성향의 봇이 판단했는지 보이게 합니다.
+    /// </summary>
+    private void Log(long botId, string message)
+    {
+        log?.Invoke($"[봇 판단:{settings.Name}] {botId}: {message}");
     }
 
     #endregion

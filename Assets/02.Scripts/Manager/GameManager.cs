@@ -34,12 +34,13 @@ public class GameManager : Singleton<GameManager>
     [Header("Bot (Test)")]
     [SerializeField] private bool autoPlayAllPlayers = false;   // 테스트용: 켜면 사람도 자동 진행
     [SerializeField] private float botActionDelay = 3f;         // 봇이 행동하기 전 대기 시간(초)
-    private IBotStrategy botStrategy; // 봇의 결정을 담당합니다. 보드·가격 정보가 필요해서 Start에서 생성합니다.
+    private Dictionary<long, IBotStrategy> botStrategies; // 플레이어별 봇 전략. 보드·가격 정보가 필요해서 Start에서 생성합니다.
     [System.Serializable]
     private class PlayerSetup
     {
         public long playerId;   // 플레이어 고유 번호 (겹치면 안 됨)
         public bool isBot;      // 봇 여부
+        public BotPersonality personality = BotPersonality.Balanced; // 봇 성향 (봇일 때만 사용)
     }
 
     [Header("Players")] [SerializeField] private List<PlayerSetup> playerSetups = new List<PlayerSetup>();
@@ -88,12 +89,17 @@ public class GameManager : Singleton<GameManager>
             gameState.PropertyStates.Add(new PropertyState(propertyData.Id));
         }
         // 봇 전략 생성 (보드 배치와 가격 계산이 필요해서 매니저 초기화 이후에 생성)
-        botStrategy = new BasicBotStrategy(
-            BoardManager.Instance.BoardData.Tiles,
-            PropertyManager.Instance.GetToll,
-            PropertyManager.Instance.GetData,
-            maxRound,
-            Log);
+        botStrategies = new Dictionary<long, IBotStrategy>();
+        foreach (PlayerSetup setup in playerSetups)
+        {
+            botStrategies[setup.playerId] = new BasicBotStrategy(
+                BoardManager.Instance.BoardData.Tiles,
+                PropertyManager.Instance.GetToll,
+                PropertyManager.Instance.GetData,
+                BotSettings.For(setup.personality),
+                maxRound,
+                Log);
+        }
             
         // MVP 단계에서 플레이어의 playerId는 123, 봇의 playerId는 456 입니다.
         PlayerManager.Instance.Initialize(playerOrder); // 다른 Monobehaviour 클래스를 참조하여 초기화할때는 Awake말고 Start에서 하는게 안전
@@ -151,6 +157,11 @@ public class GameManager : Singleton<GameManager>
 
         PlayerSetup setup = playerSetups.Find(s => s.playerId == playerId);
         return setup != null && setup.isBot;
+    }
+
+    private IBotStrategy GetBotStrategy(long playerId)
+    {
+        return botStrategies[playerId];
     }
 
     private void RunAfterDelay(Action action)
@@ -312,7 +323,7 @@ public class GameManager : Singleton<GameManager>
         {
             RunAfterDelay(() =>
             {
-                int destination = botStrategy.ChooseTravelDestination(gameState, playerId);
+                int destination = GetBotStrategy(playerId).ChooseTravelDestination(gameState, playerId);
                 Log($"[봇] {P(playerId)}: 세계여행 목적지 {TileName(destination)} 선택");
                 ChooseDestination(destination);
             });
@@ -902,7 +913,7 @@ public class GameManager : Singleton<GameManager>
             RunAfterDelay(() =>
             {
                 long price = PropertyManager.Instance.GetLandPrice(propertyId);
-                if (botStrategy.ShouldPurchase(gameState, playerId, propertyId, price))
+                if (GetBotStrategy(playerId).ShouldPurchase(gameState, playerId, propertyId, price))
                     PurchaseProperty(playerId, propertyId);
                 else
                     DeclinePropertyPurchase(playerId, propertyId);
@@ -972,7 +983,7 @@ public class GameManager : Singleton<GameManager>
             {
                 BuildingLevel nextLevel = GetPropertyState(propertyId).BuildingLevel + 1;
                 long cost = PropertyManager.Instance.GetBuildCost(propertyId, nextLevel);
-                if (botStrategy.ShouldBuild(gameState, playerId, propertyId, cost))
+                if (GetBotStrategy(playerId).ShouldBuild(gameState, playerId, propertyId, cost))
                     Build(playerId, propertyId);
                 else
                     DeclineBuild(playerId, propertyId);
@@ -1039,7 +1050,7 @@ public class GameManager : Singleton<GameManager>
         {
             RunAfterDelay(() =>
             {
-                if (botStrategy.ShouldAcquire(gameState, playerId, propertyId, amount))
+                if (GetBotStrategy(playerId).ShouldAcquire(gameState, playerId, propertyId, amount))
                     AcquireProperty(playerId, propertyId);
                 else
                     DeclineAcquireProperty(playerId, propertyId);
@@ -1105,7 +1116,7 @@ public class GameManager : Singleton<GameManager>
         {
             RunAfterDelay(() =>
             {
-                List<int> chosen = botStrategy.ChooseSellProperties(
+                List<int> chosen = GetBotStrategy(payerId).ChooseSellProperties(
                     gameState, payerId, requiredAmount, PropertyManager.Instance.GetSellValue);
                 SellProperties(payerId, receiverId, chosen, requiredAmount);
             });
