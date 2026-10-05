@@ -18,6 +18,8 @@ public class BasicBotStrategy : IBotStrategy
     private const double AverageHitRate = 1.0 / 7;         // 주사위 평균 7칸 → 한 번 굴릴 때 특정 칸에 도착할 평균 확률
     private const long WelfareFundWorthTrip = 200000;      // 적립금이 이 이상이면 세계여행 최우선 목적지
     private const double MaxPaybackRounds = 10;            // 투자 비용을 이 라운드 안에 통행료로 회수할 수 있으면 건설·인수
+    private const double BetterLandMargin = 0.2;           // 구매 시 지금 땅보다 수익 비율이 이만큼 높아야 "더 좋은 땅"
+    private const double MaxMissedChance = 0.15;           // 더 좋은 땅을 놓칠 확률이 이보다 크면 돈을 아낌
 
     private readonly TileData[] tileByIndex;                  // 칸 번호 → 칸 정보
     private readonly Func<PropertyState, long> getToll;       // 통행료 계산
@@ -47,17 +49,23 @@ public class BasicBotStrategy : IBotStrategy
         // 1) 통행료 위험이 크면 어떤 땅이든 사지 않습니다.
         if (!CanAffordSafely(state, botId, price)) return false;
 
-        // 2) 좋은 땅은 사고, 보통 땅은 현금이 넉넉히 남을 때만 삽니다.
         PropertyData data = getPropertyData(propertyId);
-        if (data == null) return true;
+        PlayerState bot = state.PlayerStates.Find(p => p.PlayerId == botId);
+        if (data == null || bot == null) return true;
 
+        // 2) 좋은 땅은 사고, 보통 땅은 현금이 넉넉히 남을 때만 삽니다.
         double landReturn = GetMaxTollReturn(data);
-        long cashAfter = GetMoney(state, botId) - price;
+        long cashAfter = bot.Money - price;
         bool isGoodLand = landReturn >= GoodLandReturn;
         bool buy = IsWorthBuying(data, cashAfter);
 
+        // 3) 사면 다음 턴에 만날 더 좋은 땅을 못 사게 될 확률이 크면 아낍니다.
+        double missed = buy ? MissedBetterLandChance(state, bot, price, landReturn + BetterLandMargin) : 0;
+        if (missed > MaxMissedChance) buy = false;
+
         log?.Invoke($"[봇 판단] {botId}: {data.CityName} 수익 비율 {landReturn:F2}" +
-                    $"({(isGoodLand ? "좋은 땅" : "보통 땅")}), 남는 현금 {cashAfter:N0} → {(buy ? "구매" : "포기")}");
+                    $"({(isGoodLand ? "좋은 땅" : "보통 땅")}), 남는 현금 {cashAfter:N0}, " +
+                    $"더 좋은 땅 놓칠 확률 {missed:P1} → {(buy ? "구매" : "포기")}");
         return buy;
     }
 
@@ -68,18 +76,24 @@ public class BasicBotStrategy : IBotStrategy
 
         PropertyState property = state.PropertyStates.Find(p => p.PropertyId == propertyId);
         PropertyData data = getPropertyData(propertyId);
-        if (property == null || data == null) return true;
+        PlayerState bot = state.PlayerStates.Find(p => p.PlayerId == botId);
+        if (property == null || data == null || bot == null) return true;
         if (!data.CanBuild || property.BuildingLevel >= BuildingLevel.Hotel) return false;
 
         // 2) 통행료 상승분으로 건설비를 빨리 회수할 수 있거나, 현금이 넉넉하면 짓습니다.
         BuildingLevel next = property.BuildingLevel + 1;
         long tollGain = data.GetToll(next) - data.GetToll(property.BuildingLevel);
         double payback = PaybackRounds(state, botId, propertyId, cost, tollGain);
-        long cashAfter = GetMoney(state, botId) - cost;
+        long cashAfter = bot.Money - cost;
         bool build = payback <= MaxPaybackRounds || cashAfter >= SafeCashReserve;
 
+        // 3) 지으면 다음 턴에 만날 좋은 땅을 못 사게 될 확률이 크면 아낍니다.
+        double missed = build ? MissedBetterLandChance(state, bot, cost, GoodLandReturn) : 0;
+        if (missed > MaxMissedChance) build = false;
+
         log?.Invoke($"[봇 판단] {botId}: {data.CityName} {next} 건설, 통행료 +{tollGain:N0}, " +
-                    $"회수 {FormatPayback(payback)}, 남는 현금 {cashAfter:N0} → {(build ? "건설" : "포기")}");
+                    $"회수 {FormatPayback(payback)}, 남는 현금 {cashAfter:N0}, " +
+                    $"좋은 땅 놓칠 확률 {missed:P1} → {(build ? "건설" : "포기")}");
         return build;
     }
 
@@ -90,15 +104,20 @@ public class BasicBotStrategy : IBotStrategy
 
         PropertyState property = state.PropertyStates.Find(p => p.PropertyId == propertyId);
         PropertyData data = getPropertyData(propertyId);
-        if (property == null || data == null) return true;
+        PlayerState bot = state.PlayerStates.Find(p => p.PlayerId == botId);
+        if (property == null || data == null || bot == null) return true;
 
         // 2) 인수가가 비싸므로, 통행료 수입으로 빨리 회수할 수 있는 땅만 인수합니다.
         long toll = getToll(property);
         double payback = PaybackRounds(state, botId, propertyId, price, toll);
         bool acquire = payback <= MaxPaybackRounds;
 
+        // 3) 인수하면 다음 턴에 만날 좋은 땅을 못 사게 될 확률이 크면 아낍니다.
+        double missed = acquire ? MissedBetterLandChance(state, bot, price, GoodLandReturn) : 0;
+        if (missed > MaxMissedChance) acquire = false;
+
         log?.Invoke($"[봇 판단] {botId}: {data.CityName} 인수가 {price:N0}, 통행료 {toll:N0}, " +
-                    $"회수 {FormatPayback(payback)} → {(acquire ? "인수" : "포기")}");
+                    $"회수 {FormatPayback(payback)}, 좋은 땅 놓칠 확률 {missed:P1} → {(acquire ? "인수" : "포기")}");
         return acquire;
     }
 
@@ -202,6 +221,32 @@ public class BasicBotStrategy : IBotStrategy
         return incomePerRound > 0 ? cost / incomePerRound : double.MaxValue;
     }
 
+    /// <summary>
+    /// cost를 쓰면 다음 턴에 도착할 수 있는 더 좋은 빈 땅을 못 사게 되는 확률입니다.
+    /// 지금 현금으로는 살 수 있는데, cost를 쓰고 나면 못 사게 되는 땅만 셉니다.
+    /// </summary>
+    private double MissedBetterLandChance(GameState state, PlayerState bot, long cost, double minReturn)
+    {
+        if (tileByIndex.Length == 0) return 0;
+
+        long cashAfter = bot.Money - cost;
+        double chance = 0;
+        for (int sum = 2; sum <= 12; sum++)
+        {
+            TileData tile = tileByIndex[(bot.Position + sum) % tileByIndex.Length];
+            if (tile == null || tile.Type != TileType.PROPERTY) continue;
+
+            PropertyState target = state.PropertyStates.Find(p => p.PropertyId == tile.PropertyId);
+            PropertyData data = getPropertyData(tile.PropertyId);
+            if (target == null || data == null || target.OwnerId != null) continue;
+            if (GetMaxTollReturn(data) < minReturn) continue;
+
+            if (bot.Money >= data.LandPrice && cashAfter < data.LandPrice)
+                chance += DiceSumProbability(sum);
+        }
+        return chance;
+    }
+    
     private static string FormatPayback(double payback)
     {
         return payback == double.MaxValue ? "불가" : $"{payback:F1}라운드";
