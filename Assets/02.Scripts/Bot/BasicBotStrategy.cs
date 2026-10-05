@@ -15,6 +15,7 @@ public class BasicBotStrategy : IBotStrategy
     private const double GoodLandReturn = 0.75;            // 최대 통행료 ÷ 총 투자금이 이 이상이면 좋은 땅
     private const long SafeCashReserve = 200000;           // 보통 땅은 사고 나서 이만큼 현금이 남을 때만 구매
     private const double AverageHitRate = 1.0 / 7;         // 주사위 평균 7칸 → 한 번 굴릴 때 특정 칸에 도착할 평균 확률
+    private const long WelfareFundWorthTrip = 200000;      // 적립금이 이 이상이면 세계여행 최우선 목적지
 
     private readonly TileData[] tileByIndex;                  // 칸 번호 → 칸 정보
     private readonly Func<PropertyState, long> getToll;       // 통행료 계산
@@ -51,7 +52,7 @@ public class BasicBotStrategy : IBotStrategy
         double landReturn = GetMaxTollReturn(data);
         long cashAfter = GetMoney(state, botId) - price;
         bool isGoodLand = landReturn >= GoodLandReturn;
-        bool buy = isGoodLand || cashAfter >= SafeCashReserve;
+        bool buy = IsWorthBuying(data, cashAfter);
 
         log?.Invoke($"[봇 판단] {botId}: {data.CityName} 수익 비율 {landReturn:F2}" +
                     $"({(isGoodLand ? "좋은 땅" : "보통 땅")}), 남는 현금 {cashAfter:N0} → {(buy ? "구매" : "포기")}");
@@ -145,9 +146,120 @@ public class BasicBotStrategy : IBotStrategy
         return rate;
     }
  
+    /// <summary>
+    /// 보드의 모든 칸을 평가해서 우선순위(tier)가 가장 높고, 같은 순위에서는 점수가 가장 높은 칸으로 갑니다.
+    /// 갈 만한 칸이 없으면 기본 목적지로 갑니다.
+    /// </summary>
     public int ChooseTravelDestination(GameState state, long botId)
     {
-        return DefaultTravelDestination;
+        PlayerState bot = state.PlayerStates.Find(p => p.PlayerId == botId);
+        if (bot == null || tileByIndex.Length == 0) return DefaultTravelDestination;
+
+        int bestPosition = -1;
+        int bestTier = int.MaxValue;
+        double bestScore = double.MinValue;
+
+        for (int position = 0; position < tileByIndex.Length; position++)
+        {
+            if (position == bot.Position) continue;
+            if (!TryScoreDestination(state, bot, position, out int tier, out double score)) continue;
+
+            if (tier < bestTier || (tier == bestTier && score > bestScore))
+            {
+                bestPosition = position;
+                bestTier = tier;
+                bestScore = score;
+            }
+        }
+
+        if (bestPosition < 0) bestPosition = DefaultTravelDestination;
+        log?.Invoke($"[봇 판단] {botId}: 세계여행 목적지 {bestPosition}번 (순위 {bestTier}, 점수 {bestScore:F2})");
+        return bestPosition;
+    }
+
+    /// <summary>
+    /// 목적지 후보 칸의 우선순위(tier, 작을수록 좋음)와 같은 순위 안에서 비교할 점수를 구합니다.
+    /// 가면 손해인 칸은 false를 돌려 후보에서 뺍니다.
+    /// </summary>
+    private bool TryScoreDestination(GameState state, PlayerState bot, int position, out int tier, out double score)
+    {
+        tier = 5;
+        score = 0;
+
+        TileData tile = tileByIndex[position];
+        if (tile == null) return false;
+
+        switch (tile.Type)
+        {
+            case TileType.CHARITY:
+                if (state.WelfareFund <= 0) return true;                       // 받을 게 없으면 중립
+                tier = state.WelfareFund >= WelfareFundWorthTrip ? 1 : 4;
+                score = state.WelfareFund;
+                return true;
+
+            case TileType.GOLDEN_KEY:
+            case TileType.START:
+                return true;                                                    // 중립 (세계여행은 월급 없음)
+
+            case TileType.PROPERTY:
+                return TryScorePropertyDestination(state, bot, position, tile.PropertyId, out tier, out score);
+
+            default:
+                return false;                                                   // 무인도, 세무조사, 세계여행
+        }
+    }
+
+    /// <summary>
+    /// 땅 칸 평가: 살 만한 빈 땅(2순위), 건물을 올릴 내 땅(3순위), 그 외 빈 땅·내 땅(중립), 남의 땅(제외).
+    /// </summary>
+    private bool TryScorePropertyDestination(GameState state, PlayerState bot, int position, int propertyId,
+                                            out int tier, out double score)
+    {
+        tier = 5;
+        score = 0;
+
+        PropertyState property = state.PropertyStates.Find(p => p.PropertyId == propertyId);
+        PropertyData data = getPropertyData(propertyId);
+        if (property == null || data == null) return false;
+
+        // 빈 땅: 구매 규칙을 통과하면 수익 비율로 비교
+        if (property.OwnerId == null)
+        {
+            long price = data.LandPrice;
+            if (IsSafeToSpendAt(state, bot, position, price) && IsWorthBuying(data, bot.Money - price))
+            {
+                tier = 2;
+                score = GetMaxTollReturn(data);
+            }
+            return true;
+        }
+
+        // 내 땅: 다음 단계를 지을 수 있으면 통행료 상승폭으로 비교
+        if (property.OwnerId == bot.PlayerId)
+        {
+            if (data.CanBuild && property.BuildingLevel < BuildingLevel.Hotel)
+            {
+                BuildingLevel next = property.BuildingLevel + 1;
+                long cost = data.GetBuildCost(next);
+                if (IsSafeToSpendAt(state, bot, position, cost))
+                {
+                    tier = 3;
+                    score = data.GetToll(next) - data.GetToll(property.BuildingLevel);
+                }
+            }
+            return true;
+        }
+
+        return false; // 남의 땅은 통행료만 내므로 제외
+    }
+
+    /// <summary>
+    /// position 칸에서 cost를 쓰고 난 뒤, 다음 턴 현금 부족 확률이 기준 이하인지 확인합니다. (로그 없음)
+    /// </summary>
+    private bool IsSafeToSpendAt(GameState state, PlayerState bot, int position, long cost)
+    {
+        if (bot.Money < cost) return false;
+        return CashShortProbability(state, bot.PlayerId, position, bot.Money - cost) <= MaxCashShortProbability;
     }
 
     // ────────────────────────── 통행료 위험 계산 ──────────────────────────
@@ -229,5 +341,13 @@ public class BasicBotStrategy : IBotStrategy
                         + data.GetBuildCost(BuildingLevel.Building)
                         + data.GetBuildCost(BuildingLevel.Hotel);
         return invested > 0 ? (double)data.GetToll(BuildingLevel.Hotel) / invested : 0;
+    }
+
+    /// <summary>
+    /// 구매 규칙: 좋은 땅이면 사고, 보통 땅은 사고 나서 현금이 넉넉히 남을 때만 삽니다.
+    /// </summary>
+    private static bool IsWorthBuying(PropertyData data, long cashAfter)
+    {
+        return GetMaxTollReturn(data) >= GoodLandReturn || cashAfter >= SafeCashReserve;
     }
 }
