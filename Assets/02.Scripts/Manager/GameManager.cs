@@ -1131,6 +1131,49 @@ public class GameManager : Singleton<GameManager>
         // 플레이어의 경우, 청산할 자산들을 선택 가능한 UI를 표시합니다.
         Debug.Log("매각 결정 창 뜨는 기능 미구현...");
     }
+
+    /// <summary>
+    /// 부족한 금액을 채우는 자산 조합을 고릅니다. (테스트용 간단 방식)
+    /// 매각가가 큰 것부터 담고, 불필요하게 담긴 작은 자산은 다시 뺍니다.
+    /// </summary>
+    /// 
+    /// TODO: 유저 매각 창 "자동 선택" 기능에서 사용 예정.
+    ///
+    // private List<int> AutoChooseSellProperties(long payerId, long requiredAmount)
+    // {
+    //     PlayerState payer = GetPlayerState(payerId);
+    //     long shortage = requiredAmount - payer.Money;
+
+    //     List<PropertyState> owned = gameState.PropertyStates.FindAll(p => p.OwnerId == payerId);
+    //     owned.Sort((a, b) => PropertyManager.Instance.GetSellValue(b).CompareTo(PropertyManager.Instance.GetSellValue(a)));
+
+    //     List<PropertyState> selected = new List<PropertyState>();
+    //     long sum = 0;
+    //     foreach (PropertyState p in owned)
+    //     {
+    //         if (sum >= shortage) break;
+    //         selected.Add(p);
+    //         sum += PropertyManager.Instance.GetSellValue(p);
+    //     }
+
+    //     // 작은 것부터, 빼도 부족분을 채운다면 제거
+    //     selected.Sort((a, b) => PropertyManager.Instance.GetSellValue(a).CompareTo(PropertyManager.Instance.GetSellValue(b)));
+    //     for (int i = 0; i < selected.Count;)
+    //     {
+    //         long value = PropertyManager.Instance.GetSellValue(selected[i]);
+    //         if (sum - value >= shortage)
+    //         {
+    //             sum -= value;
+    //             selected.RemoveAt(i);
+    //         }
+    //         else
+    //         {
+    //             i++;
+    //         }
+    //     }
+
+    //     return selected.ConvertAll(p => p.PropertyId);
+    // }
     
     /// <summary>
     /// 화면의 '선택 완료' 버튼을 누르면 이 함수가 호출됩니다.

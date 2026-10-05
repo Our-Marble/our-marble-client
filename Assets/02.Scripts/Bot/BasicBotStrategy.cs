@@ -292,6 +292,9 @@ public class BasicBotStrategy : IBotStrategy
 
     /// <summary>
     /// cost를 쓰면 다음 턴에 도착할 수 있는 더 좋은 빈 땅을 못 사게 되는 확률입니다.
+    /// "더 좋은 땅"은 맵 위치(칸 번호)와 무관하게, 수익 비율(GetMaxTollReturn)이 minReturn 이상인 땅입니다.
+    ///   - 구매: minReturn = 지금 땅의 수익 비율 + BetterLandMargin(0.2)
+    ///   - 건설·인수: minReturn = GoodLandReturn(0.75)
     /// 지금 현금으로는 살 수 있는데, cost를 쓰고 나면 못 사게 되는 땅만 셉니다.
     /// </summary>
     private double MissedBetterLandChance(GameState state, PlayerState bot, long cost, double minReturn)
