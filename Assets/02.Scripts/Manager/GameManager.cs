@@ -91,7 +91,7 @@ public class GameManager : Singleton<GameManager>
         botStrategy = new BasicBotStrategy(
             BoardManager.Instance.BoardData.Tiles,
             PropertyManager.Instance.GetToll,
-            PropertyManager.Instance.GetLandPrice,
+            PropertyManager.Instance.GetData,
             Log);
             
         // MVP 단계에서 플레이어의 playerId는 123, 봇의 playerId는 456 입니다.
