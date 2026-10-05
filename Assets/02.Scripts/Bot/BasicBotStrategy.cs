@@ -5,6 +5,7 @@ using System.Collections.Generic;
 /// 기본 봇 전략입니다.
 /// 돈을 쓰고 난 뒤 다음 턴에 통행료를 현금으로 못 낼 위험이 크면 구매·건설·인수를 하지 않고,
 /// 땅은 수익 비율이 좋은 땅 위주로 삽니다.
+/// 매각할 때는 상대가 밟을 확률까지 고려해 기대 통행료 손실이 적은 땅부터 팝니다.
 /// </summary>
 public class BasicBotStrategy : IBotStrategy
 {
@@ -13,6 +14,7 @@ public class BasicBotStrategy : IBotStrategy
                                                            // 소심하면 올리고, 파산이 잦으면 낮춘다.
     private const double GoodLandReturn = 0.75;            // 최대 통행료 ÷ 총 투자금이 이 이상이면 좋은 땅
     private const long SafeCashReserve = 200000;           // 보통 땅은 사고 나서 이만큼 현금이 남을 때만 구매
+    private const double AverageHitRate = 1.0 / 7;         // 주사위 평균 7칸 → 한 번 굴릴 때 특정 칸에 도착할 평균 확률
 
     private readonly TileData[] tileByIndex;                  // 칸 번호 → 칸 정보
     private readonly Func<PropertyState, long> getToll;       // 통행료 계산
@@ -67,7 +69,8 @@ public class BasicBotStrategy : IBotStrategy
     }
 
     /// <summary>
-    /// 매각가가 큰 것부터 담고, 빼도 부족분을 채우는 작은 땅은 다시 뺍니다. (기존 AutoChooseSellProperties)
+    /// 매각가 1원당 잃는 기대 통행료가 적은 땅부터 담아 부족분을 채웁니다.
+    /// 그 뒤 지킬 가치가 큰 땅부터, 빼도 부족분이 채워지면 다시 빼서 수익이 좋은 땅을 최대한 지킵니다.
     /// </summary>
     public List<int> ChooseSellProperties(GameState state, long botId, long requiredAmount,
                                           Func<PropertyState, long> getSellValue)
@@ -75,7 +78,8 @@ public class BasicBotStrategy : IBotStrategy
         long shortage = requiredAmount - GetMoney(state, botId);
 
         List<PropertyState> owned = state.PropertyStates.FindAll(p => p.OwnerId == botId);
-        owned.Sort((a, b) => getSellValue(b).CompareTo(getSellValue(a)));
+        owned.Sort((a, b) => TollLossPerWon(state, botId, a, getSellValue)
+                            .CompareTo(TollLossPerWon(state, botId, b, getSellValue)));
 
         List<PropertyState> selected = new List<PropertyState>();
         long sum = 0;
@@ -86,7 +90,9 @@ public class BasicBotStrategy : IBotStrategy
             sum += getSellValue(p);
         }
 
-        selected.Sort((a, b) => getSellValue(a).CompareTo(getSellValue(b)));
+        // 지킬 가치가 큰 땅(기대 통행료 손실이 큰 땅)부터, 빼도 부족분을 채운다면 매각 목록에서 제외합니다.
+        selected.Sort((a, b) => TollLossPerWon(state, botId, b, getSellValue)
+                                .CompareTo(TollLossPerWon(state, botId, a, getSellValue)));
         for (int i = 0; i < selected.Count;)
         {
             long value = getSellValue(selected[i]);
@@ -101,9 +107,44 @@ public class BasicBotStrategy : IBotStrategy
             }
         }
 
+        log?.Invoke($"[봇 판단] {botId}: 부족분 {shortage:N0} → 매각 {selected.Count}개 (매각가 합 {sum:N0})");
         return selected.ConvertAll(p => p.PropertyId);
     }
 
+    /// <summary>
+    /// 이 땅을 팔 때 매각가 1원당 잃는 기대 통행료입니다. 값이 작을수록 팔아도 손해가 적은 땅입니다.
+    /// 기대 통행료 = 통행료 × (상대별 장기 평균 도착 확률 + 다음 턴 실제 도착 확률)
+    /// </summary>
+    private double TollLossPerWon(GameState state, long botId, PropertyState property,
+                                Func<PropertyState, long> getSellValue)
+    {
+        long sellValue = getSellValue(property);
+        if (sellValue <= 0) return double.MaxValue; // 팔아도 돈이 안 되는 땅은 맨 뒤로
+
+        double hitRate = OpponentHitRate(state, botId, property.PropertyId);
+        return getToll(property) * hitRate / sellValue;
+    }
+
+    /// <summary>
+    /// 살아 있는 상대들이 이 땅에 도착할 확률의 합입니다. (장기 평균 + 다음 주사위 기준 실제 확률)
+    /// </summary>
+    private double OpponentHitRate(GameState state, long botId, int propertyId)
+    {
+        int tilePosition = Array.FindIndex(tileByIndex, t => t != null && t.Type == TileType.PROPERTY && t.PropertyId == propertyId);
+        if (tilePosition < 0) return 0;
+
+        double rate = 0;
+        foreach (PlayerState opponent in state.PlayerStates)
+        {
+            if (opponent.PlayerId == botId || opponent.IsBankrupt) continue;
+
+            int distance = (tilePosition - opponent.Position + tileByIndex.Length) % tileByIndex.Length;
+            double nextTurn = distance >= 2 && distance <= 12 ? DiceSumProbability(distance) : 0;
+            rate += AverageHitRate + nextTurn;
+        }
+        return rate;
+    }
+ 
     public int ChooseTravelDestination(GameState state, long botId)
     {
         return DefaultTravelDestination;
