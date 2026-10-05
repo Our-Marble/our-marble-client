@@ -299,7 +299,8 @@ public class BasicBotStrategy : IBotStrategy
         double chance = 0;
         for (int sum = 2; sum <= 12; sum++)
         {
-            TileData tile = tileByIndex[(bot.Position + sum) % tileByIndex.Length];
+            int targetPosition = (bot.Position + sum) % tileByIndex.Length;
+            TileData tile = tileByIndex[targetPosition];
             if (tile == null || tile.Type != TileType.PROPERTY) continue;
 
             PropertyState target = state.PropertyStates.Find(p => p.PropertyId == tile.PropertyId);
@@ -308,9 +309,26 @@ public class BasicBotStrategy : IBotStrategy
             if (GetMaxTollReturn(data) < minReturn) continue;
 
             if (bot.Money >= data.LandPrice && cashAfter < data.LandPrice)
-                chance += DiceSumProbability(sum);
+                chance += DiceSumProbability(sum) * StillEmptyChance(state, bot.PlayerId, targetPosition);
         }
         return chance;
+    }
+
+    /// <summary>
+    /// 내 다음 차례까지 position 칸의 빈 땅이 남아 있을 확률입니다.
+    /// 상대가 먼저 밟으면 사 간다고 보고, 모든 상대가 다음 주사위로 그 칸을 안 밟을 확률을 곱합니다.
+    /// </summary>
+    private double StillEmptyChance(GameState state, long botId, int position)
+    {
+        double stillEmpty = 1;
+        foreach (PlayerState opponent in state.PlayerStates)
+        {
+            if (opponent.PlayerId == botId || opponent.IsBankrupt) continue;
+
+            int distance = (position - opponent.Position + tileByIndex.Length) % tileByIndex.Length;
+            stillEmpty *= 1 - NextRollHitProbability(opponent, distance);
+        }
+        return stillEmpty;
     }
 
     #endregion
