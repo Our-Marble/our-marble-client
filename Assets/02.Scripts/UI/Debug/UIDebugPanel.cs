@@ -140,8 +140,9 @@ public class UIDebugPanel : MonoBehaviour
     {
         UI.InitPlayers();
         UI.RefreshAllPlayers(animate);
-        UI.TopBar?.SetRoom("테스트 방", "TEST01");
-        UI.TopBar?.SetPlayerCount(Players.Count, 4);
+        // 로비에서 넘어왔다면 그 방 정보를 유지한다
+        if (LobbyManager_temp.CurrentRoom == null) UI.TopBar?.SetRoom("테스트 방", "TEST01");
+        if (LobbyManager_temp.CurrentRoom == null) UI.TopBar?.SetPlayerCount(Players.Count, 4);
         UI.ShowTurn(State.CurrentPlayerId);
     }
 

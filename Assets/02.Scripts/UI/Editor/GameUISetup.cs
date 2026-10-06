@@ -75,7 +75,6 @@ public static class GameUISetup
             ("currentTurn", Attach<CurrentTurnView>(FindRoot("Canvas_CurrentTurn"))),
             ("diceRoll", Attach<DiceRollView>(diceCanvas)),
             ("diceResult", Attach<DiceResultView>(FindRoot("Canvas_DiceResult"))),
-            ("roomSetup", Attach<RoomSetupView>(FindRoot("Canvas_RoomSetup"))),
             ("purchase", Attach<PurchasePopupView>(FindRoot("Canvas_PurchasePopup"))),
             ("takeover", Attach<TakeoverPopupView>(FindRoot("Canvas_TakeoverPopup"))),
             ("sell", Attach<SellPopupView>(FindRoot("Canvas_SellPopup"))),
@@ -84,6 +83,8 @@ public static class GameUISetup
             ("destinationSelect", Attach<DestinationSelectView>(FindRoot("Canvas_DestinationSelect"))),
             ("tileInfo", Attach<TileInfoView>(FindRoot("Canvas_TileInfo"))),
             ("gameResult", Attach<GameResultView>(FindRoot("Canvas_GameResult"))),
+            ("exitConfirm", Attach<ExitConfirmView>(FindRoot("Canvas_ExitConfirm"))),
+            ("settings", Attach<SettingsView>(FindRoot("Canvas_Settings"))),
         };
 
         // UIManager (없으면 만든다)

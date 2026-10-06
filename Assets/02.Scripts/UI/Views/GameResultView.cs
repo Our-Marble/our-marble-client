@@ -124,8 +124,25 @@ public class GameResultView : UIView
             }
         }
 
+        SetCountdown(0);
         SetOnClick(closeButton, () => { Close(); onClose?.Invoke(); });
         PlayEntrance(entries);
+    }
+
+    private TMP_Text closeLabel;
+    private string closeLabelBase;
+
+    /// <summary>확인 버튼에 남은 시간을 붙여 "확인 (12)"처럼 보여 준다. 0이면 원래 글자로 되돌린다.</summary>
+    public void SetCountdown(int seconds)
+    {
+        if (closeButton == null) return;
+        if (closeLabel == null)
+        {
+            closeLabel = closeButton.GetComponentInChildren<TMP_Text>(true);
+            if (closeLabel == null) return;
+            closeLabelBase = closeLabel.text;
+        }
+        closeLabel.text = seconds > 0 ? $"{closeLabelBase} ({seconds})" : closeLabelBase;
     }
 
     // ───────────── 등장 연출 ─────────────

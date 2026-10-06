@@ -22,7 +22,6 @@ public class UIManager : MonoBehaviour
     [SerializeField] private DiceResultView diceResult;
 
     [Header("팝업")]
-    [SerializeField] private RoomSetupView roomSetup;
     [SerializeField] private PurchasePopupView purchase;
     [SerializeField] private TakeoverPopupView takeover;
     [SerializeField] private SellPopupView sell;
@@ -31,6 +30,8 @@ public class UIManager : MonoBehaviour
     [SerializeField] private DestinationSelectView destinationSelect;
     [SerializeField] private TileInfoView tileInfo;
     [SerializeField] private GameResultView gameResult;
+    [SerializeField] private ExitConfirmView exitConfirm;
+    [SerializeField] private SettingsView settings;
 
     [Header("데이터")]
     [Tooltip("황금열쇠 카드의 이름·설명·아이콘을 찾는 덱. CardManager가 쓰는 덱과 같은 에셋을 연결한다.")]
@@ -43,7 +44,6 @@ public class UIManager : MonoBehaviour
     public CurrentTurnView CurrentTurn => currentTurn;
     public DiceRollView DiceRoll => diceRoll;
     public DiceResultView DiceResult => diceResult;
-    public RoomSetupView RoomSetup => roomSetup;
     public PurchasePopupView Purchase => purchase;
     public TakeoverPopupView Takeover => takeover;
     public SellPopupView Sell => sell;
@@ -52,6 +52,8 @@ public class UIManager : MonoBehaviour
     public DestinationSelectView DestinationSelect => destinationSelect;
     public TileInfoView TileInfo => tileInfo;
     public GameResultView GameResult => gameResult;
+    public ExitConfirmView ExitConfirm => exitConfirm;
+    public SettingsView Settings => settings;
 
     // ───────────── 밖에서 연결하는 곳 ─────────────
 
@@ -66,6 +68,9 @@ public class UIManager : MonoBehaviour
 
     /// <summary>매각 창의 '파산 신청' 버튼 (payerId, receiverId).</summary>
     public event Action<long, long> BankruptRequested;
+
+    [Tooltip("게임이 끝난 뒤 결과를 보여 주는 시간(초). 이 시간이 지나면 확인을 누르지 않아도 방(로비)으로 돌아간다.")]
+    [SerializeField] private float resultSeconds = 15f;
 
     private void Awake()
     {
@@ -89,8 +94,25 @@ public class UIManager : MonoBehaviour
         // 주사위 결과창이 닫히면 게이지를 비운다
         if (diceResult != null && diceRoll != null) diceResult.Closed += () => diceRoll.SetGauge(0f);
 
-        // 상단바 방 설정 버튼: 방 설정 팝업 열기/닫기
-        if (topBar != null && roomSetup != null) topBar.SetRoomSetupCallback(roomSetup.Toggle);
+        // 상단바: 로비에서 넘어온 방 정보 표시, 설정은 설정 창 열기/닫기, 나가기는 확인 후 로비로 돌아간다
+        if (topBar != null)
+        {
+            var room = LobbyManager_temp.CurrentRoom;
+            if (room != null)
+            {
+                topBar.SetRoom(room.Name, room.Code);
+                topBar.SetPlayerCount(room.Players.Count, room.MaxPlayers);
+            }
+            topBar.SetPassword(room != null && room.HasPassword ? room.Password : null); // 비밀번호 방이면 인원수 옆에 표시
+            topBar.SetCallbacks(settings != null ? settings.Toggle : (Action)null, RequestExit);
+        }
+    }
+
+    // 나가기 버튼: 로비로 돌아갈지 묻고, 확인하면 돌아간다
+    private void RequestExit()
+    {
+        if (exitConfirm != null) exitConfirm.Show(() => SceneFlow.ToLobby());
+        else SceneFlow.ToLobby();
     }
 
     // 돈이 바뀌면 EconomyManager가 알려준다. 돈 표시와 연출은 여기서 갱신한다.
@@ -572,7 +594,6 @@ public class UIManager : MonoBehaviour
     {
         localPlayerId = playerId;
         hasLocalPlayer = true;
-        if (roomSetup != null) roomSetup.SetLocalPlayer(Mathf.Max(0, IndexOf(playerId)));
     }
 
     /// <summary>플레이어 이름과 초상화. 지정하지 않으면 "플레이어 N"과 기본 초상화를 씁니다.</summary>
@@ -600,6 +621,8 @@ public class UIManager : MonoBehaviour
     {
         GameState state = State;
         if (state == null) return;
+
+        if (topBar != null) topBar.SetRoundVisible(true); // 게임이 시작되면 상단바에 라운드를 보인다
 
         bankruptShortfall.Clear();
         transferPlayers.Clear();
@@ -844,6 +867,11 @@ public class UIManager : MonoBehaviour
         GameState state = State;
         if (gameResult == null || state == null) return;
 
+        // 더 이상 굴릴 주사위도, 진행 중인 차례도 없다
+        if (diceRoll != null) { diceRoll.SetInteractable(false); diceRoll.Close(); }
+        if (diceResult != null) diceResult.Close();
+        if (currentTurn != null) currentTurn.Close();
+
         // 순위: 파산 → 총자산 → 현금 순, 모두 같으면 원래 순서 (GameManager 종료 로그와 같은 기준)
         var order = new List<int>();
         for (int i = 0; i < state.PlayerStates.Count; i++) order.Add(i);
@@ -872,7 +900,38 @@ public class UIManager : MonoBehaviour
                 IsBankrupt = bankrupt,
             });
         }
-        gameResult.Show(entries, onClose);
+        // 확인 버튼을 누르거나 정해진 시간이 지나면 방(로비)으로 돌아간다.
+        gameResult.Show(entries, () =>
+        {
+            onClose?.Invoke();
+            ReturnAfterResult();
+        });
+        if (resultCountdown != null) StopCoroutine(resultCountdown);
+        resultCountdown = StartCoroutine(ResultCountdown());
+    }
+
+    private Coroutine resultCountdown;
+
+    private System.Collections.IEnumerator ResultCountdown()
+    {
+        for (int left = Mathf.CeilToInt(resultSeconds); left > 0; left--)
+        {
+            gameResult.SetCountdown(left);
+            yield return new WaitForSecondsRealtime(1f);
+        }
+        resultCountdown = null;
+        ReturnAfterResult();
+    }
+
+    /// <summary>
+    /// 결과 창의 확인 버튼을 눌렀거나 결과 시간이 끝났을 때: 같은 방을 유지한 채 로비 씬으로 돌아가 방 설정을 다시 연다.
+    /// 로비를 거치지 않고 게임 씬만 실행한 경우(방 정보 없음)에는 결과 창을 그대로 둔다.
+    /// </summary>
+    public void ReturnAfterResult()
+    {
+        if (resultCountdown != null) { StopCoroutine(resultCountdown); resultCountdown = null; }
+        if (gameResult != null) gameResult.SetCountdown(0);
+        if (LobbyManager_temp.CurrentRoom != null) SceneFlow.ReturnToRoom();
     }
 
     #endregion
@@ -1032,8 +1091,8 @@ public class UIManager : MonoBehaviour
 
         UIView[] popups =
         {
-            diceResult, roomSetup, purchase, takeover, sell, islandEscape,
-            cardDraw, destinationSelect, tileInfo, gameResult
+            diceResult, purchase, takeover, sell, islandEscape,
+            cardDraw, destinationSelect, tileInfo, gameResult, exitConfirm
         };
         foreach (var popup in popups)
         {
