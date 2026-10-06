@@ -23,7 +23,7 @@ public class GameNetwork : Singleton<GameNetwork>
                 BuiltBroadcast message =
                     JsonUtility.FromJson<BuiltBroadcast>(json);
 
-                OnBuilt?.Invoke(message.playerId, message.propertyId);
+                OnBuilt?.Invoke(message.playerId, message.propertyId, message.isAccept);
                 break;
             }
             case "CARD_DRAWN":
@@ -63,7 +63,7 @@ public class GameNetwork : Singleton<GameNetwork>
                 PropertyAcquiredBroadcast message =
                     JsonUtility.FromJson<PropertyAcquiredBroadcast>(json);
                 
-                OnPropertyAcquired?.Invoke(message.playerId, message.propertyId);
+                OnPropertyAcquired?.Invoke(message.playerId, message.propertyId, message.isAccept);
                 break;
             }
             case "PROPERTY_PURCHASED":
@@ -71,7 +71,7 @@ public class GameNetwork : Singleton<GameNetwork>
                 PropertyPurchasedBroadcast message =
                     JsonUtility.FromJson<PropertyPurchasedBroadcast>(json);
                 
-                OnPropertyPurchased?.Invoke(message.playerId, message.propertyId);
+                OnPropertyPurchased?.Invoke(message.playerId, message.propertyId, message.isAccept);
                 break;
             }
             default:
@@ -83,13 +83,13 @@ public class GameNetwork : Singleton<GameNetwork>
     }
 
     // GameNetwork는 GameManager의 존재를 몰라도 되게 하기 위해서, GameManager의 함수를 직접 호출하는 대신, 이벤트 방식을 사용할것이다.
-    public event Action<long, int> OnBuilt; // GameManager의 OnEnable에서  GameNetwork.Instance.OnDiceRolled += HandleDiceRolled; 하면 된다.
+    public event Action<long, int, bool> OnBuilt; // GameManager의 OnEnable에서  GameNetwork.Instance.OnDiceRolled += HandleDiceRolled; 하면 된다.
     public event Action<long, int> OnCardDrawn;
     public event Action<long, int> OnDestinationChosen;
     public event Action<long, int, int> OnDiceRolled;
     public event Action<long, List<int>> OnPropertiesSold;
-    public event Action<long, int> OnPropertyAcquired;
-    public event Action<long, int> OnPropertyPurchased;
+    public event Action<long, int, bool> OnPropertyAcquired;
+    public event Action<long, int, bool> OnPropertyPurchased;
    
     public void SendBuildRequest(int propertyId, bool isAccept)
     {
