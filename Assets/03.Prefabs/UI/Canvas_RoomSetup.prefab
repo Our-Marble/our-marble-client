@@ -4036,7 +4036,7 @@ RectTransform:
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
   m_AnchoredPosition: {x: 190, y: -30}
-  m_SizeDelta: {x: 600, y: 48}
+  m_SizeDelta: {x: 900, y: 48}
   m_Pivot: {x: 0, y: 1}
 --- !u!222 &1248338227702104424
 CanvasRenderer:
@@ -7934,6 +7934,7 @@ MonoBehaviour:
   readyLabel: {fileID: 7733788153198900475}
   hintText: {fileID: 4992758312065227876}
   closeButton: {fileID: 2777628928692527966}
+  subtitleText: {fileID: 0}
 --- !u!1 &5705347792752291288
 GameObject:
   m_ObjectHideFlags: 0

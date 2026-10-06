@@ -145,9 +145,6 @@ public class GameResultView : UIView
         closeLabel.text = seconds > 0 ? $"{closeLabelBase} ({seconds})" : closeLabelBase;
     }
 
-    /// <summary>시간이 다 되어 결과 창을 닫는다. (열려 있지 않으면 아무 일도 없다)</summary>
-    public void Dismiss() => Close();
-
     // ───────────── 등장 연출 ─────────────
 
     private const int ConfettiCount = 40;

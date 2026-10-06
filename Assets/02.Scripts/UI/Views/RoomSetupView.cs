@@ -4,7 +4,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-/// <summary>게임 시작 전 방 설정 팝업. Canvas_RoomSetup에 붙는다.</summary>
+/// <summary>로비 씬의 방 설정 화면. 방에 들어오면 열리고, 방장이 시작하면 게임 씬으로 넘어간다. Canvas_RoomSetup에 붙는다.</summary>
 public class RoomSetupView : UIView
 {
     public override string PanelPath => "RoomSetupPopup/Window";
@@ -66,6 +66,7 @@ public class RoomSetupView : UIView
     [SerializeField] private TMP_Text readyLabel;
     [SerializeField] private TMP_Text hintText;
     [SerializeField] private Button closeButton;
+    [SerializeField] private TMP_Text subtitleText;
 
     /// <summary>모드 토글이 바뀌면 호출. true면 팀전.</summary>
     public event Action<bool> ModeChanged;
@@ -75,6 +76,9 @@ public class RoomSetupView : UIView
 
     /// <summary>방장이 최대 인원(2~4)을 바꾸면 호출.</summary>
     public event Action<int> MaxPlayersChanged;
+
+    /// <summary>오른쪽 위 X 버튼을 눌렀다. 방에서 나가겠다는 뜻이라, 창을 닫는 건 받는 쪽이 정한다.</summary>
+    public event Action LeaveRequested;
 
     private bool isTeamMode;
     private bool isHost = true;
@@ -119,19 +123,20 @@ public class RoomSetupView : UIView
         readyLabel = Find<TMP_Text>(w + "ReadyButton/Label");
         hintText = Find<TMP_Text>(w + "HintText");
         closeButton = Find<Button>(w + "CloseButton");
+        subtitleText = Find<TMP_Text>(w + "SubtitleText");
     }
 
     private void Awake()
     {
         if (teamToggle != null) teamToggle.onValueChanged.AddListener(OnTeamToggleChanged);
-        SetOnClick(closeButton, Close);
+        SetOnClick(closeButton, () => LeaveRequested?.Invoke());
         SetOnClick(readyButton, OnReadyClicked);
         for (int i = 0; i < maxPlayersToggles.Length; i++)
         {
             int value = i + 2;
             if (maxPlayersToggles[i] != null) maxPlayersToggles[i].onValueChanged.AddListener(isOn => OnMaxPlayersToggled(value, isOn));
         }
-        // 팀 버튼은 Show를 거치지 않고 열어도(상단바 버튼) 동작해야 해서 여기서 연결한다
+        // 팀 버튼은 Show를 거치지 않고 열어도 동작해야 해서 여기서 연결한다
         SetOnClick(redTeamButton, () => ChangeLocalTeam(Team.Red, onRedTeamChanged));
         SetOnClick(blueTeamButton, () => ChangeLocalTeam(Team.Blue, onBlueTeamChanged));
     }
@@ -139,11 +144,14 @@ public class RoomSetupView : UIView
     private Action onRedTeamChanged;
     private Action onBlueTeamChanged;
 
-    /// <summary>상단바 방 설정 버튼용. 열려 있으면 닫고, 닫혀 있으면 마지막 내용 그대로 다시 연다.</summary>
-    public void Toggle()
+    /// <summary>제목 옆 줄에 방 이름, 방 코드, (있으면) 비밀번호를 보여 준다.</summary>
+    public void SetRoomInfo(string roomName, string roomCode, string password)
     {
-        if (IsOpen) Close();
-        else Open();
+        if (subtitleText == null) subtitleText = Find<TMP_Text>("RoomSetupPopup/Window/SubtitleText"); // 이미 만들어진 프리팹에는 연결돼 있지 않을 수 있다
+        if (subtitleText == null) return;
+        string text = $"{roomName}  ·  방 코드 {roomCode}";
+        if (!string.IsNullOrEmpty(password)) text += $"  ·  비밀번호 {password}";
+        subtitleText.text = text;
     }
 
     /// <summary>
@@ -292,21 +300,12 @@ public class RoomSetupView : UIView
         UpdateStartState();
     }
 
-    /// <summary>시작·준비 버튼과 안내 문구를 보일지. 게임이 시작되면 끈다.</summary>
-    public void SetStartVisible(bool visible)
-    {
-        actionsVisible = visible;
-        RefreshActionButtons();
-    }
-
-    private bool actionsVisible = true;
     private bool localReady;
 
     private void RefreshActionButtons()
     {
-        SetActive(startButton != null ? startButton.gameObject : null, actionsVisible && isHost);
-        SetActive(readyButton != null ? readyButton.gameObject : null, actionsVisible && !isHost);
-        SetActive(hintText != null ? hintText.gameObject : null, actionsVisible);
+        SetActive(startButton != null ? startButton.gameObject : null, isHost);
+        SetActive(readyButton != null ? readyButton.gameObject : null, !isHost);
     }
 
     /// <summary>이 화면의 플레이어가 준비한 상태인지 보여준다. (준비하기 ↔ 준비 취소)</summary>

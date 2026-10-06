@@ -101,7 +101,6 @@ public class UIDebugPanel : MonoBehaviour
 
         Header($"HUD (GameState 기준, {Players.Count}명)");
         if (GUILayout.Button("GameState 다시 읽기")) { FillHud(animate: true); Log("GameState 다시 읽기"); }
-        if (GUILayout.Button("방 설정 창 열기 (로비에서 들어온 방 정보로)")) UI.ShowRoomSetupForDebug();
         if (GUILayout.Button("다음 차례 (HandleTurnChanged)")) NextTurn();
         if (GUILayout.Button("통행료 주고받기 (HandleTollPaid)")) PayToll();
         if (GUILayout.Button("파산 켜기/끄기 (차례인 사람)")) ToggleBankrupt();

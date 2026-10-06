@@ -81,6 +81,9 @@ public class LobbyManager_temp : MonoBehaviour
     [Tooltip("선택한 방 행의 두꺼운 테두리 (UI_RoundedStroke_Thick).")]
     [SerializeField] private Sprite selectedStrokeSprite;
 
+    [Tooltip("맵 초상화. Maps 배열과 같은 순서(클래식 월드, 도시 탐험, 해변 마을).")]
+    [SerializeField] private Sprite[] mapSprites = new Sprite[3];
+
     [Header("테스트 옵션")]
     [Tooltip("켜면 다른 방의 인원·게임 진행이 몇 초마다 저절로 바뀐다 (웹소켓 푸시 흉내).")]
     [SerializeField] private bool simulateLiveUpdates = true;
@@ -122,6 +125,8 @@ public class LobbyManager_temp : MonoBehaviour
     // 상단바
     private Button settingsButton, exitButton;
     private ExitConfirmView exitConfirm;
+    private RoomSetupView roomSetup;
+    private Coroutine mockHostStart;
 
     // 방 목록
     private Toggle[] filterToggles;
@@ -155,6 +160,7 @@ public class LobbyManager_temp : MonoBehaviour
     private PopupView createPopup;
     private TMP_InputField nameInput, passwordInput;
     private TMP_Text mapNameText;
+    private Image mapPreviewImage;
     private Button prevMapButton, nextMapButton, createCancel, createConfirm, createClose;
     private Toggle[] modeToggles, maxToggles;
     private int mapIndex;
@@ -203,7 +209,8 @@ public class LobbyManager_temp : MonoBehaviour
         if (uiRoot == null) Reset();
         if (uiRoot == null) { Debug.LogError("[Lobby] 'UI' 루트를 찾을 수 없습니다.", this); enabled = false; return; }
 
-        CurrentRoom = null; // 로비에 있다는 건 어느 방에도 들어가 있지 않다는 뜻이다
+        // 로비에 있다는 건 보통 어느 방에도 들어가 있지 않다는 뜻이다. 게임을 마치고 같은 방으로 돌아온 경우만 방을 유지한다.
+        if (!reopenRoomSetup) CurrentRoom = null;
 
         Bind();
         WireEvents();
@@ -218,6 +225,11 @@ public class LobbyManager_temp : MonoBehaviour
     private void Start()
     {
         if (simulateLiveUpdates) StartCoroutine(SimulateRoutine());
+
+        // 게임이 끝나 같은 방으로 돌아왔다면 방 설정을 다시 띄운다
+        bool back = reopenRoomSetup;
+        reopenRoomSetup = false;
+        if (back && CurrentRoom != null) OpenRoomSetup(CurrentRoom);
     }
 
     private static T Get<T>(Transform root, string path) where T : Component
@@ -247,6 +259,8 @@ public class LobbyManager_temp : MonoBehaviour
         settingsView = uiRoot.Find("Canvas_Settings").GetComponent<SettingsView>();
         var exitCanvas = uiRoot.Find("Canvas_ExitConfirm");
         if (exitCanvas != null) exitConfirm = exitCanvas.GetComponent<ExitConfirmView>();
+        var roomSetupCanvas = uiRoot.Find("Canvas_RoomSetup");
+        if (roomSetupCanvas != null) roomSetup = roomSetupCanvas.GetComponent<RoomSetupView>();
 
         var list = lobby.Find("RoomListPanel");
         filterToggles = list.Find("ModeFilter").GetComponentsInChildren<Toggle>(true);
@@ -317,6 +331,7 @@ public class LobbyManager_temp : MonoBehaviour
         var cw = createPopup.Window;
         nameInput = Get<TMP_InputField>(cw, "NameSection/NameInput");
         mapNameText = Get<TMP_Text>(cw, "MapSection/MapNameText");
+        mapPreviewImage = Get<Image>(cw, "MapSection/MapPreview/MapImage");
         prevMapButton = Get<Button>(cw, "MapSection/PrevMapButton");
         nextMapButton = Get<Button>(cw, "MapSection/NextMapButton");
         modeToggles = cw.Find("ModeSection/ModeToggle").GetComponentsInChildren<Toggle>(true);
@@ -406,6 +421,7 @@ public class LobbyManager_temp : MonoBehaviour
 
         if (!Input.GetKeyDown(KeyCode.Escape) || entering) return;
         if (settingsView.IsOpen) settingsView.Close();
+        else if (roomSetup != null && roomSetup.IsOpen) return; // 방 안에서는 X 버튼으로만 나간다
         else if (passwordPopup.IsOpen) passwordPopup.Close();
         else if (createPopup.IsOpen) createPopup.Close();
         else if (joinPopup.IsOpen) joinPopup.Close();
@@ -540,12 +556,32 @@ public class LobbyManager_temp : MonoBehaviour
     public const string LobbyScenePath = "Assets/01.Scenes/Temp/UI_LobbyScene.unity";
     public const string LoginScenePath = "Assets/01.Scenes/Temp/UI_LoginScene.unity";
 
-    /// <summary>입장한 방. 로비를 거치지 않고 게임 씬만 실행하면 null.</summary>
+    /// <summary>입장한 방. 방 설정(로비 씬)과 게임 씬이 함께 읽는다. 로비를 거치지 않고 게임 씬만 실행하면 null.</summary>
     public static RoomInfo CurrentRoom { get; private set; }
 
     // 에디터에서 도메인 리로드 없이 플레이를 다시 시작해도 이전 플레이의 방 정보가 남지 않게 한다
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    private static void ResetStatics() => CurrentRoom = null;
+    private static void ResetStatics() { CurrentRoom = null; reopenRoomSetup = false; }
+
+    // 게임을 마치고 같은 방으로 돌아오는 중이면 true. 로비 씬이 읽고 지운다.
+    private static bool reopenRoomSetup;
+
+    /// <summary>
+    /// 게임이 끝나 같은 방을 유지한 채 로비 씬으로 돌아간다. 로비는 방 설정을 다시 연다.
+    /// 내 준비는 풀리고(방장은 해당 없음), 다른 사람의 준비는 서버가 알려줄 일이라 그대로 둔다.
+    /// </summary>
+    public static void ReturnToRoom()
+    {
+        if (CurrentRoom == null) { ReturnToLobby(); return; }
+        var mine = CurrentRoom.Players[CurrentRoom.LocalIndex];
+        mine.IsReady = mine.IsHost;
+        reopenRoomSetup = true;
+        if (!TryLoadScene(LobbyScenePath))
+        {
+            reopenRoomSetup = false;
+            Debug.LogError($"[Lobby] 로비 씬을 불러올 수 없습니다: {LobbyScenePath}");
+        }
+    }
 
     /// <summary>게임에서 나가 로비로 돌아간다. 방 정보는 비운다.</summary>
     public static void ReturnToLobby()
@@ -586,6 +622,12 @@ public class LobbyManager_temp : MonoBehaviour
         AddSeedRoom("친구들끼리", 2, false, 4, RoomState.Waiting, 0, "구름");
         AddSeedRoom("건물부자 모여라", 0, true, 4, RoomState.Waiting, 0, "호랑이", "펭귄", "고래");
         AddSeedRoom("둘이서 한판", 1, false, 2, RoomState.Playing, 5, "토끼", "여우");
+        AddSeedRoom("2인 대기방", 0, false, 2, RoomState.Waiting, 0, "다이아");
+        AddSeedRoom("3인 대기방", 0, false, 3, RoomState.Waiting, 0, "바둑이", "단풍");
+
+        // 테스트용 고정 방 코드. (방 코드로 입장 팝업에 그대로 입력하면 된다. 순서는 위 방 목록과 같다)
+        string[] fixedCodes = { "MARBLE", "NEWBIE", "EXPERT", "WEEKND", "FRIEND", "BUILDS", "ONLY22", "DUO222", "TRIO33" };
+        for (int i = 0; i < fixedCodes.Length; i++) rooms[i].Code = fixedCodes[i];
 
         // 자물쇠 표시 확인용: 일부 방에 비밀번호를 건다 (목업이라 값은 의미 없다)
         foreach (int index in new[] { 1, 3, 4 }) rooms[index].Password = "1234";
@@ -645,7 +687,7 @@ public class LobbyManager_temp : MonoBehaviour
 
     /// <summary>
     /// 입장 요청. 목록, 상세, 방 코드 어디서 들어오든 이 함수를 거친다.
-    /// 비밀번호가 있는 방은 입력 팝업을 먼저 띄운다. 서버 응답을 기다리는 동안 로딩 화면을 띄우고, 통과하면 게임 씬으로 넘어간다.
+    /// 비밀번호가 있는 방은 입력 팝업을 먼저 띄운다. 서버 응답을 기다리는 동안 로딩 화면을 띄우고, 통과하면 방 설정 화면으로 들어간다.
     /// </summary>
     private void TryJoin(RoomData room)
     {
@@ -735,16 +777,161 @@ public class LobbyManager_temp : MonoBehaviour
         }
         pwFails.Remove(room.Id);
 
+        // 방에 들어왔다. 방 설정 화면에서 준비하고, 방장이 시작하면 게임 씬으로 넘어간다.
         FillCurrentRoom(room, asHost);
-        Debug.Log($"[Lobby] 게임 씬으로 이동: {gameScenePath} (방 {room.Code}, 방장 {asHost})");
+        Debug.Log($"[Lobby] 방 입장: {room.Name} ({room.Code}), 방장 {asHost}");
+        ShowLoading(false);
+        entering = false;
+        OpenRoomSetup(CurrentRoom);
+    }
+
+    // ───────────── 방 설정 (방 안, 게임 시작 전) ─────────────
+
+    /// <summary>방 설정 화면에 방 정보를 채워 연다. 모드, 팀, 준비, 최대 인원을 바꾸면 방 정보(RoomInfo)에 기록한다.</summary>
+    private void OpenRoomSetup(RoomInfo room)
+    {
+        if (roomSetup == null) { Debug.LogError("[Lobby] Canvas_RoomSetup이 로비 씬에 없습니다."); return; }
+
+        roomSetup.SetRoomInfo(room.Name, room.Code, room.HasPassword ? room.Password : null);
+        roomSetup.SetMode(room.IsTeam);
+        roomSetup.SetMap(room.Map, MapSpriteOf(room.Map));
+        roomSetup.SetMapSelectable(room.IsHost); // 맵은 방장만 바꾼다
+        roomSetup.SetLocalPlayer(room.LocalIndex);
+        roomSetup.SetMaxPlayers(room.MaxPlayers);
+        roomSetup.SetHost(room.IsHost);
+        ApplyRoomSetupSlots(room);
+        roomSetup.SetReady(room.Players[room.LocalIndex].IsReady);
+
+        roomSetup.ModeChanged -= OnRoomModeChanged;
+        roomSetup.ModeChanged += OnRoomModeChanged;
+        roomSetup.MaxPlayersChanged -= OnRoomMaxPlayersChanged;
+        roomSetup.MaxPlayersChanged += OnRoomMaxPlayersChanged;
+        roomSetup.ReadyToggled -= OnLocalReadyToggled;
+        roomSetup.ReadyToggled += OnLocalReadyToggled;
+        roomSetup.LeaveRequested -= OnLeaveRequested;
+        roomSetup.LeaveRequested += OnLeaveRequested;
+
+        // 내가 팀을 고르면 방 정보에도 기록한다
+        roomSetup.Show(() => ChangeRoomMap(room, -1), () => ChangeRoomMap(room, 1),
+            () => { room.Players[room.LocalIndex].Team = 1; ApplyRoomSetupSlots(room); },
+            () => { room.Players[room.LocalIndex].Team = 2; ApplyRoomSetupSlots(room); },
+            StartGameFromRoom);
+    }
+
+    // 방장이 맵을 바꿨을 때. 방 정보에 기록하고 방 설정 화면의 맵 이름과 초상화를 바꾼다.
+    private void ChangeRoomMap(RoomInfo room, int step)
+    {
+        int index = Mathf.Max(0, Array.IndexOf(Maps, room.Map));
+        room.Map = Maps[(index + step + Maps.Length) % Maps.Length];
+        roomSetup.SetMap(room.Map, MapSpriteOf(room.Map));
+    }
+
+    private void ApplyRoomSetupSlots(RoomInfo room)
+    {
+        for (int i = 0; i < 4; i++)
+        {
+            if (i >= room.Players.Count) { roomSetup.SetSlot(i, new RoomSetupView.Slot { IsEmpty = true }); continue; }
+            var p = room.Players[i];
+            roomSetup.SetSlot(i, new RoomSetupView.Slot
+            {
+                IsEmpty = false,
+                Name = p.Name,
+                ColorIndex = p.ColorIndex,
+                IsHost = p.IsHost,
+                IsReady = p.IsReady,
+                Team = (RoomSetupView.Team)p.Team,
+            });
+        }
+        roomSetup.RecountTeams();
+    }
+
+    // 방장이 모드를 바꿨을 때. 팀전으로 바꾸면 기본 팀은 자리 순서대로 레드, 블루, 레드, 블루다. 개인전이면 팀이 없다.
+    private void OnRoomModeChanged(bool isTeam)
+    {
+        var room = CurrentRoom;
+        if (room == null) return;
+        room.IsTeam = isTeam;
+        for (int i = 0; i < room.Players.Count; i++) room.Players[i].Team = isTeam ? 1 + (i % 2) : 0;
+        ApplyRoomSetupSlots(room);
+    }
+
+    // 방장이 최대 인원을 바꿨을 때. 지금 들어와 있는 인원보다 적게는 못 줄인다(창이 막아 준다).
+    private void OnRoomMaxPlayersChanged(int max)
+    {
+        if (CurrentRoom != null) CurrentRoom.MaxPlayers = max;
+    }
+
+    // 방장이 아닌 내가 준비하기/준비 취소를 눌렀을 때
+    private void OnLocalReadyToggled(bool ready)
+    {
+        var room = CurrentRoom;
+        if (room == null) return;
+        room.Players[room.LocalIndex].IsReady = ready;
+        ApplyRoomSetupSlots(room);
+
+        // 목업: 내가 방장이 아니면, 모두 준비된 뒤 방장이 잠시 후 시작한다
+        if (mockHostStart != null) { StopCoroutine(mockHostStart); mockHostStart = null; }
+        if (ready && !room.IsHost && CanStart(room)) mockHostStart = StartCoroutine(MockHostStartRoutine());
+    }
+
+    // 시작 조건: 2명 이상, 방장 외 모두 준비, 팀전이면 두 팀 인원이 같다 (RoomSetupView의 시작 버튼 조건과 같다)
+    private static bool CanStart(RoomInfo room)
+    {
+        if (room.Players.Count < 2) return false;
+        int red = 0, blue = 0;
+        foreach (var p in room.Players)
+        {
+            if (!p.IsHost && !p.IsReady) return false;
+            if (p.Team == 1) red++; else if (p.Team == 2) blue++;
+        }
+        return !room.IsTeam || red == blue;
+    }
+
+    private IEnumerator MockHostStartRoutine()
+    {
+        yield return new WaitForSecondsRealtime(2f);
+        mockHostStart = null;
+        ShowToast("방장이 게임을 시작해요");
+        StartGameFromRoom();
+    }
+
+    /// <summary>방 설정 화면의 "게임 시작". 게임 씬으로 넘어간다. 게임 씬의 GameManager가 방 정보(CurrentRoom)를 읽어 게임을 시작한다.</summary>
+    private void StartGameFromRoom()
+    {
+        if (entering || CurrentRoom == null) return;
+        StartCoroutine(StartGameRoutine());
+    }
+
+    private IEnumerator StartGameRoutine()
+    {
+        entering = true;
+        ShowLoading(true);
+        yield return new WaitForSecondsRealtime(serverDelay);
+
+        Debug.Log($"[Lobby] 게임 씬으로 이동: {gameScenePath} (방 {CurrentRoom.Code})");
         if (!TryLoadScene(gameScenePath))
         {
             Debug.LogError($"[Lobby] 게임 씬을 불러올 수 없습니다: {gameScenePath}");
-            CurrentRoom = null;
             ShowLoading(false);
             entering = false;
             ShowToast("게임 화면을 불러오지 못했어요");
         }
+    }
+
+    // X 버튼: 방에서 나갈지 묻고, 확인하면 방을 떠나 방 목록으로 돌아간다
+    private void OnLeaveRequested()
+    {
+        if (entering) return;
+        if (exitConfirm != null) exitConfirm.Show(LeaveRoom, "방에서 나갈까요?");
+        else LeaveRoom();
+    }
+
+    private void LeaveRoom()
+    {
+        if (mockHostStart != null) { StopCoroutine(mockHostStart); mockHostStart = null; }
+        CurrentRoom = null;
+        roomSetup.Close();
+        SyncAll();
     }
 
     private void QuickStart()
@@ -760,7 +947,7 @@ public class LobbyManager_temp : MonoBehaviour
         CreateRoom($"{me.Name}의 방", Maps[0], false, 4, null);
     }
 
-    /// <summary>방을 만들고 방장으로 바로 게임 씬에 들어간다. password가 비어 있으면 비밀번호 없는 방.</summary>
+    /// <summary>방을 만들고 방장으로 방 설정 화면에 들어간다. password가 비어 있으면 비밀번호 없는 방.</summary>
     private void CreateRoom(string roomName, string map, bool team, int max, string password)
     {
         if (entering || connection != ConnectionState.Connected) return;
@@ -1028,7 +1215,7 @@ public class LobbyManager_temp : MonoBehaviour
         nameInput.text = $"{me.Name}의 방";
         passwordInput.text = "";
         mapIndex = 0;
-        mapNameText.text = Maps[mapIndex];
+        ShowMap();
         modeToggles[0].SetIsOnWithoutNotify(true);
         modeToggles[1].SetIsOnWithoutNotify(false);
         for (int i = 0; i < maxToggles.Length; i++) maxToggles[i].SetIsOnWithoutNotify(i == maxToggles.Length - 1);
@@ -1038,7 +1225,21 @@ public class LobbyManager_temp : MonoBehaviour
     private void ChangeMap(int step)
     {
         mapIndex = (mapIndex + step + Maps.Length) % Maps.Length;
+        ShowMap();
+    }
+
+    // 고른 맵의 이름과 초상화를 보여 준다
+    private void ShowMap()
+    {
         mapNameText.text = Maps[mapIndex];
+        if (mapPreviewImage != null) mapPreviewImage.sprite = MapSpriteOf(Maps[mapIndex]);
+    }
+
+    /// <summary>맵 이름에 맞는 초상화. 없으면 null.</summary>
+    private Sprite MapSpriteOf(string mapName)
+    {
+        int index = Array.IndexOf(Maps, mapName);
+        return mapSprites != null && index >= 0 && index < mapSprites.Length ? mapSprites[index] : null;
     }
 
     private void ConfirmCreate()

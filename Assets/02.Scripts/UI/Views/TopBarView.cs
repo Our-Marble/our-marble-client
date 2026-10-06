@@ -10,8 +10,6 @@ public class TopBarView : UIView
     [SerializeField] private TMP_Text roomCodeText;
     [SerializeField] private TMP_Text playerCountText;
     [SerializeField] private TMP_Text turnText;
-    [SerializeField] private Button roomSetupButton;
-    [SerializeField] private Image roomSetupIcon;
     [SerializeField] private Button settingsButton;
     [SerializeField] private Button exitButton;
     [SerializeField] private GameObject passwordChip;
@@ -27,8 +25,6 @@ public class TopBarView : UIView
         passwordText = Find<TMP_Text>("TopBar/RoomInfo/PasswordChip/PasswordText");
         turnInfo = FindObject("TopBar/TurnInfo");
         turnText = Find<TMP_Text>("TopBar/TurnInfo/TurnText");
-        roomSetupButton = Find<Button>("TopBar/Buttons/RoomSetupButton");
-        roomSetupIcon = Find<Image>("TopBar/Buttons/RoomSetupButton/Icon");
         settingsButton = Find<Button>("TopBar/Buttons/SettingsButton");
         exitButton = Find<Button>("TopBar/Buttons/ExitButton");
     }
@@ -66,19 +62,4 @@ public class TopBarView : UIView
         SetOnClick(settingsButton, onSettings);
         SetOnClick(exitButton, onExit);
     }
-
-    /// <summary>방 설정(집 모양) 버튼을 누를 수 있는지. 게임이 시작되면 끄고, 아이콘도 흐리게 한다.</summary>
-    public void SetRoomSetupInteractable(bool interactable)
-    {
-        if (roomSetupButton != null) roomSetupButton.interactable = interactable;
-        if (roomSetupIcon != null)
-        {
-            var color = roomSetupIcon.color;
-            color.a = interactable ? 1f : 0.35f;
-            roomSetupIcon.color = color;
-        }
-    }
-
-    /// <summary>방 설정 아이콘 버튼. UIManager가 방 설정 팝업 열기/닫기로 연결한다.</summary>
-    public void SetRoomSetupCallback(Action onRoomSetup) => SetOnClick(roomSetupButton, onRoomSetup);
 }

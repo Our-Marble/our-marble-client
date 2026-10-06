@@ -75,7 +75,6 @@ public static class GameUISetup
             ("currentTurn", Attach<CurrentTurnView>(FindRoot("Canvas_CurrentTurn"))),
             ("diceRoll", Attach<DiceRollView>(diceCanvas)),
             ("diceResult", Attach<DiceResultView>(FindRoot("Canvas_DiceResult"))),
-            ("roomSetup", Attach<RoomSetupView>(FindRoot("Canvas_RoomSetup"))),
             ("purchase", Attach<PurchasePopupView>(FindRoot("Canvas_PurchasePopup"))),
             ("takeover", Attach<TakeoverPopupView>(FindRoot("Canvas_TakeoverPopup"))),
             ("sell", Attach<SellPopupView>(FindRoot("Canvas_SellPopup"))),
