@@ -34,11 +34,13 @@ public class GameManager : Singleton<GameManager>
     [Header("Bot (Test)")]
     [SerializeField] private bool autoPlayAllPlayers = false;   // 테스트용: 켜면 사람도 자동 진행
     [SerializeField] private float botActionDelay = 3f;         // 봇이 행동하기 전 대기 시간(초)
+    private Dictionary<long, IBotStrategy> botStrategies; // 플레이어별 봇 전략. 보드·가격 정보가 필요해서 Start에서 생성합니다.
     [System.Serializable]
     private class PlayerSetup
     {
         public long playerId;   // 플레이어 고유 번호 (겹치면 안 됨)
         public bool isBot;      // 봇 여부
+        public BotPersonality personality = BotPersonality.Balanced; // 봇 성향 (봇일 때만 사용)
     }
 
     [Header("Players")] [SerializeField] private List<PlayerSetup> playerSetups = new List<PlayerSetup>();
@@ -86,7 +88,19 @@ public class GameManager : Singleton<GameManager>
         {
             gameState.PropertyStates.Add(new PropertyState(propertyData.Id));
         }
-        
+        // 봇 전략 생성 (보드 배치와 가격 계산이 필요해서 매니저 초기화 이후에 생성)
+        botStrategies = new Dictionary<long, IBotStrategy>();
+        foreach (PlayerSetup setup in playerSetups)
+        {
+            botStrategies[setup.playerId] = new BasicBotStrategy(
+                BoardManager.Instance.BoardData.Tiles,
+                PropertyManager.Instance.GetToll,
+                PropertyManager.Instance.GetData,
+                BotSettings.For(setup.personality),
+                maxRound,
+                Log);
+        }
+            
         // MVP 단계에서 플레이어의 playerId는 123, 봇의 playerId는 456 입니다.
         PlayerManager.Instance.Initialize(playerOrder); // 다른 Monobehaviour 클래스를 참조하여 초기화할때는 Awake말고 Start에서 하는게 안전
         
@@ -143,6 +157,11 @@ public class GameManager : Singleton<GameManager>
 
         PlayerSetup setup = playerSetups.Find(s => s.playerId == playerId);
         return setup != null && setup.isBot;
+    }
+
+    private IBotStrategy GetBotStrategy(long playerId)
+    {
+        return botStrategies[playerId];
     }
 
     private void RunAfterDelay(Action action)
@@ -298,10 +317,16 @@ public class GameManager : Singleton<GameManager>
 
     public void HandleChooseDestinationPrompt()
     {
-        // 봇의 경우, 복지기금수령(16)을 목적지로 HandleDestinationChosen를 호출합니다. (빈 땅을 우선적으로 선택하는 등의 지능은 추후 개발)
-        if ((IsBot(gameState.CurrentPlayerId)))
+        // 봇의 경우, botStrategy가 고른 목적지로 이동합니다.
+        long playerId = gameState.CurrentPlayerId;
+        if (IsBot(playerId))
         {
-            ChooseDestination(16);
+            RunAfterDelay(() =>
+            {
+                int destination = GetBotStrategy(playerId).ChooseTravelDestination(gameState, playerId);
+                Log($"[봇] {P(playerId)}: 세계여행 목적지 {TileName(destination)} 선택");
+                ChooseDestination(destination);
+            });
             return;
         }
         
@@ -876,14 +901,23 @@ public class GameManager : Singleton<GameManager>
     // ────────────────────────── 토지 구매 ──────────────────────────
     public void HandlePurchasePropertyPrompt(long playerId, int propertyId, bool isPurchasable)
     {
-        // 봇의 경우, 돈이 있다면 무조건 구매합니다.
+        // 봇의 경우, 살 수 있으면 botStrategy의 판단에 따라 구매하거나 거절합니다.
         if (IsBot(playerId))
         {
-            if (isPurchasable)
+            if (!isPurchasable)
             {
-                RunAfterDelay(() => PurchaseProperty(playerId, propertyId));
+                DeclinePropertyPurchase(playerId, propertyId);
+                return;
             }
 
+            RunAfterDelay(() =>
+            {
+                long price = PropertyManager.Instance.GetLandPrice(propertyId);
+                if (GetBotStrategy(playerId).ShouldPurchase(gameState, playerId, propertyId, price))
+                    PurchaseProperty(playerId, propertyId);
+                else
+                    DeclinePropertyPurchase(playerId, propertyId);
+            });
             return;
         }
         // 플레이어의 경우, 땅을 구매할 것인지 선택 가능한 UI를 표시합니다.
@@ -936,19 +970,25 @@ public class GameManager : Singleton<GameManager>
     // ────────────────────────── 건물 건설 ──────────────────────────
     public void HandleBuildPrompt(long playerId, int propertyId, bool isBuildable)
     {
-        // 봇의 경우, 돈이 있다면 무조건 건설합니다.
+        // 봇의 경우, 지을 수 있으면 botStrategy의 판단에 따라 건설하거나 거절합니다.
         if (IsBot(playerId))
         {
-            if (isBuildable)
+            if (!isBuildable)
             {
-                Build(playerId, propertyId);
+                DeclineBuild(playerId, propertyId);
                 return;
             }
-            else
+
+            RunAfterDelay(() =>
             {
-                ProcessEndTurn();
-                return;
-            }
+                BuildingLevel nextLevel = GetPropertyState(propertyId).BuildingLevel + 1;
+                long cost = PropertyManager.Instance.GetBuildCost(propertyId, nextLevel);
+                if (GetBotStrategy(playerId).ShouldBuild(gameState, playerId, propertyId, cost))
+                    Build(playerId, propertyId);
+                else
+                    DeclineBuild(playerId, propertyId);
+            });
+            return;
         }
         // 플레이어의 경우, 건설할 것인지 선택 가능한 UI를 표시합니다.
         if (UIManager.Instance != null)
@@ -980,6 +1020,7 @@ public class GameManager : Singleton<GameManager>
     /// </summary>
     public void DeclineBuild(long playerId, int propertyId) // 거절 함수를 분리한 이유는, chatGPT한테 물어본 결과 bool매개변수를 사용하여 수락/거절을 표현하기보다 함수 자체를 분리하는것을 추천했기 때문입니다.
     {
+        Log($"[건설 안 함] {P(playerId)}: {CityName(propertyId)}");
         ProcessEndTurn();
     }
 
@@ -1004,14 +1045,16 @@ public class GameManager : Singleton<GameManager>
     // ────────────────────────── 자산 인수 ──────────────────────────
     public void HandleAcquirePropertyPrompt(long playerId, int propertyId, long amount)
     {
-        // 봇의 경우, 돈이 있다면 무조건 인수합니다.
+        // 봇의 경우, botStrategy의 판단에 따라 인수하거나 거절합니다.
         if (IsBot(playerId))
         {
-            if (GetPlayerState(playerId).Money >= amount)
+            RunAfterDelay(() =>
             {
-                RunAfterDelay(() => AcquireProperty(playerId, propertyId));
-            }
-
+                if (GetBotStrategy(playerId).ShouldAcquire(gameState, playerId, propertyId, amount))
+                    AcquireProperty(playerId, propertyId);
+                else
+                    DeclineAcquireProperty(playerId, propertyId);
+            });
             return;
         }
         
@@ -1068,11 +1111,15 @@ public class GameManager : Singleton<GameManager>
     // ────────────────────────── 자산 매각 ──────────────────────────
     public void HandleSellPropertiesPrompt(long payerId, long receiverId, long requiredAmount)
     {
-        // 봇의 경우, 매각가 합이 부족분 이상이 되도록 자산을 골라 팝니다.
+        // 봇의 경우, botStrategy가 고른 땅을 팝니다.
         if (IsBot(payerId))
         {
-            List<int> chosen = AutoChooseSellProperties(payerId, requiredAmount);
-            RunAfterDelay(() => SellProperties(payerId, receiverId, chosen, requiredAmount));
+            RunAfterDelay(() =>
+            {
+                List<int> chosen = GetBotStrategy(payerId).ChooseSellProperties(
+                    gameState, payerId, requiredAmount, PropertyManager.Instance.GetSellValue);
+                SellProperties(payerId, receiverId, chosen, requiredAmount);
+            });
             return;
         }
         
@@ -1085,44 +1132,23 @@ public class GameManager : Singleton<GameManager>
         Debug.Log("매각 결정 창 뜨는 기능 미구현...");
     }
 
-    /// <summary>
-    /// 부족한 금액을 채우는 자산 조합을 고릅니다. (테스트용 간단 방식)
-    /// 매각가가 큰 것부터 담고, 불필요하게 담긴 작은 자산은 다시 뺍니다.
+        /// <summary>
+    /// 유저 매각 창의 "자동 선택" 버튼에서 호출합니다.
+    /// 부족분을 채울 땅 목록을 골라 돌려주기만 하고, 실제 매각은 유저가 확인하면 SellProperties에서 합니다.
+    /// 봇은 이 함수를 쓰지 않고 BotStrategy.ChooseSellProperties로 고릅니다.
     /// </summary>
-    private List<int> AutoChooseSellProperties(long payerId, long requiredAmount)
+    public List<int> AutoChooseSellProperties(long payerId, long requiredAmount, SellSelectionMode mode)
     {
         PlayerState payer = GetPlayerState(payerId);
+        if (payer == null) return new List<int>();
+
+        // 수익 지키기는 봇 매각과 같은 판단(상대 위치·도착 확률 계산)이라 봇 전략을 그대로 재사용합니다.
+        if (mode == SellSelectionMode.ProtectIncome)
+            return GetBotStrategy(payerId).ChooseSellProperties(
+                gameState, payerId, requiredAmount, PropertyManager.Instance.GetSellValue);
+
         long shortage = requiredAmount - payer.Money;
-
-        List<PropertyState> owned = gameState.PropertyStates.FindAll(p => p.OwnerId == payerId);
-        owned.Sort((a, b) => PropertyManager.Instance.GetSellValue(b).CompareTo(PropertyManager.Instance.GetSellValue(a)));
-
-        List<PropertyState> selected = new List<PropertyState>();
-        long sum = 0;
-        foreach (PropertyState p in owned)
-        {
-            if (sum >= shortage) break;
-            selected.Add(p);
-            sum += PropertyManager.Instance.GetSellValue(p);
-        }
-
-        // 작은 것부터, 빼도 부족분을 채운다면 제거
-        selected.Sort((a, b) => PropertyManager.Instance.GetSellValue(a).CompareTo(PropertyManager.Instance.GetSellValue(b)));
-        for (int i = 0; i < selected.Count;)
-        {
-            long value = PropertyManager.Instance.GetSellValue(selected[i]);
-            if (sum - value >= shortage)
-            {
-                sum -= value;
-                selected.RemoveAt(i);
-            }
-            else
-            {
-                i++;
-            }
-        }
-
-        return selected.ConvertAll(p => p.PropertyId);
+        return PropertyManager.Instance.AutoChooseSellProperties(payerId, shortage, gameState.PropertyStates, mode);
     }
     
     /// <summary>
