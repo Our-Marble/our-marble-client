@@ -10936,8 +10936,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::GameManager
   salaryAmount: 20000
   taxAmount: 100000
-  startMoney: 1500000
-  maxRound: 30
+  startMoney: 1000000
+  maxRound: 10
   forceDice1: -1
   forceDice2: -1
   autoPlayAllPlayers: 0
@@ -10946,6 +10946,8 @@ MonoBehaviour:
   - playerId: 123
     isBot: 0
   - playerId: 456
+    isBot: 1
+  - playerId: 789
     isBot: 1
 --- !u!4 &337382219
 Transform:
@@ -28908,6 +28910,7 @@ MonoBehaviour:
   defaultColor: {r: 0.44001427, g: 0.9056604, b: 0.7870102, a: 1}
   defaultTextColor: {r: 0.21698111, g: 0.0775333, b: 0, a: 1}
   cornerColor: {r: 1, g: 0.87574923, b: 0.2783019, a: 1}
+  selectedIndexes: 
 --- !u!4 &839385235
 Transform:
   m_ObjectHideFlags: 0
@@ -30223,6 +30226,50 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 878376197}
   m_CullTransparentMesh: 1
+--- !u!1 &884571782
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 884571784}
+  - component: {fileID: 884571783}
+  m_Layer: 0
+  m_Name: GameNetwork
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &884571783
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 884571782}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 52726a4242d99144e989194c6ae79730, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GameNetwork
+--- !u!4 &884571784
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 884571782}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 2.39903, y: 3.6488, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &885034613
 GameObject:
   m_ObjectHideFlags: 0
@@ -69519,7 +69566,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BoardManager
   boardController: {fileID: 839385234}
   boardData: {fileID: 11400000, guid: d05d5df88b4bc65488273ca45c54509a, type: 2}
-  selectedIndexes: 
 --- !u!4 &2127056688
 Transform:
   m_ObjectHideFlags: 0
@@ -69969,3 +70015,4 @@ SceneRoots:
   - {fileID: 674266577}
   - {fileID: 1470332513}
   - {fileID: 920067414}
+  - {fileID: 884571784}
