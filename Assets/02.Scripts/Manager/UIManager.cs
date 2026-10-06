@@ -111,8 +111,8 @@ public class UIManager : MonoBehaviour
     // 나가기 버튼: 로비로 돌아갈지 묻고, 확인하면 돌아간다
     private void RequestExit()
     {
-        if (exitConfirm != null) exitConfirm.Show(LobbyManager_temp.ReturnToLobby);
-        else LobbyManager_temp.ReturnToLobby();
+        if (exitConfirm != null) exitConfirm.Show(() => SceneFlow.ToLobby());
+        else SceneFlow.ToLobby();
     }
 
     // 돈이 바뀌면 EconomyManager가 알려준다. 돈 표시와 연출은 여기서 갱신한다.
@@ -931,7 +931,7 @@ public class UIManager : MonoBehaviour
     {
         if (resultCountdown != null) { StopCoroutine(resultCountdown); resultCountdown = null; }
         if (gameResult != null) gameResult.SetCountdown(0);
-        if (LobbyManager_temp.CurrentRoom != null) LobbyManager_temp.ReturnToRoom();
+        if (LobbyManager_temp.CurrentRoom != null) SceneFlow.ReturnToRoom();
     }
 
     #endregion

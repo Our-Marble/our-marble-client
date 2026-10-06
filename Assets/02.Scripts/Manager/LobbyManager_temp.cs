@@ -72,12 +72,6 @@ public class LobbyManager_temp : MonoBehaviour
     [Header("연결")]
     [SerializeField] private Transform uiRoot;
 
-    [Tooltip("참가·방 만들기를 하면 이 씬으로 넘어간다.")]
-    [SerializeField] private string gameScenePath = "Assets/01.Scenes/BoardLayout 2.unity";
-
-    [Tooltip("나가기를 누르면 이동할 로그인 씬. 아직 없으면 안내 메시지(토스트)만 띄운다.")]
-    [SerializeField] private string loginScenePath = LoginScenePath;
-
     [Tooltip("선택한 방 행의 두꺼운 테두리 (UI_RoundedStroke_Thick).")]
     [SerializeField] private Sprite selectedStrokeSprite;
 
@@ -210,7 +204,7 @@ public class LobbyManager_temp : MonoBehaviour
         if (uiRoot == null) { Debug.LogError("[Lobby] 'UI' 루트를 찾을 수 없습니다.", this); enabled = false; return; }
 
         // 로비에 있다는 건 보통 어느 방에도 들어가 있지 않다는 뜻이다. 게임을 마치고 같은 방으로 돌아온 경우만 방을 유지한다.
-        if (!reopenRoomSetup) CurrentRoom = null;
+        if (!SceneFlow.IsReturningToRoom) CurrentRoom = null;
 
         Bind();
         WireEvents();
@@ -227,9 +221,13 @@ public class LobbyManager_temp : MonoBehaviour
         if (simulateLiveUpdates) StartCoroutine(SimulateRoutine());
 
         // 게임이 끝나 같은 방으로 돌아왔다면 방 설정을 다시 띄운다
-        bool back = reopenRoomSetup;
-        reopenRoomSetup = false;
-        if (back && CurrentRoom != null) OpenRoomSetup(CurrentRoom);
+        if (SceneFlow.ConsumeReopenRoomSetup() && CurrentRoom != null)
+        {
+            // 내 준비는 풀린다(방장은 해당 없음). 다른 사람의 준비는 서버가 알려줄 일이라 그대로 둔다.
+            var mine = CurrentRoom.Players[CurrentRoom.LocalIndex];
+            mine.IsReady = mine.IsHost;
+            OpenRoomSetup(CurrentRoom);
+        }
     }
 
     private static T Get<T>(Transform root, string path) where T : Component
@@ -484,8 +482,7 @@ public class LobbyManager_temp : MonoBehaviour
     private void LoadLoginScene()
     {
         if (entering) return;
-        if (TryLoadScene(loginScenePath)) return;
-        Debug.LogWarning($"[Lobby] 로그인 씬을 찾을 수 없습니다: {loginScenePath}");
+        if (SceneFlow.ToLogin()) return;
         ShowToast("로그인 화면이 아직 없어요");
     }
 
@@ -553,63 +550,12 @@ public class LobbyManager_temp : MonoBehaviour
         public int Team; // 0 없음, 1 레드, 2 블루
     }
 
-    public const string LobbyScenePath = "Assets/01.Scenes/Temp/UI_LobbyScene.unity";
-    public const string LoginScenePath = "Assets/01.Scenes/Temp/UI_LoginScene.unity";
-
     /// <summary>입장한 방. 방 설정(로비 씬)과 게임 씬이 함께 읽는다. 로비를 거치지 않고 게임 씬만 실행하면 null.</summary>
     public static RoomInfo CurrentRoom { get; private set; }
 
     // 에디터에서 도메인 리로드 없이 플레이를 다시 시작해도 이전 플레이의 방 정보가 남지 않게 한다
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    private static void ResetStatics() { CurrentRoom = null; reopenRoomSetup = false; }
-
-    // 게임을 마치고 같은 방으로 돌아오는 중이면 true. 로비 씬이 읽고 지운다.
-    private static bool reopenRoomSetup;
-
-    /// <summary>
-    /// 게임이 끝나 같은 방을 유지한 채 로비 씬으로 돌아간다. 로비는 방 설정을 다시 연다.
-    /// 내 준비는 풀리고(방장은 해당 없음), 다른 사람의 준비는 서버가 알려줄 일이라 그대로 둔다.
-    /// </summary>
-    public static void ReturnToRoom()
-    {
-        if (CurrentRoom == null) { ReturnToLobby(); return; }
-        var mine = CurrentRoom.Players[CurrentRoom.LocalIndex];
-        mine.IsReady = mine.IsHost;
-        reopenRoomSetup = true;
-        if (!TryLoadScene(LobbyScenePath))
-        {
-            reopenRoomSetup = false;
-            Debug.LogError($"[Lobby] 로비 씬을 불러올 수 없습니다: {LobbyScenePath}");
-        }
-    }
-
-    /// <summary>게임에서 나가 로비로 돌아간다. 방 정보는 비운다.</summary>
-    public static void ReturnToLobby()
-    {
-        CurrentRoom = null;
-        if (!TryLoadScene(LobbyScenePath))
-            Debug.LogError($"[Lobby] 로비 씬을 불러올 수 없습니다: {LobbyScenePath}");
-    }
-
-    /// <summary>씬을 경로로 불러온다. 파일이 없거나(에디터) 빌드에 없으면(빌드) false.</summary>
-    public static bool TryLoadScene(string path)
-    {
-        bool inBuild = UnityEngine.SceneManagement.SceneUtility.GetBuildIndexByScenePath(path) >= 0;
-#if UNITY_EDITOR
-        if (!inBuild)
-        {
-            // 빌드 설정에 없는 씬도 에디터 플레이 중에는 경로로 불러온다
-            if (!System.IO.File.Exists(path)) return false;
-            UnityEditor.SceneManagement.EditorSceneManager.LoadSceneInPlayMode(
-                path, new UnityEngine.SceneManagement.LoadSceneParameters(UnityEngine.SceneManagement.LoadSceneMode.Single));
-            return true;
-        }
-#else
-        if (!inBuild) return false;
-#endif
-        UnityEngine.SceneManagement.SceneManager.LoadScene(path);
-        return true;
-    }
+    private static void ResetStatics() => CurrentRoom = null;
 
     // ───────────── 가짜 방 데이터 ─────────────
 
@@ -908,10 +854,9 @@ public class LobbyManager_temp : MonoBehaviour
         ShowLoading(true);
         yield return new WaitForSecondsRealtime(serverDelay);
 
-        Debug.Log($"[Lobby] 게임 씬으로 이동: {gameScenePath} (방 {CurrentRoom.Code})");
-        if (!TryLoadScene(gameScenePath))
+        Debug.Log($"[Lobby] 게임 씬으로 이동 (방 {CurrentRoom.Code})");
+        if (!SceneFlow.ToGame())
         {
-            Debug.LogError($"[Lobby] 게임 씬을 불러올 수 없습니다: {gameScenePath}");
             ShowLoading(false);
             entering = false;
             ShowToast("게임 화면을 불러오지 못했어요");

@@ -27,9 +27,6 @@ public class LoginManager_temp : MonoBehaviour
     [Header("연결")]
     [SerializeField] private Transform uiRoot;
 
-    [Tooltip("로그인에 성공하면 이동할 씬.")]
-    [SerializeField] private string lobbyScenePath = LobbyManager_temp.LobbyScenePath;
-
     [Header("테스트 옵션")]
     [Tooltip("서버가 응답하기까지 걸리는 시간 흉내(초).")]
     [SerializeField] private float serverDelay = 0.6f;
@@ -167,9 +164,8 @@ public class LoginManager_temp : MonoBehaviour
         fails = 0;
         SaveId(id);
         Debug.Log($"[Login] 로그인 성공: {id}");
-        if (!LobbyManager_temp.TryLoadScene(lobbyScenePath))
+        if (!SceneFlow.ToLobby())
         {
-            Debug.LogError($"[Login] 로비 씬을 불러올 수 없습니다: {lobbyScenePath}");
             ShowLoading(false);
             busy = false;
             ShowToast("로비 화면을 불러오지 못했어요");
