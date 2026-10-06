@@ -10,11 +10,6 @@ public class GameManager : Singleton<GameManager>
 
     private System.Random random; // 선턴 정하기나 랜덤 주사위 값을 계산할 때 사용합니다.
 
-    private List<long> playerOrder;
-
-    private bool isDouble; // 추가 턴 진행 여부를 결정하는데 사용됩니다.
-    private int consecutiveDoubleCount; // 추후 3연속 더블시 무인도행을 판정할 때 사용합니다.
-
     private const int IslandTurns = 3; // 무인도 영업정지 턴 수
     
     [SerializeField] private long salaryAmount = 100000;   // TODO: 월급 금액 확정 필요
@@ -23,7 +18,6 @@ public class GameManager : Singleton<GameManager>
     [SerializeField, Min(1)] private int maxRound = 30;     // 최대 라운드 (모든 플레이어가 한 번씩 하면 1라운드). 넘으면 게임 종료
     
     private bool isMoving;
-    private bool isGameOver; // 게임이 끝났으면 더 이상 턴을 진행하지 않습니다.
     
     // ────────────────────────── 기능 테스트용 주사위 값 지정 필드 ──────────────────────────
     [Header("기능 테스트용 주사위 값 강제")]
@@ -35,6 +29,7 @@ public class GameManager : Singleton<GameManager>
     [SerializeField] private bool autoPlayAllPlayers = false;   // 테스트용: 켜면 사람도 자동 진행
     [SerializeField] private float botActionDelay = 3f;         // 봇이 행동하기 전 대기 시간(초)
     private Dictionary<long, IBotStrategy> botStrategies; // 플레이어별 봇 전략. 보드·가격 정보가 필요해서 Start에서 생성합니다.
+    
     [System.Serializable]
     private class PlayerSetup
     {
@@ -56,20 +51,20 @@ public class GameManager : Singleton<GameManager>
     {
         // gameState 초기화. PropertyStates의 초기화는 Start에서 진행.
         gameState = new  GameState();
+        
         gameState.TurnNumber = 0;
         gameState.RoundNumber = 0;
         gameState.CurrentPlayerId = 0;
         gameState.WelfareFund = 0;
         
-        gameState.PlayerStates = new List<PlayerState>();
         foreach (PlayerSetup setup in playerSetups)
             gameState.PlayerStates.Add(new PlayerState(setup.playerId));
 
         // 그 외 필드 변수 초기화
         random = new System.Random();
-        playerOrder = new List<long>();
-        isDouble = false;
-        consecutiveDoubleCount = 0;
+        gameState.PlayerOrder = new List<long>();
+        gameState.IsDouble = false;
+        gameState.ConsecutiveDoubleCount = 0;
         
         // player의 색상 지정. gameState.playerStates 의 순서대로 배정
         playerColorMap = new Dictionary<long, Color>();
@@ -83,7 +78,6 @@ public class GameManager : Singleton<GameManager>
     void Start()
     {
         // gameState.PropertyStates의 초기화는 PropertyManager의 초기화가 선행되어야 하기 때문에 Start에서 진행
-        gameState.PropertyStates = new List<PropertyState>();
         foreach (PropertyData propertyData in  PropertyManager.Instance.GetAllDataByMapId(1))
         {
             gameState.PropertyStates.Add(new PropertyState(propertyData.Id));
@@ -102,7 +96,7 @@ public class GameManager : Singleton<GameManager>
         }
             
         // MVP 단계에서 플레이어의 playerId는 123, 봇의 playerId는 456 입니다.
-        PlayerManager.Instance.Initialize(playerOrder); // 다른 Monobehaviour 클래스를 참조하여 초기화할때는 Awake말고 Start에서 하는게 안전
+        PlayerManager.Instance.Initialize(gameState.PlayerOrder); // 다른 Monobehaviour 클래스를 참조하여 초기화할때는 Awake말고 Start에서 하는게 안전
         
         StartGame();
     }
@@ -123,7 +117,7 @@ public class GameManager : Singleton<GameManager>
     // 로그용 이름: "1P[123]", "2P(봇)[456]"처럼 순서와 봇 여부를 보여줍니다.
     private string P(long playerId)
     {
-        int order = playerOrder.IndexOf(playerId) + 1;
+        int order = gameState.PlayerOrder.IndexOf(playerId) + 1;
         PlayerSetup setup = playerSetups.Find(s => s.playerId == playerId);
         bool isBotSetup = setup != null && setup.isBot;
         return $"{order}P{(isBotSetup ? "(봇)" : "")}[{playerId}]";
@@ -190,8 +184,8 @@ public class GameManager : Singleton<GameManager>
     {
         if (gameState.RoundNumber == 0) return 1; // 게임의 첫 차례
 
-        int prevIndex = playerOrder.IndexOf(gameState.CurrentPlayerId);
-        int nextIndex = playerOrder.IndexOf(nextPlayerId);
+        int prevIndex = gameState.PlayerOrder.IndexOf(gameState.CurrentPlayerId);
+        int nextIndex = gameState.PlayerOrder.IndexOf(nextPlayerId);
         return nextIndex <= prevIndex ? gameState.RoundNumber + 1 : gameState.RoundNumber;
     }
 
@@ -227,8 +221,8 @@ public class GameManager : Singleton<GameManager>
     /// </summary>
     private void EndGame(string reason)
     {
-        if (isGameOver) return;
-        isGameOver = true;
+        if (gameState.IsGameOver) return;
+        gameState.IsGameOver = true;
 
         Log($"[게임 종료] {reason}");
         AssignSurvivorRanks(); // 생존자 최종 등수 확정 (파산자는 이미 정해짐)
@@ -247,7 +241,7 @@ public class GameManager : Singleton<GameManager>
 
         // 결과를 playerOrder 에 저장. MVP에서는 플레이어가 무조건 선턴입니다.
         foreach (PlayerSetup setup in playerSetups)
-            playerOrder.Add(setup.playerId);
+            gameState.PlayerOrder.Add(setup.playerId);
         
         PlayerManager.Instance.Initialize(playerSetups.ConvertAll(s => s.playerId));
         
@@ -269,13 +263,13 @@ public class GameManager : Singleton<GameManager>
         }
 
         // 첫 번째 순서부터 턴 시작
-        HandleTurnChanged(playerOrder[0]);
+        HandleTurnChanged(gameState.PlayerOrder[0]);
     }
 
     public void HandleTurnChanged(long playerId)
     {
         // 게임 종료 판정: 새 턴을 시작하기 전에 확인합니다.
-        if (isGameOver) return;
+        if (gameState.IsGameOver) return;
         if (IsGameOver())
         {
             EndGame("남은 플레이어가 1명입니다.");
@@ -300,8 +294,8 @@ public class GameManager : Singleton<GameManager>
             UIManager.Instance.ShowTurn(playerId);
 
         // 필드 변수를 갱신합니다.
-        isDouble = false;
-        consecutiveDoubleCount = 0;
+        gameState.IsDouble = false;
+        gameState.ConsecutiveDoubleCount = 0;
         
         // 새 차례가 온 플레이어의 위치가 자유여행인 경우
         if(BoardManager.Instance.GetTileData(GetPlayerState(playerId).Position).Type == TileType.WORLD_TRAVEL)
@@ -417,19 +411,19 @@ public class GameManager : Singleton<GameManager>
         // 더블 처리
         if (dice1 == dice2)
         {
-            isDouble = true;
-            consecutiveDoubleCount++;
+            gameState.IsDouble = true;
+            gameState.ConsecutiveDoubleCount++;
         }
         else
         {
-            isDouble = false;
-            consecutiveDoubleCount = 0;
+            gameState.IsDouble = false;
+            gameState.ConsecutiveDoubleCount = 0;
         }
         
         // if (현재 위치가 무인도 && PlayerStates.IslandTurnsRemaining > 0 && !isDouble )  무인도 탈출 실패 판정.
         bool onIslandTile = BoardManager.Instance.GetTileData(player.Position).Type == TileType.ISLAND;
         bool isIslandTurnsRemaining = player.IslandTurnsRemaining > 0;
-        if (onIslandTile && isIslandTurnsRemaining && !isDouble)
+        if (onIslandTile && isIslandTurnsRemaining && !gameState.IsDouble)
         {
             // 남은 감금 턴수 차감
             player.IslandTurnsRemaining -= 1;
@@ -440,27 +434,27 @@ public class GameManager : Singleton<GameManager>
             return;
         }
 
-        if (onIslandTile && isDouble)
+        if (onIslandTile && gameState.IsDouble)
         {
             player.IslandTurnsRemaining = 0;
             Log($"[무인도 탈출] {P(playerId)}: 더블로 탈출했습니다!");
             SpecialTileManager.Instance.PlayIslandEscaped(playerId); // 탈출 연출
             
             // isDouble을 false로 갱신하여 추가턴 진행을 막습니다.
-            isDouble = false;
+            gameState.IsDouble = false;
         }
 
         if (isMoving) return;
         
         // 3연속 더블이면 이동하지 않고 무인도로 보낸다.
-        if (consecutiveDoubleCount >= 3)
+        if (gameState.ConsecutiveDoubleCount >= 3)
         {
             int islandPosition = FindIslandTileIndex();
             if (islandPosition >= 0)
             {
                 Log($"[3연속 더블] {P(playerId)}: 무인도로 이동합니다.");
-                isDouble = false;
-                consecutiveDoubleCount = 0;
+                gameState.IsDouble = false;
+                gameState.ConsecutiveDoubleCount = 0;
                 MovePlayerDirectly(playerId, islandPosition); // 순간이동 (월급 없음) → 도착 처리에서 영업정지 설정 + 턴 넘김
                 return;
             }
@@ -683,7 +677,7 @@ public class GameManager : Singleton<GameManager>
     private void ProcessEndTurn()
     {
         // isDouble인 경우 추가턴을 진행합니다.
-        if(isDouble)
+        if(gameState.IsDouble)
             HandleRollDicePrompt();
         else
         {
@@ -693,6 +687,7 @@ public class GameManager : Singleton<GameManager>
 
     private long GetNextPlayerId()
     {
+        List<long> playerOrder = gameState.PlayerOrder;
         int currentIndex = playerOrder.IndexOf(gameState.CurrentPlayerId);
 
         // 현재 플레이어 다음 순서부터 한 바퀴 돌면서, 파산하지 않은 플레이어를 찾습니다.

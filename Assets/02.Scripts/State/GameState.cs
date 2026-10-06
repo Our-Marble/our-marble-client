@@ -8,6 +8,16 @@ public class GameState
     public long CurrentPlayerId { get; set; }
     
     public long WelfareFund { get; set; }
+
+    public TurnPhase Phase { get; set; }
+    
+    public List<long> PlayerOrder { get; set; }
+    
+    public bool IsDouble { get; set; }
+    
+    public int ConsecutiveDoubleCount { get; set; }
+    
+    public bool IsGameOver { get; set; }
     
     public List<PlayerState> PlayerStates { get; set; }
     
@@ -24,4 +34,9 @@ public class GameState
         PlayerStates = new List<PlayerState>();
         PropertyStates = new List<PropertyState>();
     }
+}
+
+public enum TurnPhase
+{
+    
 }
