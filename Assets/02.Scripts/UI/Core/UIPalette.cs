@@ -32,6 +32,16 @@ public static class UIPalette
     public static readonly Color StarEmpty = new Color32(226, 229, 238, 255);
     public static readonly Color Gold = new Color32(255, 209, 102, 255);
 
+    // 로비·로그인·방 설정이 같이 쓰는 색
+    public static readonly Color Mint = new Color32(92, 201, 154, 255);          // 주요 버튼, 선택 강조
+    public static readonly Color Neutral = new Color32(238, 241, 247, 255);      // 보조 버튼, 입력칸, 비활성 배경
+    public static readonly Color ReadyBg = new Color32(207, 242, 224, 255);      // 준비 완료, 대기 중
+    public static readonly Color ReadyText = new Color32(63, 168, 119, 255);
+    public static readonly Color WarmBg = new Color32(255, 240, 214, 255);       // 팀전, 게임 중
+    public static readonly Color WarmText = new Color32(150, 100, 30, 255);
+    public static readonly Color RedBg = new Color32(255, 220, 225, 255);        // 가득 참, 나가기
+    public static readonly Color RedText = new Color32(214, 88, 110, 255);
+
     // 돈 증가 / 감소
     public static readonly Color GainBg = new Color32(227, 246, 236, 255);
     public static readonly Color GainStroke = new Color32(180, 228, 203, 255);

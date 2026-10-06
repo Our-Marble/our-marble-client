@@ -84,6 +84,8 @@ public static class GameUISetup
             ("destinationSelect", Attach<DestinationSelectView>(FindRoot("Canvas_DestinationSelect"))),
             ("tileInfo", Attach<TileInfoView>(FindRoot("Canvas_TileInfo"))),
             ("gameResult", Attach<GameResultView>(FindRoot("Canvas_GameResult"))),
+            ("exitConfirm", Attach<ExitConfirmView>(FindRoot("Canvas_ExitConfirm"))),
+            ("settings", Attach<SettingsView>(FindRoot("Canvas_Settings"))),
         };
 
         // UIManager (없으면 만든다)

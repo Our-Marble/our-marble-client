@@ -113,6 +113,27 @@ public class PlayerInfoView : UIView
         TotalRoll.Set(totalAsset, animate);
     }
 
+    /// <summary>
+    /// 게임 시작 전 모습으로 되돌린다: 차례 강조, 파산 표시, 돈 변화 표시를 끄고, 돈은 0으로, 등수 배지는 숨긴다.
+    /// 이름과 초상화는 SetProfile로 따로 채운다. 게임이 시작되면 SetGameStarted로 등수 배지를 다시 보인다.
+    /// </summary>
+    public void ResetForNewGame()
+    {
+        SetTurn(false, false);
+        SetBankrupt(false, false);
+        if (moneyChangeRoutine != null) { StopCoroutine(moneyChangeRoutine); moneyChangeRoutine = null; }
+        if (moneyChange != null) moneyChange.gameObject.SetActive(false);
+        currentRank = 0;
+        SetMoney(0, 0, false);
+        if (rankBadge != null) rankBadge.gameObject.SetActive(false);
+    }
+
+    /// <summary>게임이 시작되어 등수 배지를 보인다.</summary>
+    public void SetGameStarted()
+    {
+        if (rankBadge != null) rankBadge.gameObject.SetActive(true);
+    }
+
     // Awake 전에 불릴 수 있어 처음 쓸 때 만든다
     private RollingNumber cashRoll;
     private RollingNumber totalRoll;

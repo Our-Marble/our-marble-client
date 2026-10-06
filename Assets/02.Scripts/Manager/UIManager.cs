@@ -31,6 +31,8 @@ public class UIManager : MonoBehaviour
     [SerializeField] private DestinationSelectView destinationSelect;
     [SerializeField] private TileInfoView tileInfo;
     [SerializeField] private GameResultView gameResult;
+    [SerializeField] private ExitConfirmView exitConfirm;
+    [SerializeField] private SettingsView settings;
 
     [Header("데이터")]
     [Tooltip("황금열쇠 카드의 이름·설명·아이콘을 찾는 덱. CardManager가 쓰는 덱과 같은 에셋을 연결한다.")]
@@ -52,6 +54,8 @@ public class UIManager : MonoBehaviour
     public DestinationSelectView DestinationSelect => destinationSelect;
     public TileInfoView TileInfo => tileInfo;
     public GameResultView GameResult => gameResult;
+    public ExitConfirmView ExitConfirm => exitConfirm;
+    public SettingsView Settings => settings;
 
     // ───────────── 밖에서 연결하는 곳 ─────────────
 
@@ -66,6 +70,22 @@ public class UIManager : MonoBehaviour
 
     /// <summary>매각 창의 '파산 신청' 버튼 (payerId, receiverId).</summary>
     public event Action<long, long> BankruptRequested;
+
+    /// <summary>
+    /// 방 설정 창에서 방장이 "게임 시작"을 눌렀다. 인자는 방 정보(플레이어 목록, 팀, 모드, 최대 인원).
+    /// GameManager가 구독해서 방 정보로 게임을 시작하면 된다. (시작되어 InitPlayers가 불리면 방 설정 창은 알아서 닫힌다)
+    /// 구독자가 없으면 창만 닫는다.
+    /// </summary>
+    public event Action<LobbyManager_temp.RoomInfo> GameStartRequested;
+
+    /// <summary>
+    /// 결과를 보여 주는 시간(resultSeconds)이 끝났다. (확인 버튼을 눌러도 이 시간이 끝나야 넘어간다) 이 직후 방 설정 창이 다시 열려 다음 판을 준비한다.
+    /// GameManager가 구독해서 다음 판을 위해 게임 상태(돈, 위치, 땅, 턴, 라운드, 종료 표시)를 초기화하면 된다.
+    /// </summary>
+    public event Action GameResultClosed;
+
+    [Tooltip("게임이 끝난 뒤 결과를 보여 주는 시간(초). 이 시간이 지나면 방 설정으로 돌아간다.")]
+    [SerializeField] private float resultSeconds = 15f;
 
     private void Awake()
     {
@@ -91,6 +111,198 @@ public class UIManager : MonoBehaviour
 
         // 상단바 방 설정 버튼: 방 설정 팝업 열기/닫기
         if (topBar != null && roomSetup != null) topBar.SetRoomSetupCallback(roomSetup.Toggle);
+
+        // 상단바: 로비에서 넘어온 방 정보 표시, 설정은 설정 창 열기/닫기, 나가기는 확인 후 로비로 돌아간다
+        if (topBar != null)
+        {
+            var room = LobbyManager_temp.CurrentRoom;
+            if (room != null)
+            {
+                topBar.SetRoom(room.Name, room.Code);
+                topBar.SetPlayerCount(room.Players.Count, room.MaxPlayers);
+            }
+            topBar.SetPassword(room != null && room.HasPassword ? room.Password : null); // 비밀번호 방이면 인원수 옆에 표시
+            topBar.SetCallbacks(settings != null ? settings.Toggle : (Action)null, RequestExit);
+        }
+    }
+
+    private void Start()
+    {
+        // 로비에서 들어왔고 아직 게임이 시작되지 않았다면 방 설정을 먼저 띄운다.
+        // GameManager가 Start에서 바로 게임을 시작하는 동안은 한 프레임 뒤에는 이미 시작된 상태라 이 창은 뜨지 않는다.
+        var room = LobbyManager_temp.CurrentRoom;
+        if (room != null) StartCoroutine(OpenRoomSetupIfNotStarted(room));
+    }
+
+    private System.Collections.IEnumerator OpenRoomSetupIfNotStarted(LobbyManager_temp.RoomInfo room)
+    {
+        yield return null;
+        if (!gameInProgress) OpenRoomSetup(room);
+    }
+
+    #region 방 설정 (게임 시작 전)
+
+    /// <summary>UI 확인용: 로비에서 들어온 방 정보로 방 설정 창을 채워서 연다. (UIDebugPanel의 버튼이 부른다)</summary>
+    public void ShowRoomSetupForDebug()
+    {
+        var room = LobbyManager_temp.CurrentRoom;
+        if (room != null) OpenRoomSetup(room);
+    }
+
+    /// <summary>
+    /// 방 설정 창에 방 정보를 채우고 연다. 모드, 팀, 준비, 최대 인원을 바꾸면 방 정보(RoomInfo)에 기록한다.
+    /// 게임을 시작하는 일은 GameManager 몫이라, "게임 시작"은 GameStartRequested로 알리기만 한다. (구독자가 없으면 창만 닫는다)
+    /// </summary>
+    private void OpenRoomSetup(LobbyManager_temp.RoomInfo room)
+    {
+        RefreshPreGamePlayers(room);
+        if (roomSetup == null) return;
+
+        roomSetup.SetMode(room.IsTeam);
+        roomSetup.SetMap(room.Map, null);
+        roomSetup.SetMapSelectable(false); // 고를 수 있는 맵이 아직 하나뿐이다
+        roomSetup.SetLocalPlayer(room.LocalIndex);
+        roomSetup.SetMaxPlayers(room.MaxPlayers);
+        roomSetup.SetHost(room.IsHost);
+        ApplyRoomSetupSlots(room);
+
+        roomSetup.ModeChanged -= OnRoomModeChanged;
+        roomSetup.ModeChanged += OnRoomModeChanged;
+        roomSetup.MaxPlayersChanged -= OnRoomMaxPlayersChanged;
+        roomSetup.MaxPlayersChanged += OnRoomMaxPlayersChanged;
+        roomSetup.ReadyToggled -= OnLocalReadyToggled;
+        roomSetup.ReadyToggled += OnLocalReadyToggled;
+        roomSetup.SetReady(room.Players[room.LocalIndex].IsReady);
+
+        // 내가 팀을 고르면 방 정보에도 기록한다
+        roomSetup.Show(null, null,
+            () => { room.Players[room.LocalIndex].Team = 1; ApplyRoomSetupSlots(room); },
+            () => { room.Players[room.LocalIndex].Team = 2; ApplyRoomSetupSlots(room); },
+            () =>
+            {
+                if (GameStartRequested != null) GameStartRequested(room);
+                else roomSetup.Close();
+            });
+    }
+
+    /// <summary>
+    /// 한 판이 끝난 뒤 방 설정 상태로 되돌린다: 라운드 숨김, 집 모양 버튼 켜기, 플레이어 카드 초기화, 내 준비 해제, 방 설정 창 열기.
+    /// 결과 창이 닫힐 때 자동으로 불린다. (로비에서 들어온 방이 아니면 아무것도 하지 않는다)
+    /// 다른 사람의 준비 상태는 서버가 알려줄 일이라 여기서 건드리지 않는다.
+    /// </summary>
+    public void ReturnToRoomSetup()
+    {
+        var room = LobbyManager_temp.CurrentRoom;
+        if (room == null || roomSetup == null) return;
+
+        gameInProgress = false;
+        if (topBar != null)
+        {
+            topBar.SetRoundVisible(false);
+            topBar.SetRoomSetupInteractable(true);
+        }
+        room.Players[room.LocalIndex].IsReady = false;
+        roomSetup.SetStartVisible(true);
+        OpenRoomSetup(room);
+    }
+
+    // 방에 들어온 사람들로 플레이어 정보 카드를 채운다. (프리팹에 들어 있던 샘플 값 대신)
+    // 시작 자금은 게임이 시작될 때 정해지므로 그 전에는 돈을 0으로 보여 준다.
+    private void RefreshPreGamePlayers(LobbyManager_temp.RoomInfo room)
+    {
+        SetPlayerCount(room.Players.Count);
+        for (int i = 0; i < room.Players.Count; i++)
+        {
+            PlayerInfoView view = GetPlayerInfo(i);
+            if (view == null) continue;
+            view.SetProfile(room.Players[i].Name, null, i);
+            view.ResetForNewGame();
+        }
+    }
+
+    private void ApplyRoomSetupSlots(LobbyManager_temp.RoomInfo room)
+    {
+        for (int i = 0; i < 4; i++)
+        {
+            if (i >= room.Players.Count) { roomSetup.SetSlot(i, new RoomSetupView.Slot { IsEmpty = true }); continue; }
+            var p = room.Players[i];
+            roomSetup.SetSlot(i, new RoomSetupView.Slot
+            {
+                IsEmpty = false,
+                Name = p.Name,
+                ColorIndex = p.ColorIndex,
+                IsHost = p.IsHost,
+                IsReady = p.IsReady,
+                Team = (RoomSetupView.Team)p.Team,
+            });
+        }
+        roomSetup.RecountTeams();
+    }
+
+    // 방장이 모드를 바꿨을 때. 팀전으로 바꾸면 기본 팀은 자리 순서대로 레드, 블루, 레드, 블루다. 개인전이면 팀이 없다.
+    private void OnRoomModeChanged(bool isTeam)
+    {
+        var room = LobbyManager_temp.CurrentRoom;
+        if (room == null) return;
+        room.IsTeam = isTeam;
+        for (int i = 0; i < room.Players.Count; i++) room.Players[i].Team = isTeam ? 1 + (i % 2) : 0;
+        ApplyRoomSetupSlots(room);
+    }
+
+    // 방장이 최대 인원을 바꿨을 때. 지금 들어와 있는 인원보다 적게는 못 줄인다(창이 막아 준다).
+    private void OnRoomMaxPlayersChanged(int max)
+    {
+        var room = LobbyManager_temp.CurrentRoom;
+        if (room == null) return;
+        room.MaxPlayers = max;
+        if (topBar != null) topBar.SetPlayerCount(room.Players.Count, room.MaxPlayers);
+    }
+
+    // 방장이 아닌 내가 준비하기/준비 취소를 눌렀을 때
+    private void OnLocalReadyToggled(bool ready)
+    {
+        var room = LobbyManager_temp.CurrentRoom;
+        if (room == null) return;
+        room.Players[room.LocalIndex].IsReady = ready;
+        ApplyRoomSetupSlots(room);
+    }
+
+    #endregion
+
+    private bool gameInProgress;
+
+    /// <summary>게임이 시작되어 진행 중인지. (InitPlayers가 불리면 시작, 결과 창이 뜨면 끝)</summary>
+    public bool GameInProgress => gameInProgress;
+
+    /// <summary>
+    /// 게임이 진행 중인지 정한다. 게임 시작 때 GameManager가 부르는 InitPlayers에서 true, 종료 때 부르는 ShowGameResultPopup에서 false가 된다.
+    /// 게임이 시작되면 라운드가 보이고, 방 설정 창은 닫히며 상단바의 방 설정(집 모양) 버튼은 눌러지지 않는다. (나가기는 게임 중에도 누를 수 있다)
+    /// </summary>
+    public void SetGameInProgress(bool inProgress)
+    {
+        gameInProgress = inProgress;
+        if (!inProgress) return;
+
+        foreach (var info in playerInfos)
+            if (info != null) info.SetGameStarted();
+
+        if (topBar != null)
+        {
+            topBar.SetRoundVisible(true);
+            topBar.SetRoomSetupInteractable(false);
+        }
+        if (roomSetup != null)
+        {
+            roomSetup.SetStartVisible(false);
+            roomSetup.Close();
+        }
+    }
+
+    // 나가기 버튼: 로비로 돌아갈지 묻고, 확인하면 돌아간다
+    private void RequestExit()
+    {
+        if (exitConfirm != null) exitConfirm.Show(LobbyManager_temp.ReturnToLobby);
+        else LobbyManager_temp.ReturnToLobby();
     }
 
     // 돈이 바뀌면 EconomyManager가 알려준다. 돈 표시와 연출은 여기서 갱신한다.
@@ -572,7 +784,8 @@ public class UIManager : MonoBehaviour
     {
         localPlayerId = playerId;
         hasLocalPlayer = true;
-        if (roomSetup != null) roomSetup.SetLocalPlayer(Mathf.Max(0, IndexOf(playerId)));
+        // 로비에서 들어온 방이라면 방 설정 창의 "나"는 방 안에서의 내 자리다. 게임 플레이어 번호로 덮어쓰지 않는다.
+        if (roomSetup != null && LobbyManager_temp.CurrentRoom == null) roomSetup.SetLocalPlayer(Mathf.Max(0, IndexOf(playerId)));
     }
 
     /// <summary>플레이어 이름과 초상화. 지정하지 않으면 "플레이어 N"과 기본 초상화를 씁니다.</summary>
@@ -600,6 +813,8 @@ public class UIManager : MonoBehaviour
     {
         GameState state = State;
         if (state == null) return;
+
+        SetGameInProgress(true); // GameManager가 게임을 시작할 때 부르는 함수이므로 여기서 "게임 시작"으로 본다
 
         bankruptShortfall.Clear();
         transferPlayers.Clear();
@@ -844,6 +1059,13 @@ public class UIManager : MonoBehaviour
         GameState state = State;
         if (gameResult == null || state == null) return;
 
+        SetGameInProgress(false); // 결과 창이 뜨면 게임이 끝난 것
+
+        // 더 이상 굴릴 주사위도, 진행 중인 차례도 없다
+        if (diceRoll != null) { diceRoll.SetInteractable(false); diceRoll.Close(); }
+        if (diceResult != null) diceResult.Close();
+        if (currentTurn != null) currentTurn.Close();
+
         // 순위: 파산 → 총자산 → 현금 순, 모두 같으면 원래 순서 (GameManager 종료 로그와 같은 기준)
         var order = new List<int>();
         for (int i = 0; i < state.PlayerStates.Count; i++) order.Add(i);
@@ -872,7 +1094,33 @@ public class UIManager : MonoBehaviour
                 IsBankrupt = bankrupt,
             });
         }
+        // 확인 버튼은 결과 창만 닫는다. 방 설정으로 돌아가는 건 정해진 시간이 지났을 때다.
+        // (서버 연동 후에는 서버가 "대기 상태로 복귀"를 알려 줄 때 ReturnAfterResult를 부르면 된다)
         gameResult.Show(entries, onClose);
+        if (resultCountdown != null) StopCoroutine(resultCountdown);
+        resultCountdown = StartCoroutine(ResultCountdown());
+    }
+
+    private Coroutine resultCountdown;
+
+    private System.Collections.IEnumerator ResultCountdown()
+    {
+        for (int left = Mathf.CeilToInt(resultSeconds); left > 0; left--)
+        {
+            gameResult.SetCountdown(left);
+            yield return new WaitForSecondsRealtime(1f);
+        }
+        resultCountdown = null;
+        ReturnAfterResult();
+    }
+
+    /// <summary>결과 시간이 끝났을 때: 결과 창을 닫고, GameManager가 다음 판을 정리할 수 있게 알린 뒤, 방 설정 창을 다시 연다.</summary>
+    public void ReturnAfterResult()
+    {
+        if (resultCountdown != null) { StopCoroutine(resultCountdown); resultCountdown = null; }
+        if (gameResult != null) { gameResult.SetCountdown(0); gameResult.Dismiss(); }
+        GameResultClosed?.Invoke();  // GameManager가 먼저 다음 판 상태를 정리하고
+        ReturnToRoomSetup();         // UI는 방 설정 창을 다시 연다
     }
 
     #endregion
@@ -1033,7 +1281,7 @@ public class UIManager : MonoBehaviour
         UIView[] popups =
         {
             diceResult, roomSetup, purchase, takeover, sell, islandEscape,
-            cardDraw, destinationSelect, tileInfo, gameResult
+            cardDraw, destinationSelect, tileInfo, gameResult, exitConfirm
         };
         foreach (var popup in popups)
         {
