@@ -8,6 +8,9 @@ using UnityEngine;
 public class WebSocketNetwork : Singleton<WebSocketNetwork>
 {
     private WebSocket websocket;
+
+    private long localPlayerId;
+    private string localPlayerNickname;
     
     private void Awake()
     {
@@ -45,6 +48,11 @@ public class WebSocketNetwork : Singleton<WebSocketNetwork>
             
             switch (topic)
             {
+                case "SYSTEM":
+                {
+                    ReceiveSystemMessage(json);
+                    break;
+                }
                 case "LOBBY":
                 {
                     LobbyNetwork.Instance.ReceiveLobbyMessage(json);
@@ -83,6 +91,28 @@ public class WebSocketNetwork : Singleton<WebSocketNetwork>
         if (websocket != null)
         {
             await websocket.Close();
+        }
+    }
+    
+    // system 메시지는 WebSocketNetwork에서 직접 처리합니다.
+    private void ReceiveSystemMessage(string json)
+    {
+        JObject jsonObject = JObject.Parse(json);
+        string type = jsonObject["type"]?.ToString() ?? ""; // type 키가 없으면 null 대신 빈 문자열 할당
+        
+        switch (type)
+        {
+            case "INIT_LOCAL_PLAYER_INFO":
+            {
+                localPlayerId = long.TryParse(jsonObject["type"]?.ToString(), out long result) ? result : 0;
+                localPlayerNickname = jsonObject["nickName"]?.ToString() ?? "이름 지정되지 않음";
+                break;
+            }
+            default:
+            {
+                Debug.Log($"식별할 수 없는 type입니다.: {type}");
+                break;
+            }
         }
     }
 }
