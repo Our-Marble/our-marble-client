@@ -30,7 +30,8 @@ public class ButtonPressEffect : MonoBehaviour, IPointerDownHandler, IPointerUpH
     private void OnDisable()
     {
         tween?.Kill();
-        if (pressed) Apply(1f);
+        // 누르는 중이거나, 놓은 뒤 원래 크기로 돌아오는 도중에 꺼져도 크기가 줄어든 채 남지 않게 되돌린다
+        if (pressed || !Mathf.Approximately(scale, 1f)) Apply(1f);
         pressed = false;
     }
 

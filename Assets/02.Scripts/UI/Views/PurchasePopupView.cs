@@ -129,12 +129,11 @@ public class PurchasePopupView : UIView
         if (cashText != null) cashText.text = UIPalette.Money(cash);
         if (costText != null) costText.color = Color.black; // 구매(건설) 비용은 검정색
 
-        int first = -1, firstUnlocked = -1;
+        int firstUnlocked = -1;
         for (int i = 0; i < OptionCount; i++)
         {
             SetupCard(i);
             if (!this.options[i].HasValue) continue;
-            if (first < 0) first = i;
             if (firstUnlocked < 0 && !this.options[i].Value.Locked) firstUnlocked = i;
         }
         // 살 수 있는(잠기지 않은) 첫 단계를 고른다. 하나도 없으면(금액 부족 등) 아무것도 선택하지 않는다

@@ -30,6 +30,7 @@ public abstract class UIView : MonoBehaviour
     /// <summary>뒤를 어둡게 덮는 배경의 경로. 없으면 null.</summary>
     public virtual string DimPath => null;
 
+    /// <summary>켜져 있고 닫힘 연출 중이 아닐 때 true. 닫히는 중이면 false.</summary>
     public bool IsOpen => gameObject.activeSelf && !closing;
 
     /// <summary>창이 완전히 닫혔을 때(닫힘 연출이 끝난 뒤) 호출된다.</summary>
@@ -89,11 +90,7 @@ public abstract class UIView : MonoBehaviour
     }
 
     [ContextMenu("Bind (이름으로 다시 연결)")]
-    private void BindFromMenu()
-    {
-        Bind();
-        BindTransitions();
-    }
+    private void BindFromMenu() => Reset();
 
     // ───────────── 열기·닫기 연출 ─────────────
 

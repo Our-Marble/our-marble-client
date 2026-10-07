@@ -3,7 +3,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-/// <summary>나가기 확인 팝업. 게임에서는 로비로, 로비에서는 로그인 화면으로 돌아갈지 묻는다. Canvas_ExitConfirm에 붙는다.</summary>
+/// <summary>나가기 확인 팝업. 게임에서는 로비로, 로비에서는 방 밖이나 로그인 화면으로 나갈지 묻는다. 문구는 부르는 쪽이 정한다. Canvas_ExitConfirm에 붙는다.</summary>
 public class ExitConfirmView : UIView
 {
     public override string PanelPath => "ExitConfirmPopup/Window";

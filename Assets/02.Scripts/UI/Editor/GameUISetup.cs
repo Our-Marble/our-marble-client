@@ -8,6 +8,7 @@ using UnityEngine.UI;
 /// <summary>
 /// 씬의 UI 캔버스에 뷰 컴포넌트를 붙이고 UIManager에 연결한다.
 /// 캔버스 구조를 바꾼 뒤 다시 실행해도 된다(이미 있는 컴포넌트는 참조만 다시 채운다).
+/// 게임 씬의 캔버스가 대상이다. 로비·로그인 씬의 뷰(RoomSetupView, Loading, Toast 등)는 이 도구가 붙이지 않는다.
 /// </summary>
 public static class GameUISetup
 {
