@@ -101,6 +101,16 @@ public class GameManager : Singleton<GameManager>
         StartGame();
     }
 
+    private void OnEnable()
+    {
+        GameNetwork.Instance.OnRefresh += Refresh;
+    }
+
+    private void OnDisable()
+    {
+        GameNetwork.Instance.OnRefresh -= Refresh;
+    }
+
     void Update()
     {
         if (gameState.WaitingType == null) return;
@@ -1351,6 +1361,17 @@ public class GameManager : Singleton<GameManager>
         
         int propertyId = state.PropertyId;
         BoardManager.Instance.UpdatePropertyBuildingVisual(propertyId, buildingLevel);
+    }
+
+    public void Refresh(GameState serverGameState)
+    {
+        // gameState 덮어쓰기
+        
+        // UI 리프레시 함수 호출
+        
+        // Board 리프레시 함수 호출
+        
+        // PlayerPawn 리프레시 함수 호출
     }
 
     /// <summary>

@@ -19,6 +19,13 @@ public class GameNetwork : Singleton<GameNetwork>
         JObject jsonObject = JObject.Parse(json);
         string typeString = jsonObject["type"]?.ToString() ?? ""; // type 키가 없으면 null 대신 빈 문자열 할당
         
+        // 새로고침에 대한 응답인 경우 큐를 거치지 않고 즉시 처리
+        if (typeString == "GAME_STATE_REFRESH")
+        {
+            HandleGameStateRefresh(json);
+            return;
+        }
+        
         if (Enum.TryParse<BroadcastType>(typeString, out BroadcastType parsedType))
         {
             Debug.Log($"식별할 수 없는 type입니다.: {typeString}");
@@ -225,6 +232,26 @@ public class GameNetwork : Singleton<GameNetwork>
 
         string json = JsonConvert.SerializeObject(message);
         WebSocketNetwork.Instance.SendMessage(json);
+    }
+    
+    public event Action<GameState> OnRefresh;
+    
+    /// <summary>
+    /// 새로고침 응답을 받았을 때의 특수 처리 함수
+    /// </summary>
+    private void HandleGameStateRefresh(string json)
+    {
+        Debug.Log("[GameNetwork] 새로고침 응답 수신. 큐를 초기화하고 상태를 강제 동기화합니다.");
+
+        // 메시지 큐 Clear
+        lock (messageQueue)
+        {
+            messageQueue.Clear();
+        }
+
+        // 2. 파싱 및 GameManager 또는 GameState 강제 갱신
+        // GameStateRefreshResponse response = JsonUtility.FromJson<GameStateRefreshResponse>(json);
+        // GameManager.Instance.ForceUpdateGameState(response);
     }
 }
 
