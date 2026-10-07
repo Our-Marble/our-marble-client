@@ -4,19 +4,22 @@ using DG.Tweening;
 using UnityEngine;
 
 /// <summary>
-/// [임시] UI 확인용 테스트 버튼 창. 씬의 GameManager(GameState)를 읽어 UI를 채우고,
-/// GameManager가 이미 UIManager를 직접 부르므로 이 창은 상태를 만들고(땅 주인, 현금 등) 창을 띄워 보는 일만 한다.
-/// 보드(BoardManager)가 칸 선택을 연결하기 전에는, "보드 선택 시험"의 버튼이 보드 대신 칸 번호 목록을
-/// UIManager.CheckTileValidForTravel / CheckTilesValidForSell에 넘겨 준다.
-/// 에디터·개발 빌드에서만 그려진다. 확인이 끝나면 씬의 UIDebugPanel 오브젝트를 지우면 된다.
-/// F1: 창 접기/펼치기
+/// [임시] 게임 씬 UI 확인용 테스트 버튼 창. 에디터·개발 빌드에서만 그려지고, F1로 접거나 펼친다.
+/// 확인이 끝나면 씬의 UIDebugPanel 오브젝트를 지우면 된다.
+///
+/// 하는 일
+/// - GameManager(GameState)를 읽어 카드·차례·라운드를 채운다. 창과 연출은 GameManager가 UIManager를 직접 부르므로,
+///   이 창은 상태를 만들어 보고(땅 주인, 현금, 파산) 창을 띄워 보는 일만 한다.
+/// - 동기화 시험: 화면은 그대로 두고 GameState만 바꾼 뒤 UIManager.RefreshUIFromGameState로 화면을 맞춰 본다.
+/// - 결과 창, 방(로비)으로 돌아가기 같은 씬 흐름을 바로 시험한다. (로비에서 들어온 방이 있어야 방으로 돌아온다)
+/// - 보드 선택 시험: BoardManager 대신 칸 번호 목록을 UIManager.CheckTileValidForTravel / CheckTilesValidForSell에 넘긴다.
 /// </summary>
 public class UIDebugPanel : MonoBehaviour
 {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-    private static readonly string[] Names = { "나", "봇", "플레이어3", "플레이어4" };
+    // 로비를 거치지 않고 게임 씬만 실행했을 때 카드에 쓰는 이름. 로비에서 들어왔으면 방 안의 이름을 쓴다
+    private static readonly string[] DefaultNames = { "나", "봇", "플레이어3", "플레이어4" };
 
-    private int turnCount = 1;
     private int propertyCursor;
     private float speed = 1f;
     private bool expanded = true;
@@ -31,7 +34,8 @@ public class UIDebugPanel : MonoBehaviour
     private GameState State => Game != null ? Game.gameState : null;
     private List<PlayerState> Players => State.PlayerStates;
 
-    private const int LocalPlayer = 0; // 이 화면의 플레이어 = PlayerStates[0] (playerId 123)
+    // 이 화면의 플레이어 번호(PlayerStates 인덱스). GameManager가 UIManager에 알려 준 값을 따른다
+    private int LocalPlayer => Mathf.Max(0, Players.FindIndex(p => p.PlayerId == UI.LocalPlayerId));
 
     private IEnumerator Start()
     {
@@ -39,9 +43,7 @@ public class UIDebugPanel : MonoBehaviour
         yield return null;
         if (UI == null || Game == null) yield break;
 
-        for (int i = 0; i < Players.Count; i++) UI.SetPlayerProfile(Players[i].PlayerId, Names[i]);
-        UI.SetLocalPlayer(Players[LocalPlayer].PlayerId);
-        UI.DiceRoll?.SetIslandTurns(0);
+        for (int i = 0; i < Players.Count; i++) UI.SetPlayerProfile(Players[i].PlayerId, NameOf(i));
         ready = true;
 
         FillHud(animate: false);
@@ -99,16 +101,30 @@ public class UIDebugPanel : MonoBehaviour
 
         scroll = GUILayout.BeginScrollView(scroll, false, false, GUIStyle.none, GUI.skin.verticalScrollbar);
 
+        DrawRoomSection();
+
         Header($"HUD (GameState 기준, {Players.Count}명)");
-        if (GUILayout.Button("GameState 다시 읽기")) { FillHud(animate: true); Log("GameState 다시 읽기"); }
+        if (GUILayout.Button("카드·차례 다시 채우기 (InitPlayers)")) { FillHud(animate: true); Log("카드·차례 다시 채우기"); }
         if (GUILayout.Button("다음 차례 (HandleTurnChanged)")) NextTurn();
         if (GUILayout.Button("통행료 주고받기 (HandleTollPaid)")) PayToll();
         if (GUILayout.Button("파산 켜기/끄기 (차례인 사람)")) ToggleBankrupt();
+
+        Header("동기화 시험 (서버 상태만 바꾸기)");
+        GUILayout.Label("화면은 그대로 두고 GameState만 바꿉니다. 바꾼 뒤 '화면 동기화'를 누르세요.");
+        if (GUILayout.Button("내 돈 +100,000")) SilentChange(() => Players[LocalPlayer].Money += 100000, "내 돈 +100,000");
+        if (GUILayout.Button("상대 돈 -100,000")) SilentChange(() => Players[NextPlayer(LocalPlayer)].Money -= 100000, "상대 돈 -100,000");
+        if (GUILayout.Button("다음 차례로")) SilentChange(() => State.CurrentPlayerId = Players[NextPlayer(turnIndex)].PlayerId, "차례 변경");
+        if (GUILayout.Button("라운드 +1")) SilentChange(() => State.RoundNumber += 1, "라운드 +1");
+        if (GUILayout.Button("화면 동기화 (UIManager.RefreshUIFromGameState)")) { UI.RefreshUIFromGameState(); Log("화면 동기화"); }
 
         Header("주사위");
         if (GUILayout.Button("주사위 굴리기 창 열기 (버튼 → GameManager.RollDice)")) UI.ShowRollDicePopup();
 
         DrawPropertySection();
+
+        Header("게임 종료 · 이동");
+        if (GUILayout.Button("결과 창 띄우기 (UIManager.ShowGameResultPopup)")) { UI.ShowGameResultPopup(); Log("결과 창 (확인 또는 시간이 지나면 방으로 돌아간다)"); }
+        Row(("방으로 돌아가기", () => SceneFlow.ReturnToRoom()), ("로비로 나가기", () => SceneFlow.ToLobby()));
 
         GUILayout.Space(4);
         if (GUILayout.Button("팝업 모두 닫기")) UI.CloseAllPopups();
@@ -117,6 +133,30 @@ public class UIDebugPanel : MonoBehaviour
 
         if (!string.IsNullOrEmpty(lastLog)) GUILayout.Label(lastLog);
         GUI.DragWindow();
+    }
+
+    // ───────────── 방 정보 ─────────────
+
+    // 로비에서 들어온 방(LobbyManager_temp.CurrentRoom)을 보여 준다
+    private void DrawRoomSection()
+    {
+        var room = LobbyManager_temp.CurrentRoom;
+        Header("방 정보");
+        if (room == null)
+        {
+            GUILayout.Label("로비를 거치지 않고 실행했습니다. (방 정보 없음)");
+            return;
+        }
+        GUILayout.Label($"{room.Name} ({room.Code}) / {(room.IsTeam ? "팀전" : "개인전")} / {room.Map} / {room.Players.Count}/{room.MaxPlayers}명");
+        GUILayout.Label($"내 자리 {room.LocalIndex + 1}번 ({(room.IsHost ? "방장" : "참가자")})");
+    }
+
+    // 카드에 쓰는 이름. 로비에서 들어왔으면 방 안의 이름, 아니면 기본 이름
+    private static string NameOf(int index)
+    {
+        var room = LobbyManager_temp.CurrentRoom;
+        if (room != null && index < room.Players.Count) return room.Players[index].Name;
+        return index < DefaultNames.Length ? DefaultNames[index] : "플레이어" + (index + 1);
     }
 
     // ───────────── 상태 읽기 ─────────────
@@ -131,35 +171,33 @@ public class UIDebugPanel : MonoBehaviour
         }
     }
 
-    private bool IsLocalTurn => turnIndex == LocalPlayer;
     private long Cash(int index) => Players[index].Money;
 
     // ───────────── HUD ─────────────
 
+    // 카드 수·이름·돈·등수와 차례 표시를 GameState에 맞춰 처음부터 다시 채운다
     private void FillHud(bool animate)
     {
         UI.InitPlayers();
-        UI.RefreshAllPlayers(animate);
-        // 로비에서 넘어왔다면 그 방 정보를 유지한다
-        if (LobbyManager_temp.CurrentRoom == null) UI.TopBar?.SetRoom("테스트 방", "TEST01");
-        if (LobbyManager_temp.CurrentRoom == null) UI.TopBar?.SetPlayerCount(Players.Count, 4);
+        UI.RefreshPlayerCards(animate);
         UI.ShowTurn(State.CurrentPlayerId);
     }
 
     // GameManager.HandleTurnChanged를 실제로 부른다. (다음 사람은 이 창이 정해서 넘긴다)
     private void NextTurn()
     {
-        int next = turnIndex;
-        for (int step = 0; step < Players.Count; step++)
-        {
-            next = (next + 1) % Players.Count;
-            if (!Players[next].IsBankrupt) break;
-        }
-        if (next == 0) turnCount = Mathf.Min(turnCount + 1, 30);
+        int next = NextPlayer(turnIndex);
 
         // 차례 표시, 주사위 창은 GameManager가 UIManager로 직접 띄운다
         Game.HandleTurnChanged(Players[next].PlayerId);
-        Log($"{Names[next]} 차례");
+        Log($"{NameOf(next)} 차례");
+    }
+
+    // 이벤트도 화면 갱신도 없이 GameState만 바꾼다. (서버에서 상태가 바뀌었는데 화면은 모르는 경우를 흉내)
+    private void SilentChange(System.Action change, string message)
+    {
+        change();
+        Log($"서버 상태만 변경: {message}");
     }
 
     // GameState의 돈을 바꾸고 EconomyManager로 알린다 (돈 변화 표시는 이 경로 하나만 쓴다)
@@ -180,7 +218,7 @@ public class UIDebugPanel : MonoBehaviour
         if (receiver == payer || Cash(payer) < toll) { Log("통행료를 낼 돈이 부족합니다"); return; }
 
         Game.HandleTollPaid(Players[payer].PlayerId, Players[receiver].PlayerId, toll); // GameState 갱신
-        Log($"통행료 {toll:N0}: {Names[payer]} → {Names[receiver]}");
+        Log($"통행료 {toll:N0}: {NameOf(payer)} → {NameOf(receiver)}");
     }
 
     private void ToggleBankrupt()
@@ -189,14 +227,14 @@ public class UIDebugPanel : MonoBehaviour
         if (!player.IsBankrupt)
         {
             Game.ProcessBankruptcy(player.PlayerId); // GameState: IsBankrupt = true, FinalRank 기록 → 파산 연출까지 재생
-            Log($"{Names[turnIndex]} 파산");
+            Log($"{NameOf(turnIndex)} 파산");
         }
         else
         {
             player.IsBankrupt = false;
             player.FinalRank = 0;
-            UI.RefreshAllPlayers();
-            Log($"{Names[turnIndex]} 파산 해제 (표시만 되돌립니다)");
+            UI.RefreshPlayerCards();
+            Log($"{NameOf(turnIndex)} 파산 해제 (표시만 되돌립니다)");
         }
     }
 
@@ -219,10 +257,10 @@ public class UIDebugPanel : MonoBehaviour
         if (GUILayout.Button("▶")) propertyCursor = (propertyCursor + 1) % all.Count;
         GUILayout.EndHorizontal();
         GUILayout.Label(state == null ? "상태 없음"
-            : $"주인 {(state.OwnerId.HasValue ? Names[Players.FindIndex(p => p.PlayerId == state.OwnerId.Value)] : "없음")} / 단계 {state.BuildingLevel}");
+            : $"주인 {(state.OwnerId.HasValue ? NameOf(Players.FindIndex(p => p.PlayerId == state.OwnerId.Value)) : "없음")} / 단계 {state.BuildingLevel}");
 
         Row(("주인 없음", () => SetOwner(data.Id, null, 0)), ("내 땅", () => SetOwner(data.Id, me, 0)),
-            ("봇 땅", () => SetOwner(data.Id, other, 0)));
+            ("상대 땅", () => SetOwner(data.Id, other, 0)));
         Row(("단계 +1", () => { if (state != null && state.BuildingLevel < BuildingLevel.Hotel) SetOwner(data.Id, state.OwnerId, (int)state.BuildingLevel + 1); }),
             ("내 돈 100,000", () => SetMyMoney(100000)), ("내 돈 100", () => SetMyMoney(100)));
         GUILayout.Label("아래 창의 버튼 → GameManager.Purchase/Build/Acquire 호출. 매각은 아래 '보드 선택 시험'에서");
@@ -246,8 +284,8 @@ public class UIDebugPanel : MonoBehaviour
 
     private void DrawBoardSelectSection(long me, long other)
     {
-        Header("보드 선택 시험 (BoardManager 대신)");
-        GUILayout.Label("보드 모드 전환(ChangeTo~)은 BoardManager 구현 전이라 주석 상태입니다.");
+        Header("보드 선택 시험 (칸 번호 목록을 직접 넘김)");
+        GUILayout.Label("창을 열면 UIManager가 보드 모드도 바꿉니다. (ChangeTo~)");
 
         int count = BoardManager.Instance.TileCount;
         if (count <= 0) { GUILayout.Label("보드 데이터가 없습니다."); return; }
@@ -259,21 +297,21 @@ public class UIDebugPanel : MonoBehaviour
         if (GUILayout.Button("▶")) tileCursor = (tileCursor + 1) % count;
         GUILayout.EndHorizontal();
 
-        GUILayout.Label("<b>세계여행</b> (칸 종류와 상관없이 하나만 고르면 완료 버튼이 켜집니다)", new GUIStyle(GUI.skin.label) { richText = true });
+        RichLabel("<b>세계여행</b> (칸 종류와 상관없이 하나만 고르면 완료 버튼이 켜집니다)");
         Row(("창 열기", () => { travelTiles.Clear(); UI.ShowChooseDestinationPopup(); }),
             ("창 닫기", () => UI.HideChooseDestinationPopup()));
         Row(("이 칸 선택/해제", () => { Toggle(travelTiles, tileCursor); UI.CheckTileValidForTravel(new List<int>(travelTiles)); }),
             ("모두 해제", () => { travelTiles.Clear(); UI.CheckTileValidForTravel(new List<int>()); }));
         GUILayout.Label($"고른 칸: {ListText(travelTiles)}");
 
-        GUILayout.Label("<b>매각</b> (내 땅만 합산, 현금 + 매각가 합 ≥ 필요 금액이면 완료 버튼이 켜집니다)", new GUIStyle(GUI.skin.label) { richText = true });
+        RichLabel("<b>매각</b> (내 땅만 합산, 현금 + 매각가 합 ≥ 필요 금액이면 완료 버튼이 켜집니다)");
         Row(($"필요 금액 {SellRequiredPresets[sellPresetIndex]:N0} (눌러서 변경)", () => sellPresetIndex = (sellPresetIndex + 1) % SellRequiredPresets.Length),
             ("창 열기", () => { sellTiles.Clear(); UI.ShowSellPropertiesPopup(me, other, SellRequiredPresets[sellPresetIndex]); }));
         Row(("이 칸 선택/해제", () => { Toggle(sellTiles, tileCursor); UI.CheckTilesValidForSell(new List<int>(sellTiles)); }),
             ("모두 해제", () => { sellTiles.Clear(); UI.CheckTilesValidForSell(new List<int>()); }));
         GUILayout.Label($"고른 칸: {ListText(sellTiles)}");
 
-        GUILayout.Label("<b>둘러보기</b>", new GUIStyle(GUI.skin.label) { richText = true });
+        RichLabel("<b>둘러보기</b>");
         if (GUILayout.Button("이 칸 클릭 (땅이면 정보창)")) UI.OnBoardTileClicked(tileCursor);
     }
 
@@ -300,13 +338,13 @@ public class UIDebugPanel : MonoBehaviour
         if (state == null) return;
         state.OwnerId = owner;
         state.BuildingLevel = (BuildingLevel)level;
-        UI.RefreshAllPlayers();
+        UI.RefreshPlayerCards();
         Log($"땅 {propertyId}: 주인 {(owner.HasValue ? owner.Value.ToString() : "없음")}, 단계 {(BuildingLevel)level}");
     }
 
     private void SetMyMoney(long amount) => ChangeMoney(LocalPlayer, amount - Players[LocalPlayer].Money, "설정");
 
-    // from 다음 차례의 (파산하지 않은) 플레이어
+    // from 다음 차례의 (파산하지 않은) 플레이어. 다른 사람이 없으면 from의 다음 번호
     private int NextPlayer(int from)
     {
         for (int step = 1; step <= Players.Count; step++)
@@ -319,10 +357,19 @@ public class UIDebugPanel : MonoBehaviour
 
     // ───────────── GUI 헬퍼 ─────────────
 
+    private static GUIStyle richLabel;
+
+    // 굵은 글씨 같은 리치 텍스트를 쓰는 라벨. 스타일은 한 번만 만든다
+    private static void RichLabel(string text)
+    {
+        richLabel ??= new GUIStyle(GUI.skin.label) { richText = true };
+        GUILayout.Label(text, richLabel);
+    }
+
     private static void Header(string text)
     {
         GUILayout.Space(8);
-        GUILayout.Label($"<b>{text}</b>", new GUIStyle(GUI.skin.label) { richText = true });
+        RichLabel($"<b>{text}</b>");
     }
 
     private static void Row(params (string label, System.Action action)[] buttons)

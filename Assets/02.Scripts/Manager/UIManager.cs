@@ -38,22 +38,9 @@ public class UIManager : MonoBehaviour
     [SerializeField] private CardDeckData cardDeck;
     [Tooltip("다른 플레이어가 뽑은 황금열쇠 카드를 보여주는 시간(초). 카드가 뒤집힌 뒤부터 센다.")]
     [SerializeField] private float otherCardShowSeconds = 2f;
-    private int maxRound = 30; // 상단바에 '라운드 N / 최대'로 보여줄 최대 라운드. 값은 GameManager가 SetMaxRound로 알려준다.
-
-    public TopBarView TopBar => topBar;
-    public CurrentTurnView CurrentTurn => currentTurn;
-    public DiceRollView DiceRoll => diceRoll;
-    public DiceResultView DiceResult => diceResult;
-    public PurchasePopupView Purchase => purchase;
-    public TakeoverPopupView Takeover => takeover;
-    public SellPopupView Sell => sell;
-    public IslandEscapeView IslandEscape => islandEscape;
-    public CardDrawView CardDraw => cardDraw;
-    public DestinationSelectView DestinationSelect => destinationSelect;
-    public TileInfoView TileInfo => tileInfo;
-    public GameResultView GameResult => gameResult;
-    public ExitConfirmView ExitConfirm => exitConfirm;
-    public SettingsView Settings => settings;
+    [Tooltip("게임이 끝난 뒤 결과를 보여 주는 시간(초). 이 시간이 지나면 확인을 누르지 않아도 방(로비)으로 돌아간다.")]
+    [SerializeField] private float resultSeconds = 15f;
+    private int maxRound = 30; // 상단바에 '라운드 N / 최대'로 보여줄 최대 라운드. 값은 GameManager가 SetMaxRound로 알려주고, 그 전까지는 이 기본값을 쓴다.
 
     // ───────────── 밖에서 연결하는 곳 ─────────────
 
@@ -68,9 +55,6 @@ public class UIManager : MonoBehaviour
 
     /// <summary>매각 창의 '파산 신청' 버튼 (payerId, receiverId).</summary>
     public event Action<long, long> BankruptRequested;
-
-    [Tooltip("게임이 끝난 뒤 결과를 보여 주는 시간(초). 이 시간이 지나면 확인을 누르지 않아도 방(로비)으로 돌아간다.")]
-    [SerializeField] private float resultSeconds = 15f;
 
     private void Awake()
     {
@@ -91,7 +75,7 @@ public class UIManager : MonoBehaviour
             // 무인도 표시는 갇힌 플레이어의 주사위 UI를 열 때만 켠다
             diceRoll.SetIslandTurns(0);
         }
-        // 주사위 결과창이 닫히면 게이지를 비운다
+        // 주사위 결과창이 닫히면 게이지를 비운다 (두 뷰가 이 오브젝트와 같은 수명이라 구독을 해제하지 않는다)
         if (diceResult != null && diceRoll != null) diceResult.Closed += () => diceRoll.SetGauge(0f);
 
         // 상단바: 로비에서 넘어온 방 정보 표시, 설정은 설정 창 열기/닫기, 나가기는 확인 후 로비로 돌아간다
@@ -107,6 +91,46 @@ public class UIManager : MonoBehaviour
             topBar.SetCallbacks(settings != null ? settings.Toggle : (Action)null, RequestExit);
         }
     }
+
+    #region 화면 동기화 (재접속 · 지연)
+
+    /// <summary>
+    /// 재접속하거나 지연으로 화면이 서버 상태와 어긋났을 때, 화면(UI)만 지금 GameState에 맞춘다.
+    /// GameState는 읽기만 하고 바꾸지 않으며, 서버에서 상태를 받아 오는 일도 하지 않는다.
+    /// 화면과 달라진 부분만 평소 변할 때와 같은 연출로 바뀐다:
+    /// 현금이 달라졌으면 숫자가 굴러가며 돈 변화 표시("입금"/"출금")가 뜨고, 등수는 뒤집히고, 파산이면 도장이 찍히고,
+    /// 차례가 달라졌으면 차례 표시와 카드 강조가 바뀌고, 라운드가 달라졌으면 숫자가 튄다. 달라진 게 없으면 아무 일도 없다.
+    /// 서버 상태를 받아 GameState를 갱신한 쪽(GameManager 또는 네트워크)이 그 뒤에 이 함수를 부르면 된다.
+    /// </summary>
+    public void RefreshUIFromGameState()
+    {
+        GameState state = State;
+        if (state == null) return;
+
+        for (int i = 0; i < state.PlayerStates.Count; i++)
+        {
+            PlayerInfoView view = GetPlayerInfo(i);
+            if (view == null) continue;
+            PlayerState player = state.PlayerStates[i];
+            // 코인 연출 중인 사람은 연출이 도착하는 순간 돈 표시를 직접 갱신하므로 건너뛴다 (같은 변화가 두 번 뜨지 않게)
+            if (transferPlayers.Contains(player.PlayerId)) continue;
+
+            long delta = player.Money - view.CashTarget;
+            view.SetMoney(player.Money, TotalAssetOf(player.PlayerId, player.Money));
+            if (delta != 0) view.ShowMoneyChange(TakeMoneyReason(player.PlayerId, delta), delta);
+            view.SetBankrupt(player.IsBankrupt); // 새로 파산했으면 도장 연출
+        }
+        UpdateRanks(); // 등수가 달라진 카드만 뒤집힌다
+
+        // 차례: 화면에 강조된 카드와 서버의 현재 차례가 다르면 차례 표시를 바꾼다
+        int turnIndex = IndexOf(state.CurrentPlayerId);
+        PlayerInfoView shownTurn = turnIndex >= 0 ? GetPlayerInfo(turnIndex) : null;
+        if (shownTurn != null && !shownTurn.IsTurnShown) ShowTurn(state.CurrentPlayerId);
+
+        if (topBar != null) topBar.SetRound(DisplayRound(), maxRound, animate: true);
+    }
+
+    #endregion
 
     // 나가기 버튼: 로비로 돌아갈지 묻고, 확인하면 돌아간다
     private void RequestExit()
@@ -130,7 +154,7 @@ public class UIManager : MonoBehaviour
         travelTileIndex = -1;
         if (diceRoll != null) diceRoll.SetInteractable(false); // 목적지를 고르는 동안에는 주사위를 굴릴 수 없다
 
-        // TODO: BoardManager에 구현되면 주석을 풀어주세요. (보드를 여행지 선택 모드로 바꿉니다)
+        // 보드를 여행지 선택 모드로 바꾼다
         BoardManager.Instance.ChangeToSelectTravelMode();
 
         if (destinationSelect != null) destinationSelect.Show(CompleteDestination); // 완료 버튼은 꺼진 상태로 시작
@@ -158,10 +182,10 @@ public class UIManager : MonoBehaviour
         travelTileIndex = -1;
         if (destinationSelect != null) destinationSelect.Close();
 
-        // TODO: BoardManager에 구현되면 주석을 풀어주세요. (보드를 다시 둘러보기 모드로 바꿉니다)
+        // 보드를 다시 둘러보기 모드로 되돌린다
         BoardManager.Instance.ChangeToInspectMode();
 
-        // TODO: GameManager에 구현되면 주석을 풀어주세요.
+        // 고른 목적지를 GameManager로 넘긴다
         if (Game != null) Game.ChooseDestination(destination);
     }
 
@@ -195,7 +219,7 @@ public class UIManager : MonoBehaviour
         }, islandTurns);
     }
 
-    // 빈 땅에 대하여  사기 & 사지않기 버튼이 있는 창을 띄워주는 함수입니다.
+    // 빈 땅을 사거나 사지 않는 버튼이 있는 창을 띄워주는 함수입니다.
     // 사기 버튼을 누르면 GameManager.PurchaseProperty(playerId, propertyId) 를 호출합니다.
     // 사지않기 버튼을 누르면 GameManager.DeclinePropertyPurchase(playerId, propertyId) 를 호출합니다.
     // 이 창은 빈 땅 전용입니다. (내 땅의 건설은 GameManager가 ShowBuildPopup으로 따로 부릅니다.)
@@ -396,7 +420,7 @@ public class UIManager : MonoBehaviour
         sellRequired = requiredAmount; // 필요한 금액을 보관해 두었다가 CheckTilesValidForSell에서 쓴다
         selectedSellPropertyIds.Clear();
 
-        // TODO: BoardManager에 구현되면 주석을 풀어주세요. (보드를 매각 자산 선택 모드로 바꿉니다)
+        // 보드를 매각 자산 선택 모드로 바꾼다
         BoardManager.Instance.ChangeToSelectSellMode();
 
         PlayerState payer = GetPlayer(payerId);
@@ -606,10 +630,6 @@ public class UIManager : MonoBehaviour
         if (view != null) view.SetProfile(NameOf(playerId), PortraitOf(playerId), index);
     }
 
-    /// <summary>
-    /// 게임을 시작할 때 한 번 부릅니다. GameState의 플레이어 수에 맞춰 카드를 채웁니다.
-    /// (플레이어 이름은 그 전에 SetPlayerProfile로 넣어주세요.)
-    /// </summary>
     // 상단바에 보여줄 최대 라운드를 지정합니다. 게임 시작 시 GameManager가 부릅니다. (최대 라운드 값은 GameManager가 관리)
     public void SetMaxRound(int value)
     {
@@ -617,6 +637,10 @@ public class UIManager : MonoBehaviour
         if (topBar != null) topBar.SetRound(DisplayRound(), maxRound);
     }
 
+    /// <summary>
+    /// 게임을 시작할 때 한 번 부릅니다. GameState의 플레이어 수에 맞춰 카드를 채웁니다.
+    /// (플레이어 이름은 그 전에 SetPlayerProfile로 넣어주세요.)
+    /// </summary>
     public void InitPlayers()
     {
         GameState state = State;
@@ -635,17 +659,23 @@ public class UIManager : MonoBehaviour
             long id = state.PlayerStates[i].PlayerId;
             if (view != null) view.SetProfile(NameOf(id), PortraitOf(id), i);
         }
-        RefreshAllPlayers(animate: false);
+        RefreshPlayerCards(animate: false);
 
         if (topBar != null)
         {
-            topBar.SetPlayerCount(count, playerInfos.Length);
+            // 로비에서 들어온 방이면 그 방의 최대 인원으로, 아니면 카드 수(4)로 표시한다
+            var room = LobbyManager_temp.CurrentRoom;
+            topBar.SetPlayerCount(count, room != null ? room.MaxPlayers : playerInfos.Length);
             topBar.SetRound(DisplayRound(), maxRound);
         }
     }
 
-    /// <summary>GameState를 다시 읽어 모든 플레이어 카드(돈, 총 자산, 등수, 파산)를 맞춥니다. 돈 변화 표시는 띄우지 않습니다.</summary>
-    public void RefreshAllPlayers(bool animate = true)
+    /// <summary>
+    /// GameState를 다시 읽어 모든 플레이어 카드(돈, 총 자산, 등수, 파산)를 통째로 맞춥니다. 돈 변화 표시는 띄우지 않습니다.
+    /// 게임 시작(InitPlayers)과 파산 연출에서 쓰는 카드 전용 갱신입니다. 재접속·지연으로 어긋난 화면을 맞출 때는
+    /// 달라진 부분만 연출하고 차례와 라운드까지 맞추는 RefreshUIFromGameState를 쓰세요.
+    /// </summary>
+    public void RefreshPlayerCards(bool animate = true)
     {
         GameState state = State;
         if (state == null) return;
@@ -687,7 +717,7 @@ public class UIManager : MonoBehaviour
         return delta > 0 ? "입금" : "출금";
     }
 
-    // 재화 획득/손실 연출을 재생합니다. GameManager.HandleDonationPaid, HandleWelfareFundReceived에서 부릅니다.
+    // 사유를 붙여 돈 변화 표시를 띄웁니다. GameManager의 땅 구매, 건설에서 부릅니다.
     // GameState를 먼저 갱신한 뒤 부릅니다. (EconomyManager.NotifyMoneyChanged를 이미 부르는 곳은 이 함수를 따로 부르지 않습니다.)
     public void PlayMoneyChange(long playerId, long amount, string reason)
     {
@@ -700,7 +730,7 @@ public class UIManager : MonoBehaviour
         UpdateRanks();
     }
 
-    // 재화 이동 연출을 재생합니다. GameManager.HandleTollPaid에서 부릅니다.
+    // 통행료 지불 연출. PlayMoneyTransfer를 통행료 문구로 부르는 단축 함수입니다.
     public void PlayTollEffect(long payerId, long receiverId, long amount)
         => PlayMoneyTransfer(payerId, receiverId, amount, "통행료", "통행료 수입");
 
@@ -748,7 +778,7 @@ public class UIManager : MonoBehaviour
         // GameState(IsBankrupt)가 이미 갱신된 뒤 호출되므로, 전체 갱신 한 번이면 됩니다.
         // 방금 파산한 플레이어의 카드만 파산 표시가 꺼짐 → 켜짐으로 바뀌면서 도장 연출이 재생됩니다.
         // (SetBankrupt를 따로 한 번 더 부르면, 두 번째 호출이 진행 중인 도장 연출을 멈추고 최종 모습으로 바꿔 버림)
-        RefreshAllPlayers();
+        RefreshPlayerCards();
     }
 
     // 총 자산 = 현금 + 가진 땅의 투자금(땅값 + 지은 건물 비용). 계산은 PropertyManager.GetTotalAsset (게임 결과와 같은 기준)
@@ -861,7 +891,7 @@ public class UIManager : MonoBehaviour
     }
 
     // 게임 결과 창을 띄우는 함수입니다. 게임이 끝났을 때 GameManager가 호출합니다.
-    // 등수 순(파산한 사람은 맨 뒤)으로 승리/패배/파산과 최종 자산을 보여주고, 닫기를 누르면 onClose를 호출합니다.
+    // 등수 순(파산한 사람은 맨 뒤)으로 승리/패배/파산과 최종 자산을 보여주고, 닫기를 누르면 onClose를 호출합니다. (결과 시간이 지나 자동으로 방으로 돌아갈 때는 호출되지 않습니다)
     public void ShowGameResultPopup(Action onClose = null)
     {
         GameState state = State;
@@ -912,6 +942,7 @@ public class UIManager : MonoBehaviour
 
     private Coroutine resultCountdown;
 
+    // 결과 창의 확인 버튼에 남은 시간을 보여 주고, 0이 되면 방으로 돌아간다
     private System.Collections.IEnumerator ResultCountdown()
     {
         for (int left = Mathf.CeilToInt(resultSeconds); left > 0; left--)
@@ -923,11 +954,9 @@ public class UIManager : MonoBehaviour
         ReturnAfterResult();
     }
 
-    /// <summary>
-    /// 결과 창의 확인 버튼을 눌렀거나 결과 시간이 끝났을 때: 같은 방을 유지한 채 로비 씬으로 돌아가 방 설정을 다시 연다.
-    /// 로비를 거치지 않고 게임 씬만 실행한 경우(방 정보 없음)에는 결과 창을 그대로 둔다.
-    /// </summary>
-    public void ReturnAfterResult()
+    // 결과 창의 확인 버튼을 눌렀거나 결과 시간이 끝났을 때: 같은 방을 유지한 채 로비 씬으로 돌아가 방 설정을 다시 연다.
+    // 로비를 거치지 않고 게임 씬만 실행한 경우(방 정보 없음)에는 결과 창을 그대로 둔다.
+    private void ReturnAfterResult()
     {
         if (resultCountdown != null) { StopCoroutine(resultCountdown); resultCountdown = null; }
         if (gameResult != null) gameResult.SetCountdown(0);
@@ -1088,6 +1117,8 @@ public class UIManager : MonoBehaviour
     public void CloseAllPopups(bool immediate = false)
     {
         ExitSellMode();
+        // 결과 창을 닫았는데 남은 시간이 지나 씬이 넘어가지 않게 한다
+        if (resultCountdown != null) { StopCoroutine(resultCountdown); resultCountdown = null; }
 
         UIView[] popups =
         {
@@ -1104,6 +1135,7 @@ public class UIManager : MonoBehaviour
 
     #region 조회 도우미
 
+    // 파괴된 Unity 객체도 진짜 null로 돌려줘서 "Game != null"만 확인하면 되게 한다
     private GameManager Game => GameManager.Instance != null ? GameManager.Instance : null;
     private GameState State => Game != null ? Game.gameState : null;
 

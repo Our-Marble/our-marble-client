@@ -9,9 +9,13 @@ using UnityEngine.UI;
 using static UIPalette;
 
 /// <summary>
-/// 로비 UI 기능 테스트용 임시 매니저. 서버 없이 가짜 방 데이터로 동작한다.
-/// 웹소켓 연동 전에 화면 흐름을 확인하는 용도라서, 연동할 때는 Rooms 데이터를 서버 메시지로 바꾸면 된다.
+/// 로비 씬 매니저(임시). 서버 없이 가짜 방 데이터로 동작한다.
+/// 방 목록(필터, 상세, 새로고침), 방 만들기, 방 코드/비밀번호 입장, 설정, 접속자 목록, 연결 상태를 맡고,
+/// 방에 들어오면 같은 씬 안에서 방 설정 화면(RoomSetupView)을 열어 준비/팀/모드/맵/최대 인원을 관리한다.
+/// 방장이 시작하면 게임 씬으로 넘어가고, 게임이 끝나면 같은 방으로 돌아와 방 설정을 다시 연다. (씬 이동은 SceneFlow가 맡는다)
+/// 웹소켓 연동 전에 화면 흐름을 확인하는 용도라서, 연동할 때는 rooms 데이터를 서버 메시지로 바꾸면 된다.
 /// UI_LobbyScene의 "UI" 루트를 찾아 이름으로 연결한다.
+/// 테스트용 방 코드는 SeedRooms에 있다.
 /// </summary>
 public class LobbyManager_temp : MonoBehaviour
 {
@@ -82,7 +86,7 @@ public class LobbyManager_temp : MonoBehaviour
     [Tooltip("켜면 다른 방의 인원·게임 진행이 몇 초마다 저절로 바뀐다 (웹소켓 푸시 흉내).")]
     [SerializeField] private bool simulateLiveUpdates = true;
     [SerializeField] private float simulateInterval = 2.5f;
-    [Tooltip("입장·방 만들기 요청에 서버가 응답하기까지 걸리는 시간 흉내(초).")]
+    [Tooltip("입장·방 만들기·방 목록 새로고침·게임 시작 요청에 서버가 응답하기까지 걸리는 시간 흉내(초).")]
     [SerializeField] private float serverDelay = 0.6f;
 
     // 실행 중 F2를 누르면 연결 상태가 연결됨 → 재연결 중 → 끊김 순으로 바뀐다 (화면 확인용)
@@ -116,11 +120,14 @@ public class LobbyManager_temp : MonoBehaviour
         public TMP_Text Nick;
     }
 
-    // 상단바
-    private Button settingsButton, exitButton;
+    // 상단바 / 방 목록 위 버튼
+    private Button settingsButton, exitButton, refreshButton;
+    private bool refreshing; // 방 목록 새로고침 요청 중이면 true. 중복 요청을 막는다
+
+    // 방 설정 화면 (방에 들어와 있는 동안 쓴다)
     private ExitConfirmView exitConfirm;
     private RoomSetupView roomSetup;
-    private Coroutine mockHostStart;
+    private Coroutine mockHostStart; // 목업: 내가 준비를 마친 뒤 방장이 잠시 후 게임을 시작하는 코루틴
 
     // 방 목록
     private Toggle[] filterToggles;
@@ -188,6 +195,7 @@ public class LobbyManager_temp : MonoBehaviour
     private readonly Dictionary<int, int> pwFails = new Dictionary<int, int>();
     private readonly Dictionary<int, float> pwLockUntil = new Dictionary<int, float>();
 
+    // 입장·방 만들기·게임 시작 요청 처리 중이면 true. 그동안 중복 요청과 다른 입력을 막는다
     private bool entering;
 
     // ───────────── 초기화 ─────────────
@@ -245,6 +253,7 @@ public class LobbyManager_temp : MonoBehaviour
 
         settingsButton = Get<Button>(lobby, "Header/Buttons/SettingsButton");
         exitButton = Get<Button>(lobby, "Header/Buttons/ExitButton");
+        refreshButton = Get<Button>(lobby, "RoomListPanel/RefreshButton");
         connectionDot = Get<Image>(lobby, "Header/Brand/ConnectionChip/Dot");
         connectionText = Get<TMP_Text>(lobby, "Header/Brand/ConnectionChip/ConnectionText");
         listGroup = UIFx.EnsureGroup(lobby.Find("RoomListPanel").gameObject);
@@ -364,6 +373,7 @@ public class LobbyManager_temp : MonoBehaviour
         // 상단바
         settingsButton.onClick.AddListener(settingsView.Open); // 설정 창은 게임 씬과 같은 SettingsView 프리팹을 쓴다
         exitButton.onClick.AddListener(ExitToLogin);
+        refreshButton.onClick.AddListener(RefreshRooms);
 
         // 필터
         for (int i = 0; i < filterToggles.Length; i++)
@@ -414,8 +424,10 @@ public class LobbyManager_temp : MonoBehaviour
 
     private void Update()
     {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
         if (Input.GetKeyDown(KeyCode.F2))
             SetConnection((ConnectionState)(((int)connection + 1) % 3), true);
+#endif
 
         if (!Input.GetKeyDown(KeyCode.Escape) || entering) return;
         if (settingsView.IsOpen) settingsView.Close();
@@ -460,7 +472,7 @@ public class LobbyManager_temp : MonoBehaviour
 
     private void ShowToast(string message) => toast.Show(message);
 
-    private void ShowLoading(bool show) => loading.Show(show);
+    private void ShowLoading(bool show, string message = null) => loading.Show(show, message);
 
     /// <summary>못 들어가는 이유. 들어갈 수 있으면 null.</summary>
     private string JoinBlockedMessage(RoomData room)
@@ -486,7 +498,10 @@ public class LobbyManager_temp : MonoBehaviour
         ShowToast("로그인 화면이 아직 없어요");
     }
 
-    /// <summary>게임 씬이 읽어 갈 방 정보를 채운다. 내가 방장이면 맨 앞, 아니면 빈 색 중 첫 번째로 들어간다.</summary>
+    /// <summary>
+    /// 방 정보(CurrentRoom)를 채운다. 방 설정 화면과 게임 씬이 읽는다.
+    /// 내가 방장이면 맨 앞, 아니면 빈 색 중 첫 번째 자리로 들어간다. (목업: 방장으로 만든 방은 빈자리를 가짜 인원으로 채우고, 팀전이면 팀을 번갈아 배정한다)
+    /// </summary>
     private void FillCurrentRoom(RoomData room, bool asHost)
     {
         // 다른 사람들은 이미 준비를 마쳤다고 본다 (목업)
@@ -507,7 +522,7 @@ public class LobbyManager_temp : MonoBehaviour
         }
 
         // 팀전의 기본 팀은 자리 순서대로 레드, 블루, 레드, 블루. (팀 "미선택"은 없다) 방 설정에서 바꿀 수 있다.
-        for (int i = 0; i < players.Count; i++) players[i].Team = room.IsTeam ? 1 + (i % 2) : 0;
+        AssignDefaultTeams(players, room.IsTeam);
 
         CurrentRoom = new RoomInfo
         {
@@ -524,16 +539,16 @@ public class LobbyManager_temp : MonoBehaviour
         };
     }
 
-    // ───────────── 게임 씬으로 넘기는 정보 / 씬 이동 ─────────────
+    // ───────────── 방 정보 (방 설정과 게임 씬이 함께 읽는다) ─────────────
 
-    /// <summary>로비가 입장 직전에 채우고, 게임 씬(UIManager)이 읽어 가는 방 정보. 서버 연동 후에는 서버가 내려 주는 값으로 대체한다.</summary>
+    /// <summary>방에 들어올 때 채우는 방 정보. 방 설정(로비 씬)에서 바뀌고, 게임 씬이 읽어 간다. 서버 연동 후에는 서버가 내려 주는 값으로 대체한다.</summary>
     public class RoomInfo
     {
         public string Name;
         public string Code;
-        public string Map;
-        public bool IsTeam;
-        public int MaxPlayers;
+        public string Map;       // 맵 이름. 방 설정에서 방장이 바꾼다
+        public bool IsTeam;      // 팀전 여부. 방 설정에서 방장이 바꾼다
+        public int MaxPlayers;   // 최대 인원(2~4). 방 설정에서 방장이 바꾼다
         public bool HasPassword;
         public string Password; // 방 안에 있는 사람에게만 보여 주는 값. 서버 연동 후에는 서버가 내려 준다
         public bool IsHost;
@@ -571,11 +586,11 @@ public class LobbyManager_temp : MonoBehaviour
         AddSeedRoom("2인 대기방", 0, false, 2, RoomState.Waiting, 0, "다이아");
         AddSeedRoom("3인 대기방", 0, false, 3, RoomState.Waiting, 0, "바둑이", "단풍");
 
-        // 테스트용 고정 방 코드. (방 코드로 입장 팝업에 그대로 입력하면 된다. 순서는 위 방 목록과 같다)
+        // 테스트용 고정 방 코드. 방 코드로 입장 팝업에 그대로 입력하면 된다. 위 AddSeedRoom 호출 순서와 1:1로 대응하므로, 방을 추가하거나 순서를 바꾸면 이 배열도 맞춘다.
         string[] fixedCodes = { "MARBLE", "NEWBIE", "EXPERT", "WEEKND", "FRIEND", "BUILDS", "ONLY22", "DUO222", "TRIO33" };
         for (int i = 0; i < fixedCodes.Length; i++) rooms[i].Code = fixedCodes[i];
 
-        // 자물쇠 표시 확인용: 일부 방에 비밀번호를 건다 (목업이라 값은 의미 없다)
+        // 자물쇠 표시 확인용: 초보 환영방, 주말 마블 한판, 친구들끼리에 비밀번호를 건다 (목업이라 값은 의미 없다)
         foreach (int index in new[] { 1, 3, 4 }) rooms[index].Password = "1234";
     }
 
@@ -626,7 +641,7 @@ public class LobbyManager_temp : MonoBehaviour
         return code;
     }
 
-    // ───────────── 동작 ─────────────
+    // ───────────── 방 입장 ─────────────
 
     private bool CanJoin(RoomData room) =>
         room.State == RoomState.Waiting && !room.IsFull;
@@ -637,7 +652,7 @@ public class LobbyManager_temp : MonoBehaviour
     /// </summary>
     private void TryJoin(RoomData room)
     {
-        if (entering || connection != ConnectionState.Connected) return;
+        if (entering || refreshing || connection != ConnectionState.Connected) return;
         string blocked = JoinBlockedMessage(room);
         if (blocked != null) { ShowToast(blocked); return; }
         if (room.HasPassword) { OpenPasswordPopup(room, false); return; }
@@ -689,7 +704,23 @@ public class LobbyManager_temp : MonoBehaviour
         ShowLoading(true);
         yield return new WaitForSecondsRealtime(serverDelay);
 
-        // 응답이 오는 사이 방이 가득 찼을 수 있다 (새로 만든 방은 해당 없음)
+        // 응답을 기다리는 사이 연결이 끊겼으면 입장하지 않는다
+        if (connection != ConnectionState.Connected)
+        {
+            ShowLoading(false);
+            entering = false;
+            yield break;
+        }
+
+        // 응답이 오는 사이 방이 사라졌거나(게임이 끝남) 가득 찼을 수 있다 (새로 만든 방은 해당 없음)
+        if (!asHost && !rooms.Contains(room))
+        {
+            ShowLoading(false);
+            entering = false;
+            ShowToast("방이 사라졌어요");
+            SyncAll();
+            yield break;
+        }
         string blocked = asHost ? null : JoinBlockedMessage(room);
         if (blocked != null)
         {
@@ -733,7 +764,7 @@ public class LobbyManager_temp : MonoBehaviour
 
     // ───────────── 방 설정 (방 안, 게임 시작 전) ─────────────
 
-    /// <summary>방 설정 화면에 방 정보를 채워 연다. 모드, 팀, 준비, 최대 인원을 바꾸면 방 정보(RoomInfo)에 기록한다.</summary>
+    /// <summary>방 설정 화면에 방 정보를 채워 연다. 모드, 맵, 팀, 준비, 최대 인원을 바꾸면 방 정보(RoomInfo)에 기록한다.</summary>
     private void OpenRoomSetup(RoomInfo room)
     {
         if (roomSetup == null) { Debug.LogError("[Lobby] Canvas_RoomSetup이 로비 씬에 없습니다."); return; }
@@ -791,13 +822,19 @@ public class LobbyManager_temp : MonoBehaviour
         roomSetup.RecountTeams();
     }
 
+    // 팀전이면 자리 순서대로 레드, 블루, 레드, 블루로 나누고, 개인전이면 팀을 없앤다. (0 없음, 1 레드, 2 블루)
+    private static void AssignDefaultTeams(IList<RoomPlayerInfo> players, bool isTeam)
+    {
+        for (int i = 0; i < players.Count; i++) players[i].Team = isTeam ? 1 + (i % 2) : 0;
+    }
+
     // 방장이 모드를 바꿨을 때. 팀전으로 바꾸면 기본 팀은 자리 순서대로 레드, 블루, 레드, 블루다. 개인전이면 팀이 없다.
     private void OnRoomModeChanged(bool isTeam)
     {
         var room = CurrentRoom;
         if (room == null) return;
         room.IsTeam = isTeam;
-        for (int i = 0; i < room.Players.Count; i++) room.Players[i].Team = isTeam ? 1 + (i % 2) : 0;
+        AssignDefaultTeams(room.Players, isTeam);
         ApplyRoomSetupSlots(room);
     }
 
@@ -837,6 +874,8 @@ public class LobbyManager_temp : MonoBehaviour
     {
         yield return new WaitForSecondsRealtime(2f);
         mockHostStart = null;
+        // 기다리는 사이 방을 나갔거나 시작 조건이 깨졌다면 시작하지 않는다
+        if (CurrentRoom == null || !CanStart(CurrentRoom)) yield break;
         ShowToast("방장이 게임을 시작해요");
         StartGameFromRoom();
     }
@@ -853,6 +892,14 @@ public class LobbyManager_temp : MonoBehaviour
         entering = true;
         ShowLoading(true);
         yield return new WaitForSecondsRealtime(serverDelay);
+
+        // 응답을 기다리는 사이 연결이 끊기거나 방을 나갔으면 시작하지 않는다
+        if (connection != ConnectionState.Connected || CurrentRoom == null)
+        {
+            ShowLoading(false);
+            entering = false;
+            yield break;
+        }
 
         Debug.Log($"[Lobby] 게임 씬으로 이동 (방 {CurrentRoom.Code})");
         if (!SceneFlow.ToGame())
@@ -895,7 +942,7 @@ public class LobbyManager_temp : MonoBehaviour
     /// <summary>방을 만들고 방장으로 방 설정 화면에 들어간다. password가 비어 있으면 비밀번호 없는 방.</summary>
     private void CreateRoom(string roomName, string map, bool team, int max, string password)
     {
-        if (entering || connection != ConnectionState.Connected) return;
+        if (entering || refreshing || connection != ConnectionState.Connected) return;
         var room = NewRoom(roomName, map, team, max, password);
         Debug.Log($"[Lobby] 방 생성 요청: {room.Name} ({room.Code}) {(team ? "팀전" : "개인전")} {max}명 {(room.HasPassword ? "비밀번호 있음" : "비밀번호 없음")}");
         StartCoroutine(EnterRoutine(room, true, null));
@@ -948,6 +995,27 @@ public class LobbyManager_temp : MonoBehaviour
     }
 
     // ───────────── 방 목록 ─────────────
+
+    /// <summary>방 목록을 서버에서 다시 받아 온다. 응답을 기다리는 동안 로딩 화면을 띄운다. (목업: 잠깐 기다린 뒤 지금 목록을 다시 그린다)</summary>
+    private void RefreshRooms()
+    {
+        if (refreshing || entering || connection != ConnectionState.Connected) return;
+        StartCoroutine(RefreshRoutine());
+    }
+
+    private IEnumerator RefreshRoutine()
+    {
+        refreshing = true;
+        ShowLoading(true, ""); // 문구 없이 점만
+        yield return new WaitForSecondsRealtime(serverDelay);
+        ShowLoading(false);
+        refreshing = false;
+
+        // 연결이 끊겼으면 갱신 결과를 보여 주지 않는다
+        if (connection != ConnectionState.Connected) yield break;
+        SyncAll();
+        ShowToast("방 목록을 새로 불러왔어요");
+    }
 
     private void SyncAll()
     {
@@ -1043,7 +1111,7 @@ public class LobbyManager_temp : MonoBehaviour
         row.Thumb.color = Color.white;
         row.ThumbStroke.color = RowStroke;
         row.Lock.SetActive(room.HasPassword);
-        row.Number.text = (room.Id % 100).ToString("00");
+        row.Number.text = (room.Id % 100).ToString("00"); // 목록 번호: 방 Id의 끝 두 자리
         row.Name.text = room.Name;
         row.Info.text = $"{room.Map} · 방장 {room.Host?.Name}";
 
@@ -1196,7 +1264,7 @@ public class LobbyManager_temp : MonoBehaviour
         string password = passwordInput.text;
         if (password.Length > 0 && password.Length != 4) { UIFx.Shake(passwordInput.transform); ShowToast("비밀번호는 4자리로 입력해 주세요"); return; }
 
-        int max = 2 + Array.FindIndex(maxToggles, t => t.isOn);
+        int max = 2 + Mathf.Max(0, Array.FindIndex(maxToggles, t => t.isOn)); // 최대 인원 토글은 2명부터. 아무것도 안 켜져 있으면 2명
         CreateRoom(roomName, Maps[mapIndex], modeToggles[1].isOn, max, password.Length > 0 ? password : null);
         createPopup.Close();
     }
@@ -1322,7 +1390,6 @@ public class LobbyManager_temp : MonoBehaviour
         public GameObject Go;
         public Image StatusChip;
         public TMP_Text Name, Sub, StatusText;
-        public RectTransform NameRect;
     }
 
     /// <summary>방 안 플레이어와 로비에 있는 플레이어를 합쳐 "서버에 있는 사람" 목록을 만든다. 나도 목록의 한 명으로만 들어간다.</summary>
@@ -1372,7 +1439,6 @@ public class LobbyManager_temp : MonoBehaviour
         {
             Go = go,
             Name = Get<TMP_Text>(t, "NameText"),
-            NameRect = (RectTransform)t.Find("NameText"),
             Sub = Get<TMP_Text>(t, "RoomText"),
             StatusChip = Get<Image>(t, "StatusChip"),
             StatusText = Get<TMP_Text>(t, "StatusChip/Text"),
