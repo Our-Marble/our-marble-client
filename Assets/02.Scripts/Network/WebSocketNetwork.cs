@@ -9,8 +9,8 @@ public class WebSocketNetwork : Singleton<WebSocketNetwork>
 {
     private WebSocket websocket;
 
-    private long localPlayerId;
-    private string localPlayerNickname;
+    public long LocalPlayerId { get; private set; }
+    public string LocalPlayerNickname { get; private set; }
     
     private void Awake()
     {
@@ -104,8 +104,8 @@ public class WebSocketNetwork : Singleton<WebSocketNetwork>
         {
             case "INIT_LOCAL_PLAYER_INFO":
             {
-                localPlayerId = long.TryParse(jsonObject["type"]?.ToString(), out long result) ? result : 0;
-                localPlayerNickname = jsonObject["nickName"]?.ToString() ?? "이름 지정되지 않음";
+                LocalPlayerId = long.TryParse(jsonObject["type"]?.ToString(), out long result) ? result : 0;
+                LocalPlayerNickname = jsonObject["nickName"]?.ToString() ?? "이름 지정되지 않음";
                 break;
             }
             default:
