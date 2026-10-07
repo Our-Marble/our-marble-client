@@ -6,6 +6,9 @@ using UnityEngine;
 
 public class GameNetwork : Singleton<GameNetwork>
 {
+    private Queue<GameBroadCastMessage> messageQueue = new Queue<GameBroadCastMessage>();
+    public int QueuedMessageCount => messageQueue.Count;
+    
     private async void SendGameMessage(string message)
     {
         await WebSocketNetwork.Instance.SendMessage(message);
@@ -14,75 +17,117 @@ public class GameNetwork : Singleton<GameNetwork>
     public void ReceiveGameMessage(string json)
     {
         JObject jsonObject = JObject.Parse(json);
-        string type = jsonObject["type"]?.ToString() ?? ""; // type 키가 없으면 null 대신 빈 문자열 할당
+        string typeString = jsonObject["type"]?.ToString() ?? ""; // type 키가 없으면 null 대신 빈 문자열 할당
         
-        if (Enum.TryParse<BroadcastType>(type, out BroadcastType parsedType))
+        if (Enum.TryParse<BroadcastType>(typeString, out BroadcastType parsedType))
         {
-            Debug.Log($"식별할 수 없는 type입니다.: {type}");
+            Debug.Log($"식별할 수 없는 type입니다.: {typeString}");
             return;
         }
         
-        switch (parsedType)
+        GameBroadCastMessage message = new GameBroadCastMessage
+        {
+            Type = parsedType,
+            Json = json
+        };
+
+        lock (messageQueue) // 메인 스레드와 네트워크 스레드 충돌 대비 락 (네트워크 스레드가 Enqueue하는 동안에는 메인 스레드의 접근 차단)
+        {
+            messageQueue.Enqueue(message);
+        }
+        
+        Debug.Log($"[GameNetwork] 메시지 큐 적재: {parsedType} (현재 큐 대기 수: {messageQueue.Count})");
+    }
+    
+    public void TryDequeueMessage(BroadcastType waitingType)
+    {
+        GameBroadCastMessage message;
+        
+        lock (messageQueue)
+        {
+            if (messageQueue.Count > 0)
+            {
+                message = messageQueue.Dequeue();
+            }
+            else
+            {
+                return;
+            }
+        }
+        
+        BroadcastType type = message.Type;
+        string json = message.Json;
+        
+        // 현재 클라이언트에서 기대하는 type과 큐의 가장 앞에있는 type이 일치하지 않는다면, 클라이언트의 시나리오와 서버의 시나리오가 다르게 흘러가고 있다는 뜻임.
+        // Warning Log를 띄우고, 클라이언트에게 새로고침을 요구해야함.
+        // 게임 진행이 멈추진 않지만, 흐름이 완전히 꼬여버릴것. ex) A차례인데 B가 건설하는 등의 상황 발생 가능.
+        if (type != waitingType)
+        {
+            Debug.LogWarning("클라이언트에서 기대하는 type과 서버에서 보내준 브로드캐스트 메시지의 type이 일치하지 않습니다. 정상 진행을 위해 반드시 새로고침을 하세요");
+            // 새로고침을 강제로 하지는 않고, 유저에게 알림만 보냄.
+        }
+
+        switch (type)
         {
             case BroadcastType.BUILT:
             {
-                BuiltBroadcast message =
+                BuiltBroadcast builtBroadcast =
                     JsonUtility.FromJson<BuiltBroadcast>(json);
 
-                OnBuilt?.Invoke(message.playerId, message.propertyId, message.isAccept);
+                OnBuilt?.Invoke(builtBroadcast.playerId, builtBroadcast.propertyId, builtBroadcast.isAccept);
                 break;
             }
             case BroadcastType.CARD_DRAWN:
             {
-                CardDrawnBroadcast message =
+                CardDrawnBroadcast cardDrawnBroadcast =
                     JsonUtility.FromJson<CardDrawnBroadcast>(json);
                 
-                OnCardDrawn?.Invoke(message.playerId, message.cardId);
+                OnCardDrawn?.Invoke(cardDrawnBroadcast.playerId, cardDrawnBroadcast.cardId);
                 break;
             }
             case BroadcastType.DESTINATION_CHOSEN:
             {
-                DestinationChosenBroadcast message =
+                DestinationChosenBroadcast destinationChosenBroadcast =
                     JsonUtility.FromJson<DestinationChosenBroadcast>(json);
                 
-                OnDestinationChosen?.Invoke(message.playerId, message.destinationPosition);
+                OnDestinationChosen?.Invoke(destinationChosenBroadcast.playerId, destinationChosenBroadcast.destinationPosition);
                 break;
             }
             case BroadcastType.DICE_ROLLED:
             {
-                DiceRolledBroadcast message =
+                DiceRolledBroadcast diceRolledBroadcast =
                     JsonUtility.FromJson<DiceRolledBroadcast>(json);
                 
-                OnDiceRolled?.Invoke(message.playerId, message.dice1, message.dice2);
+                OnDiceRolled?.Invoke(diceRolledBroadcast.playerId, diceRolledBroadcast.dice1, diceRolledBroadcast.dice2);
                 break;
             }
             case BroadcastType.PROPERTIES_SOLD:
             {
-                PropertiesSoldBroadcast message =
+                PropertiesSoldBroadcast propertiesSoldBroadcast =
                     JsonUtility.FromJson<PropertiesSoldBroadcast>(json);
                 
-                OnPropertiesSold?.Invoke(message.playerId, message.propertyIds);
+                OnPropertiesSold?.Invoke(propertiesSoldBroadcast.playerId, propertiesSoldBroadcast.propertyIds);
                 break;
             }
             case BroadcastType.PROPERTY_ACQUIRED:
             {
-                PropertyAcquiredBroadcast message =
+                PropertyAcquiredBroadcast propertyAcquiredBroadcast =
                     JsonUtility.FromJson<PropertyAcquiredBroadcast>(json);
                 
-                OnPropertyAcquired?.Invoke(message.playerId, message.propertyId, message.isAccept);
+                OnPropertyAcquired?.Invoke(propertyAcquiredBroadcast.playerId, propertyAcquiredBroadcast.propertyId, propertyAcquiredBroadcast.isAccept);
                 break;
             }
             case BroadcastType.PROPERTY_PURCHASED:
             {
-                PropertyPurchasedBroadcast message =
+                PropertyPurchasedBroadcast propertyPurchasedBroadcast =
                     JsonUtility.FromJson<PropertyPurchasedBroadcast>(json);
                 
-                OnPropertyPurchased?.Invoke(message.playerId, message.propertyId, message.isAccept);
+                OnPropertyPurchased?.Invoke(propertyPurchasedBroadcast.playerId, propertyPurchasedBroadcast.propertyId, propertyPurchasedBroadcast.isAccept);
                 break;
             }
             default:
             {
-                Debug.Log($"식별할 수 없는 type입니다.: {type}");
+                Debug.LogError($"식별할 수 없는 type입니다.: {type}");
                 break;
             }
         }
@@ -185,6 +230,6 @@ public class GameNetwork : Singleton<GameNetwork>
 
 public class GameBroadCastMessage
 {
-    public BroadcastType MessageType;
-    public string JsonPayload;  // 실제 데이터 (JsonUtility 등으로 파싱)
+    public BroadcastType Type;
+    public string Json;
 }

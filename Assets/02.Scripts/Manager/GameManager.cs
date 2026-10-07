@@ -103,7 +103,10 @@ public class GameManager : Singleton<GameManager>
 
     void Update()
     {
+        if (gameState.WaitingType == null) return;
 
+        BroadcastType waitingType = gameState.WaitingType.Value;
+        GameNetwork.Instance.TryDequeueMessage(waitingType);
     }
 
     // ────────────────────────── 로그 / 봇 도우미 ──────────────────────────
