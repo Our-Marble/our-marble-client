@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using UnityEngine;
 
 public class GameState
 {
@@ -9,7 +8,7 @@ public class GameState
     
     public long WelfareFund { get; set; }
 
-    public TurnPhase Phase { get; set; }
+    public BroadcastType? WaitingType { get; set; }
     
     public List<long> PlayerOrder { get; set; }
     
@@ -34,9 +33,4 @@ public class GameState
         PlayerStates = new List<PlayerState>();
         PropertyStates = new List<PropertyState>();
     }
-}
-
-public enum TurnPhase
-{
-    
 }

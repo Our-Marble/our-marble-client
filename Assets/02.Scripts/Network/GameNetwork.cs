@@ -16,9 +16,15 @@ public class GameNetwork : Singleton<GameNetwork>
         JObject jsonObject = JObject.Parse(json);
         string type = jsonObject["type"]?.ToString() ?? ""; // type 키가 없으면 null 대신 빈 문자열 할당
         
-        switch (type)
+        if (Enum.TryParse<BroadcastType>(type, out BroadcastType parsedType))
         {
-            case "BUILT":
+            Debug.Log($"식별할 수 없는 type입니다.: {type}");
+            return;
+        }
+        
+        switch (parsedType)
+        {
+            case BroadcastType.BUILT:
             {
                 BuiltBroadcast message =
                     JsonUtility.FromJson<BuiltBroadcast>(json);
@@ -26,7 +32,7 @@ public class GameNetwork : Singleton<GameNetwork>
                 OnBuilt?.Invoke(message.playerId, message.propertyId, message.isAccept);
                 break;
             }
-            case "CARD_DRAWN":
+            case BroadcastType.CARD_DRAWN:
             {
                 CardDrawnBroadcast message =
                     JsonUtility.FromJson<CardDrawnBroadcast>(json);
@@ -34,7 +40,7 @@ public class GameNetwork : Singleton<GameNetwork>
                 OnCardDrawn?.Invoke(message.playerId, message.cardId);
                 break;
             }
-            case "DESTINATION_CHOSEN":
+            case BroadcastType.DESTINATION_CHOSEN:
             {
                 DestinationChosenBroadcast message =
                     JsonUtility.FromJson<DestinationChosenBroadcast>(json);
@@ -42,7 +48,7 @@ public class GameNetwork : Singleton<GameNetwork>
                 OnDestinationChosen?.Invoke(message.playerId, message.destinationPosition);
                 break;
             }
-            case "DICE_ROLLED":
+            case BroadcastType.DICE_ROLLED:
             {
                 DiceRolledBroadcast message =
                     JsonUtility.FromJson<DiceRolledBroadcast>(json);
@@ -50,7 +56,7 @@ public class GameNetwork : Singleton<GameNetwork>
                 OnDiceRolled?.Invoke(message.playerId, message.dice1, message.dice2);
                 break;
             }
-            case "PROPERTIES_SOLD":
+            case BroadcastType.PROPERTIES_SOLD:
             {
                 PropertiesSoldBroadcast message =
                     JsonUtility.FromJson<PropertiesSoldBroadcast>(json);
@@ -58,7 +64,7 @@ public class GameNetwork : Singleton<GameNetwork>
                 OnPropertiesSold?.Invoke(message.playerId, message.propertyIds);
                 break;
             }
-            case "PROPERTY_ACQUIRED":
+            case BroadcastType.PROPERTY_ACQUIRED:
             {
                 PropertyAcquiredBroadcast message =
                     JsonUtility.FromJson<PropertyAcquiredBroadcast>(json);
@@ -66,7 +72,7 @@ public class GameNetwork : Singleton<GameNetwork>
                 OnPropertyAcquired?.Invoke(message.playerId, message.propertyId, message.isAccept);
                 break;
             }
-            case "PROPERTY_PURCHASED":
+            case BroadcastType.PROPERTY_PURCHASED:
             {
                 PropertyPurchasedBroadcast message =
                     JsonUtility.FromJson<PropertyPurchasedBroadcast>(json);
@@ -95,7 +101,7 @@ public class GameNetwork : Singleton<GameNetwork>
     {
         PropertyDecisionRequest message = new PropertyDecisionRequest
         {
-            type = "BUILD",
+            type = RequestType.BUILD,
             propertyId = propertyId,
             isAccept = isAccept
         };
@@ -108,7 +114,7 @@ public class GameNetwork : Singleton<GameNetwork>
     {
         DrawCardRequest message = new DrawCardRequest
         {
-            type = "DRAW_CARD"
+            type = RequestType.DRAW_CARD
         };
 
         string json = JsonConvert.SerializeObject(message);
@@ -119,7 +125,7 @@ public class GameNetwork : Singleton<GameNetwork>
     {
         ChooseDestinationRequest message = new ChooseDestinationRequest
         {
-            type = "CHOOSE_DESTINATION",
+            type = RequestType.CHOOSE_DESTINATION,
             destinationPosition = destinationPosition
         };
 
@@ -131,7 +137,7 @@ public class GameNetwork : Singleton<GameNetwork>
     {
         RollDiceRequest message = new RollDiceRequest
         {
-            type = "ROLL_DICE"
+            type = RequestType.ROLL_DICE
         };
 
         string json = JsonConvert.SerializeObject(message);
@@ -142,7 +148,7 @@ public class GameNetwork : Singleton<GameNetwork>
     {
         SellPropertiesRequest message = new SellPropertiesRequest
         {
-            type = "SELL_PROPERTIES",
+            type = RequestType.SELL_PROPERTIES,
             propertyIds = propertyIds
         };
         
@@ -154,7 +160,7 @@ public class GameNetwork : Singleton<GameNetwork>
     {
         PropertyDecisionRequest message = new PropertyDecisionRequest
         {
-            type = "ACQUIRE_PROPERTY",
+            type = RequestType.ACQUIRE_PROPERTY,
             propertyId = propertyId,
             isAccept = isAccept
         };
@@ -167,7 +173,7 @@ public class GameNetwork : Singleton<GameNetwork>
     {
         PropertyDecisionRequest message = new PropertyDecisionRequest
         {
-            type = "PURCHASE_PROPERTY",
+            type = RequestType.PURCHASE_PROPERTY,
             propertyId = propertyId,
             isAccept = isAccept
         };
@@ -175,4 +181,10 @@ public class GameNetwork : Singleton<GameNetwork>
         string json = JsonConvert.SerializeObject(message);
         WebSocketNetwork.Instance.SendMessage(json);
     }
+}
+
+public class GameBroadCastMessage
+{
+    public BroadcastType MessageType;
+    public string JsonPayload;  // 실제 데이터 (JsonUtility 등으로 파싱)
 }

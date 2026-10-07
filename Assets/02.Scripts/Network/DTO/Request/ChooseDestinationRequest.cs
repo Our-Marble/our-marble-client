@@ -3,6 +3,6 @@ using System;
 [Serializable]
 public class ChooseDestinationRequest
 {
-    public string type;
+    public RequestType type;
     public int destinationPosition;
 }

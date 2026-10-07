@@ -3,5 +3,5 @@ using System;
 [Serializable]
 public class RollDiceRequest
 {
-    public string type;
+    public RequestType type;
 }
