@@ -88,7 +88,7 @@ public class UIManager : MonoBehaviour
                 topBar.SetPlayerCount(room.Players.Count, room.MaxPlayers);
             }
             topBar.SetPassword(room != null && room.HasPassword ? room.Password : null); // 비밀번호 방이면 인원수 옆에 표시
-            topBar.SetCallbacks(settings != null ? settings.Toggle : (Action)null, RequestExit);
+            topBar.SetCallbacks(settings != null ? settings.Open : (Action)null, RequestExit);
         }
     }
 

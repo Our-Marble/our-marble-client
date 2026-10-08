@@ -430,7 +430,7 @@ public class LobbyManager_temp : MonoBehaviour
 #endif
 
         if (!Input.GetKeyDown(KeyCode.Escape) || entering) return;
-        if (settingsView.IsOpen) settingsView.Close();
+        if (settingsView.IsOpen) return; // 설정 창은 창 아래의 닫기 버튼으로만 닫는다
         else if (roomSetup != null && roomSetup.IsOpen) return; // 방 안에서는 X 버튼으로만 나간다
         else if (passwordPopup.IsOpen) passwordPopup.Close();
         else if (createPopup.IsOpen) createPopup.Close();
