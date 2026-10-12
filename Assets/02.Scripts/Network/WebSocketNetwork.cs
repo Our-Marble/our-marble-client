@@ -8,7 +8,8 @@ using UnityEngine;
 public class WebSocketNetwork : Singleton<WebSocketNetwork>
 {
     private WebSocket websocket;
-    
+    public long LocalPlayerId { get; private set; }
+
     private void Awake()
     {
         // NativeWebSocket 공식 문서에는 WebGL에서 브라우저 탭이 포커스를 잃었을 때 Unity 게임 루프가 멈출 수 있어서 Application.runInBackground = true를 설정하는 것을 권장
