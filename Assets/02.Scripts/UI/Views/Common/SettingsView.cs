@@ -5,6 +5,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 설정 팝업. Canvas_Settings에 붙는다. 로비와 게임 씬이 같은 프리팹을 쓴다.
+/// 창 아래의 닫기 버튼으로만 닫는다. (배경을 누르거나 Esc를 눌러도, 설정 버튼을 다시 눌러도 닫히지 않는다.)
 /// 값은 PlayerPrefs에 저장만 하고, 실제 오디오 연결은 사운드 시스템이 생기면 아래 정적 값을 읽어 쓰면 된다.
 /// </summary>
 public class SettingsView : UIView
@@ -35,8 +36,7 @@ public class SettingsView : UIView
 
     [SerializeField] private Channel bgm = new Channel();
     [SerializeField] private Channel sfx = new Channel();
-    [SerializeField] private Button confirmButton;
-    [SerializeField] private Button closeButton;
+    [SerializeField] private Button confirmButton; // 창 아래의 닫기 버튼 (오브젝트 이름은 ConfirmButton)
 
     /// <summary>소리 설정. 사운드 시스템이 읽어 가는 값이다. 꺼져 있으면 볼륨은 0으로 본다.</summary>
     public static float BgmVolume => PlayerPrefs.GetInt(BgmOnKey, 1) == 1 ? PlayerPrefs.GetFloat(BgmKey, 0.7f) : 0f;
@@ -48,7 +48,6 @@ public class SettingsView : UIView
         BindChannel(bgm, w + "BgmSection/", "BgmSlider", "BgmToggle");
         BindChannel(sfx, w + "SfxSection/", "SfxSlider", "SfxToggle");
         confirmButton = Find<Button>(w + "ConfirmButton");
-        closeButton = Find<Button>(w + "CloseButton");
     }
 
     private void BindChannel(Channel c, string section, string sliderName, string toggleName)
@@ -68,17 +67,6 @@ public class SettingsView : UIView
         SetupChannel(bgm, BgmKey, BgmOnKey);
         SetupChannel(sfx, SfxKey, SfxOnKey);
         SetOnClick(confirmButton, Close);
-        SetOnClick(closeButton, Close);
-
-        // 창 밖(어두운 배경)을 눌러도 닫힌다. 배경이 상단바를 덮고 있어서, 열려 있을 때 설정 버튼을 다시 눌러도 이 배경이 받아 닫힌다.
-        var dim = transform.Find(DimPath);
-        if (dim != null)
-        {
-            var dimButton = dim.GetComponent<Button>();
-            if (dimButton == null) dimButton = dim.gameObject.AddComponent<Button>();
-            dimButton.transition = Selectable.Transition.None;
-            dimButton.onClick.AddListener(Close);
-        }
     }
 
     private void SetupChannel(Channel c, string volumeKey, string onKey)
@@ -128,12 +116,5 @@ public class SettingsView : UIView
             group.interactable = on;
             group.alpha = on ? 1f : 0.45f;
         }
-    }
-
-    /// <summary>열려 있으면 닫고, 닫혀 있으면 연다. 상단바 설정 버튼용.</summary>
-    public void Toggle()
-    {
-        if (IsOpen) Close();
-        else Open();
     }
 }

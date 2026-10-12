@@ -4,13 +4,18 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-/// <summary>로비 씬의 방 설정 화면. 방에 들어오면 열리고, 방장이 시작하면 게임 씬으로 넘어간다. Canvas_RoomSetup에 붙는다.</summary>
+/// <summary>
+/// 로비 씬의 방 설정 화면. 방에 들어오면 열리고, 방장이 시작하면 게임 씬으로 넘어간다.
+/// 방장은 모드·맵·최대 인원을 바꾸고 게임을 시작하며, 그 외 플레이어는 준비하기를 누른다.
+/// 바뀐 값은 이벤트(ModeChanged, MaxPlayersChanged, ReadyToggled, LeaveRequested)와 Show의 콜백으로 알리고,
+/// 방 정보(RoomInfo)를 갱신하는 일은 받는 쪽(LobbyManager)이 한다. Canvas_RoomSetup에 붙는다.
+/// </summary>
 public class RoomSetupView : UIView
 {
     public override string PanelPath => "RoomSetupPopup/Window";
     public override string DimPath => "RoomSetupPopup/Dim";
 
-    // 기본값(0)이 "팀 미선택"이 되도록 None을 0으로 둔다
+    // 기본값(0)이 "팀 없음"이 되도록 None을 0으로 둔다. 개인전에서만 None이고, 팀전에서는 항상 레드나 블루로 채워진다.
     public enum Team { None = 0, Red = 1, Blue = 2 }
 
     /// <summary>슬롯 1칸 정보. IsEmpty면 빈 자리로 표시.</summary>
@@ -64,7 +69,6 @@ public class RoomSetupView : UIView
     [SerializeField] private Button startButton;
     [SerializeField] private Button readyButton;
     [SerializeField] private TMP_Text readyLabel;
-    [SerializeField] private TMP_Text hintText;
     [SerializeField] private Button closeButton;
     [SerializeField] private TMP_Text subtitleText;
 
@@ -121,7 +125,6 @@ public class RoomSetupView : UIView
         startButton = Find<Button>(w + "StartButton");
         readyButton = Find<Button>(w + "ReadyButton");
         readyLabel = Find<TMP_Text>(w + "ReadyButton/Label");
-        hintText = Find<TMP_Text>(w + "HintText");
         closeButton = Find<Button>(w + "CloseButton");
         subtitleText = Find<TMP_Text>(w + "SubtitleText");
     }
@@ -167,6 +170,7 @@ public class RoomSetupView : UIView
         Open();
     }
 
+    /// <summary>맵 이름과 미리보기 그림을 바꾼다. 그림이 null이면 이름만 바꾼다.</summary>
     public void SetMap(string mapName, Sprite preview)
     {
         if (mapNameText != null) mapNameText.text = mapName;
@@ -188,6 +192,7 @@ public class RoomSetupView : UIView
         UpdateStartState();
     }
 
+    /// <summary>자리 1칸을 그린다. 모드(개인전/팀전), 팀, 방장, 준비 상태에 따라 색과 배지가 달라진다.</summary>
     public void SetSlot(int index, Slot slot)
     {
         if (index < 0 || index >= slots.Length || slots[index] == null) return;

@@ -28,7 +28,6 @@ public class PlayerInfoView : UIView
     [SerializeField] private float moneyChangeDuration = 1.4f;
     [SerializeField] private float moneyChangeDistance = 24f;
 
-    private int colorIndex;
     private Coroutine moneyChangeRoutine;
     private Vector2 moneyChangeOrigin;
 
@@ -65,12 +64,21 @@ public class PlayerInfoView : UIView
         }
     }
 
+    // 카드가 꺼지면 돈 변화 연출이 중간 위치·투명도로 남지 않게 정리한다 (코루틴은 꺼질 때 멈춘다)
+    private void OnDisable()
+    {
+        moneyChangeRoutine = null;
+        if (moneyChange == null) return;
+        ((RectTransform)moneyChange.transform).anchoredPosition = moneyChangeOrigin;
+        moneyChange.alpha = 1f;
+        moneyChange.gameObject.SetActive(false);
+    }
+
     /// <summary>이름, 초상화, 플레이어 색(0~3).</summary>
     public void SetProfile(string playerName, Sprite portrait, int playerColorIndex)
     {
-        colorIndex = playerColorIndex;
         if (nameText != null) nameText.text = playerName;
-        SetPortrait(portraitImage, portrait, UIPalette.PlayerLightColor(colorIndex));
+        SetPortrait(portraitImage, portrait, UIPalette.PlayerLightColor(playerColorIndex));
     }
 
     /// <summary>등수(1~4). 이전과 달라지면 배지가 뒤집히며 바뀐다(첫 설정은 바로 표시).</summary>
@@ -82,6 +90,9 @@ public class PlayerInfoView : UIView
 
         if (!flip)
         {
+            // 진행 중인 뒤집기가 나중에 낡은 등수로 덮어쓰지 않게 끊고 모양을 되돌린다
+            rankFlip?.Kill();
+            if (rankBadge != null) rankBadge.transform.localScale = Vector3.one;
             ApplyRank(rank);
             return;
         }
@@ -106,9 +117,16 @@ public class PlayerInfoView : UIView
     private int currentRank;
     private Sequence rankFlip;
 
+    /// <summary>화면에 맞춰 둔(굴러가는 중이면 굴러서 도착할) 현금. 동기화 때 서버 값과 비교한다.</summary>
+    public long CashTarget { get; private set; }
+
+    /// <summary>지금 차례 강조가 켜져 있는지.</summary>
+    public bool IsTurnShown => turnHighlight != null && turnHighlight.activeSelf;
+
     /// <summary>현금과 총 자산. animate면 이전 값에서 굴려서 바뀐다(첫 설정은 바로 표시).</summary>
     public void SetMoney(long cash, long totalAsset, bool animate = true)
     {
+        CashTarget = cash;
         CashRoll.Set(cash, animate);
         TotalRoll.Set(totalAsset, animate);
     }
@@ -217,7 +235,8 @@ public class PlayerInfoView : UIView
     /// <summary>카드 옆에 "사유 +금액"을 띄웠다가 사라지게 한다. amount가 음수면 손실.</summary>
     public void ShowMoneyChange(string reason, long amount)
     {
-        if (moneyChange == null) return;
+        // 꺼진 카드에서는 코루틴을 시작할 수 없어서 건너뛴다
+        if (moneyChange == null || !isActiveAndEnabled) return;
 
         bool gain = amount >= 0;
         if (moneyChangeBackground != null) moneyChangeBackground.color = gain ? UIPalette.GainBg : UIPalette.LossBg;

@@ -1,4 +1,5 @@
 using System;
+using DG.Tweening;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -29,12 +30,14 @@ public class TopBarView : UIView
         exitButton = Find<Button>("TopBar/Buttons/ExitButton");
     }
 
+    /// <summary>방 이름과 방 코드를 보여 준다.</summary>
     public void SetRoom(string roomName, string roomCode)
     {
         if (roomNameText != null) roomNameText.text = roomName;
         if (roomCodeText != null) roomCodeText.text = $"방 코드  {roomCode}";
     }
 
+    /// <summary>"현재 인원 / 최대 인원명"을 보여 준다.</summary>
     public void SetPlayerCount(int current, int max)
     {
         if (playerCountText != null) playerCountText.text = $"{current} / {max}명";
@@ -51,12 +54,23 @@ public class TopBarView : UIView
     /// <summary>라운드 표시를 보일지. 게임이 시작되기 전에는 숨긴다.</summary>
     public void SetRoundVisible(bool visible) => SetActive(turnInfo, visible);
 
-    // 현재 라운드 / 최대 라운드를 표시합니다. (turnText는 씬 오브젝트 연결용 이름이라 그대로 둠)
-    public void SetRound(int round, int maxRound)
+    /// <summary>현재 라운드 / 최대 라운드를 표시한다. animate면 라운드가 바뀔 때 숫자 칸이 톡 튄다. (turnText는 프리팹 연결용 이름이라 그대로 둔다)</summary>
+    public void SetRound(int round, int maxRound, bool animate = false)
     {
+        bool changed = round != shownRound;
+        shownRound = round;
         if (turnText != null) turnText.text = $"{round} <size=70%><color=#C9A770>/ {maxRound}</color></size>";
+        // 라운드가 바뀌었을 때만 숫자 칸이 톡 튄다
+        if (animate && changed && turnInfo != null && turnInfo.activeInHierarchy)
+        {
+            turnInfo.transform.DOKill(true);
+            turnInfo.transform.DOPunchScale(Vector3.one * 0.15f, 0.4f, 6, 0.6f).SetUpdate(true).SetLink(turnInfo);
+        }
     }
 
+    private int shownRound = -1;
+
+    /// <summary>설정·나가기 버튼의 클릭 동작을 정한다. (부를 때마다 이전 동작을 바꾼다)</summary>
     public void SetCallbacks(Action onSettings, Action onExit)
     {
         SetOnClick(settingsButton, onSettings);

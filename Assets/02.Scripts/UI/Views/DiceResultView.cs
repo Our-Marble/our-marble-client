@@ -123,7 +123,7 @@ public class DiceResultView : UIView
         SetActive(doubleSubText, false);
         SetActive(doubleHighlight, false);
         if (totalText != null) totalText.text = "";
-        if (!wasRolling) Open();
+        if (!wasRolling || !gameObject.activeSelf) Open(); // 굴리는 도중 창이 닫혔다면 다시 연다
 
         var die1 = DieOf(die1Pips);
         var die2 = DieOf(die2Pips);

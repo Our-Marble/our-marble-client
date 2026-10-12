@@ -95,15 +95,15 @@ public class LoginManager_temp : MonoBehaviour
         loginButton = Get<Button>(card, "LoginButton");
         signupButton = Get<Button>(card, "SignupButton");
 
-        toast = uiRoot.Find("Canvas_Toast").GetComponent<ToastView>();
-        loading = uiRoot.Find("Canvas_Loading").GetComponent<LoadingView>();
+        toast = Get<ToastView>(uiRoot, "Canvas_Toast");
+        loading = Get<LoadingView>(uiRoot, "Canvas_Loading");
     }
 
     private void WireEvents()
     {
         // 한 줄 입력칸에는 Tab이 글자로 들어가지 않게 한다 (Tab은 칸 이동에만 쓴다)
-        idInput.onValidateInput += (text, index, c) => c == '\t' ? '\0' : c;
-        passwordInput.onValidateInput += (text, index, c) => c == '\t' ? '\0' : c;
+        idInput.onValidateInput += BlockTab;
+        passwordInput.onValidateInput += BlockTab;
         idInput.onValueChanged.AddListener(_ => UpdateLoginEnabled());
         passwordInput.onValueChanged.AddListener(_ => UpdateLoginEnabled());
         idInput.onSubmit.AddListener(_ => passwordInput.ActivateInputField()); // 엔터: 비밀번호 칸으로
@@ -112,6 +112,9 @@ public class LoginManager_temp : MonoBehaviour
         signupButton.onClick.AddListener(() => ShowToast("회원가입은 아직 준비 중이에요"));
         forgotButton.onClick.AddListener(() => ShowToast("비밀번호 찾기는 아직 준비 중이에요"));
     }
+
+    // 입력칸에 탭 문자가 들어가지 않게 막는다
+    private static char BlockTab(string text, int index, char c) => c == '\t' ? '\0' : c;
 
     // 두 칸이 모두 채워져야 로그인 버튼이 켜진다
     private void UpdateLoginEnabled()
@@ -161,6 +164,7 @@ public class LoginManager_temp : MonoBehaviour
             yield break;
         }
 
+        // 성공하면 씬이 넘어가므로 로딩을 켠 채 둔다 (실패했을 때만 아래에서 끈다)
         fails = 0;
         SaveId(id);
         Debug.Log($"[Login] 로그인 성공: {id}");
