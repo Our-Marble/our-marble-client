@@ -54,6 +54,9 @@ public class GameManager : Singleton<GameManager>
     
     protected override void Awake()
     {
+        // 싱글톤 초기화
+        base.Awake();
+
         // gameState 초기화. PropertyStates의 초기화는 Start에서 진행.
         gameState = new  GameState();
         gameState.TurnNumber = 0;
