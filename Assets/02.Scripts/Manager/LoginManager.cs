@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -9,15 +10,17 @@ using UnityEngine.UI;
 /// </summary>
 public class LoginManager : MonoBehaviour
 {
-    private const string SavedIdKey = "Login.SavedId";
-    private const string SaveIdKey = "Login.SaveId";
+    private const string SavedEmailKey = "Login.SavedEmail";
+    private const string SaveEmailKey = "Login.SaveEmail";
     private const int MaxFails = 5;
     private const float LockSeconds = 10f;
+
     [Header("연결")]
     [SerializeField] private Transform uiRoot;
 
-    private TMP_InputField idInput, passwordInput;
-    private Toggle saveIdToggle;
+
+    private TMP_InputField emailInput, passwordInput;
+    private Toggle saveEmailToggle;
     private Button loginButton, signupButton, forgotButton;
 
     private ToastView toast;
@@ -42,23 +45,23 @@ public class LoginManager : MonoBehaviour
         WireEvents();
 
         // 저장해 둔 아이디를 채운다
-        bool save = PlayerPrefs.GetInt(SaveIdKey, 1) == 1;
-        saveIdToggle.SetIsOnWithoutNotify(save);
-        if (save) idInput.text = PlayerPrefs.GetString(SavedIdKey, "");
+        bool save = PlayerPrefs.GetInt(SaveEmailKey, 1) == 1;
+        saveEmailToggle.SetIsOnWithoutNotify(save);
+        if (save) emailInput.text = PlayerPrefs.GetString(SavedEmailKey, "");
         UpdateLoginEnabled();
     }
 
     private void Start()
     {
         // 처음에는 비어 있는 칸에 바로 입력할 수 있게 한다
-        (string.IsNullOrEmpty(idInput.text) ? idInput : passwordInput).ActivateInputField();
+        (string.IsNullOrEmpty(emailInput.text) ? emailInput : passwordInput).ActivateInputField();
     }
 
     private void Update()
     {
         // Tab / Shift+Tab: 아이디 ↔ 비밀번호 칸 이동 (칸이 두 개뿐이라 방향과 상관없이 서로 넘어간다)
         if (!Input.GetKeyDown(KeyCode.Tab) || busy) return;
-        (idInput.isFocused ? passwordInput : idInput).ActivateInputField();
+        (emailInput.isFocused ? passwordInput : emailInput).ActivateInputField();
     }
 
     private static T Get<T>(Transform root, string path) where T : Component
@@ -73,35 +76,38 @@ public class LoginManager : MonoBehaviour
     private void Bind()
     {
         var card = uiRoot.Find("Canvas_Login/LoginCard");
-        idInput = Get<TMP_InputField>(card, "IdInput");
+        emailInput = Get<TMP_InputField>(card, "EmailInput");
         passwordInput = Get<TMP_InputField>(card, "PasswordInput");
-        saveIdToggle = Get<Toggle>(card, "SaveIdToggle");
+        saveEmailToggle = Get<Toggle>(card, "SaveEmailToggle");
         forgotButton = Get<Button>(card, "ForgotButton");
         loginButton = Get<Button>(card, "LoginButton");
         signupButton = Get<Button>(card, "SignupButton");
 
-        toast = uiRoot.Find("Canvas_Toast").GetComponent<ToastView>();
-        loading = uiRoot.Find("Canvas_Loading").GetComponent<LoadingView>();
+        toast = Get<ToastView>(uiRoot, "Canvas_Toast");
+        loading = Get<LoadingView>(uiRoot, "Canvas_Loading");
     }
 
     private void WireEvents()
     {
         // 한 줄 입력칸에는 Tab이 글자로 들어가지 않게 한다 (Tab은 칸 이동에만 쓴다)
-        idInput.onValidateInput += (text, index, c) => c == '\t' ? '\0' : c;
-        passwordInput.onValidateInput += (text, index, c) => c == '\t' ? '\0' : c;
-        idInput.onValueChanged.AddListener(_ => UpdateLoginEnabled());
+        emailInput.onValidateInput += BlockTab;
+        passwordInput.onValidateInput += BlockTab;
+        emailInput.onValueChanged.AddListener(_ => UpdateLoginEnabled());
         passwordInput.onValueChanged.AddListener(_ => UpdateLoginEnabled());
-        idInput.onSubmit.AddListener(_ => passwordInput.ActivateInputField()); // 엔터: 비밀번호 칸으로
+        emailInput.onSubmit.AddListener(_ => passwordInput.ActivateInputField()); // 엔터: 비밀번호 칸으로
         passwordInput.onSubmit.AddListener(_ => TryLogin());                   // 엔터: 로그인
         loginButton.onClick.AddListener(TryLogin);
         signupButton.onClick.AddListener(() => ShowToast("회원가입은 아직 준비 중이에요"));
         forgotButton.onClick.AddListener(() => ShowToast("비밀번호 찾기는 아직 준비 중이에요"));
     }
 
+    // 입력칸에 탭 문자가 들어가지 않게 막는다
+    private static char BlockTab(string text, int index, char c) => c == '\t' ? '\0' : c;
+
     // 두 칸이 모두 채워져야 로그인 버튼이 켜진다
     private void UpdateLoginEnabled()
     {
-        bool ready = idInput.text.Trim().Length > 0 && passwordInput.text.Length > 0;
+        bool ready = emailInput.text.Trim().Length > 0 && passwordInput.text.Length > 0;
         loginButton.interactable = ready;
         loginButton.targetGraphic.color = ready ? UIPalette.Mint : UIPalette.Neutral;
         loginButton.GetComponentInChildren<TMP_Text>().color = ready ? Color.white : UIPalette.InkSub;
@@ -112,9 +118,9 @@ public class LoginManager : MonoBehaviour
     private void TryLogin()
     {
         if (busy) return;
-        string email = idInput.text.Trim();
+        string email = emailInput.text.Trim();
         string password = passwordInput.text;
-        if (email.Length == 0) { UIFx.Shake(idInput.transform); ShowToast("이메일을 입력해 주세요"); return; }
+        if (email.Length == 0) { UIFx.Shake(emailInput.transform); ShowToast("이메일를 입력해 주세요"); return; }
         if (password.Length == 0) { UIFx.Shake(passwordInput.transform); ShowToast("비밀번호를 입력해 주세요"); return; }
         if (Time.unscaledTime < lockUntil) { ShowToast("잠시 후 다시 시도해 주세요"); return; }
 
@@ -126,32 +132,32 @@ public class LoginManager : MonoBehaviour
         busy = true;
         ShowLoading(true);
 
-        bool loginSucceeded = false;
-        long responseCode = 0;
-        string errorMessage = null;
+        // ── 서버 쪽 계정 확인 (목업) ──
+        yield return StartCoroutine(HttpNetwork.Instance.Login(email, password, HandleLoginResponse));
+    }
 
-        yield return AuthApi.Login(
-            email,
-            password,
-            () => loginSucceeded = true,
-            (code, message) =>
+    private void HandleLoginResponse(string email, bool success)
+    {
+        if (success)
+        {
+            fails = 0;
+            SaveEmail(email);
+            Debug.Log($"[Login] 로그인 성공: {email}");
+            
+            Debug.Log($"TCP 연결을 시도합니다...");
+            WebSocketNetwork.Instance.Connect();
+            
+            if (!SceneFlow.ToLobby())
             {
-                responseCode = code;
-                errorMessage = message;
-            });
-
-        if (!loginSucceeded)
+                ShowLoading(false);
+                busy = false;
+                ShowToast("로비 화면을 불러오지 못했어요");
+            }
+        }
+        else
         {
             ShowLoading(false);
             busy = false;
-
-            if (responseCode != 401)
-            {
-                Debug.LogError($"[Login] 서버 요청 실패 ({responseCode}): {errorMessage}");
-                ShowToast("로그인 서버에 연결할 수 없어요");
-                yield break;
-            }
-
             fails++;
             if (fails >= MaxFails)
             {
@@ -159,7 +165,7 @@ public class LoginManager : MonoBehaviour
                 lockUntil = Time.unscaledTime + LockSeconds;
                 ShowToast("여러 번 틀렸어요. 잠시 후 다시 시도해 주세요");
             }
-            else ShowToast($"이메일 또는 비밀번호가 맞지 않아요 ({fails}/{MaxFails})");
+            else ShowToast($"아이디 또는 비밀번호가 맞지 않아요 ({fails}/{MaxFails})");
             passwordInput.text = "";
             UIFx.Shake(passwordInput.transform);
             passwordInput.ActivateInputField();
@@ -177,14 +183,18 @@ public class LoginManager : MonoBehaviour
         }
     }
 
-    private void SaveId(string id)
+    private void SaveEmail(string email)
     {
-        bool save = saveIdToggle.isOn;
-        PlayerPrefs.SetInt(SaveIdKey, save ? 1 : 0);
-        if (save) PlayerPrefs.SetString(SavedIdKey, id);
-        else PlayerPrefs.DeleteKey(SavedIdKey);
+        bool save = saveEmailToggle.isOn;
+        PlayerPrefs.SetInt(SaveEmailKey, save ? 1 : 0);
+        if (save) PlayerPrefs.SetString(SavedEmailKey, email);
+        else PlayerPrefs.DeleteKey(SavedEmailKey);
     }
 
+    // ───────────── 회원가입 ─────────────
+    
+    
+    
     // ───────────── 알림 메시지(토스트) / 로딩 화면 ─────────────
 
     private void ShowToast(string message) => toast.Show(message);

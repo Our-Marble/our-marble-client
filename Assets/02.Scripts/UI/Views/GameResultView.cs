@@ -18,7 +18,7 @@ public class GameResultView : UIView
         public string Name;
         public Sprite Portrait;
         public int ColorIndex;
-        public long FinalAsset;   // 파산이면 음수
+        public long FinalAsset;   // 파산이면 못 낸 금액만큼 음수 (금액을 모르면 0)
         public bool IsWinner;
         public bool IsBankrupt;
     }
