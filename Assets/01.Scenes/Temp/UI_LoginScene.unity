@@ -132,7 +132,7 @@ GameObject:
   - component: {fileID: 132629245}
   - component: {fileID: 132629244}
   m_Layer: 5
-  m_Name: IdInput
+  m_Name: EmailInput
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1835,7 +1835,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "\uC544\uC774\uB514"
+  m_text: "\uC774\uBA54\uC77C"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: cafdd8020a9b4584ab3202fc6b118037, type: 2}
   m_sharedMaterial: {fileID: -2759815069154269271, guid: cafdd8020a9b4584ab3202fc6b118037, type: 2}
@@ -1945,7 +1945,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LoginManager_temp
   uiRoot: {fileID: 1686478960}
-  lobbyScenePath: Assets/01.Scenes/Temp/UI_LobbyScene.unity
   serverDelay: 0.6
 --- !u!4 &917164153
 Transform:

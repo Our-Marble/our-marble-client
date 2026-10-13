@@ -26,5 +26,7 @@ public enum GameMessageType
     [EnumMember(Value = "AWAITING_SELL")]
     PROPERTIES_SOLD,
     
-    GAME_STATE_SYNC
+    GAME_STATE_SYNC,
+    
+    GAME_ERROR
 }

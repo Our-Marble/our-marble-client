@@ -6,24 +6,15 @@ using UnityEngine;
 
 public class GameNetwork : Singleton<GameNetwork>
 {
-    private Queue<GameBroadCastMessage> messageQueue = new Queue<GameBroadCastMessage>();
+    private Queue<GameServerMessage> messageQueue = new Queue<GameServerMessage>();
     
     private async void SendGameMessage(string message)
     {
         await WebSocketNetwork.Instance.SendMessage(message);
     }
 
-    public void ReceiveGameMessage(string json)
+    public void ReceiveGameMessage(GameMessageType parsedType, string json)
     {
-        JObject jsonObject = JObject.Parse(json);
-        string typeString  = jsonObject["type"]?.ToString() ?? ""; // type 키가 없으면 null 대신 빈 문자열 할당
-        
-        if (Enum.TryParse(typeString, out GameMessageType parsedType))
-        {
-            Debug.Log($"식별할 수 없는 type입니다.: {typeString}");
-            return;
-        }
-        
         // GameState 동기화에 대한 메시지인 경우 큐를 거치지 않고 즉시 처리
         if(parsedType ==  GameMessageType.GAME_STATE_SYNC)
         {
@@ -31,7 +22,7 @@ public class GameNetwork : Singleton<GameNetwork>
             return;
         }
         
-        GameBroadCastMessage message = new GameBroadCastMessage
+        GameServerMessage serverMessage = new GameServerMessage
         {
             Type = parsedType,
             Json = json
@@ -39,7 +30,7 @@ public class GameNetwork : Singleton<GameNetwork>
 
         lock (messageQueue) // 메인 스레드와 네트워크 스레드 충돌 대비 락 (네트워크 스레드가 Enqueue하는 동안에는 메인 스레드의 접근 차단)
         {
-            messageQueue.Enqueue(message);
+            messageQueue.Enqueue(serverMessage);
         }
         
         Debug.Log($"[GameNetwork] 메시지 큐 적재: {parsedType} (현재 큐 대기 수: {messageQueue.Count})");
@@ -47,13 +38,13 @@ public class GameNetwork : Singleton<GameNetwork>
     
     public void TryDequeueMessage(GameMessageType waitingType)
     {
-        GameBroadCastMessage message;
+        GameServerMessage serverMessage;
         
         lock (messageQueue)
         {
             if (messageQueue.Count > 0)
             {
-                message = messageQueue.Dequeue();
+                serverMessage = messageQueue.Dequeue();
             }
             else
             {
@@ -61,8 +52,8 @@ public class GameNetwork : Singleton<GameNetwork>
             }
         }
         
-        GameMessageType type = message.Type;
-        string json = message.Json;
+        GameMessageType type = serverMessage.Type;
+        string json = serverMessage.Json;
         
         // 현재 클라이언트에서 기대하는 type과 큐의 가장 앞에있는 type이 일치하지 않는다면, 클라이언트의 시나리오와 서버의 시나리오가 다르게 흘러가고 있다는 뜻임.
         // Warning Log를 띄우고, 클라이언트에게 새로고침을 요구해야함.
@@ -78,7 +69,7 @@ public class GameNetwork : Singleton<GameNetwork>
             case GameMessageType.BUILT:
             {
                 BuiltBroadcast builtBroadcast =
-                    JsonUtility.FromJson<BuiltBroadcast>(json);
+                    JsonConvert.DeserializeObject<BuiltBroadcast>(json);
 
                 OnBuilt?.Invoke(builtBroadcast.playerId, builtBroadcast.propertyId, builtBroadcast.isAccept);
                 break;
@@ -86,7 +77,7 @@ public class GameNetwork : Singleton<GameNetwork>
             case GameMessageType.CARD_DRAWN:
             {
                 CardDrawnBroadcast cardDrawnBroadcast =
-                    JsonUtility.FromJson<CardDrawnBroadcast>(json);
+                    JsonConvert.DeserializeObject<CardDrawnBroadcast>(json);
                 
                 OnCardDrawn?.Invoke(cardDrawnBroadcast.playerId, cardDrawnBroadcast.cardId);
                 break;
@@ -94,7 +85,7 @@ public class GameNetwork : Singleton<GameNetwork>
             case GameMessageType.DESTINATION_CHOSEN:
             {
                 DestinationChosenBroadcast destinationChosenBroadcast =
-                    JsonUtility.FromJson<DestinationChosenBroadcast>(json);
+                    JsonConvert.DeserializeObject<DestinationChosenBroadcast>(json);
                 
                 OnDestinationChosen?.Invoke(destinationChosenBroadcast.playerId, destinationChosenBroadcast.destinationPosition);
                 break;
@@ -102,7 +93,7 @@ public class GameNetwork : Singleton<GameNetwork>
             case GameMessageType.DICE_ROLLED:
             {
                 DiceRolledBroadcast diceRolledBroadcast =
-                    JsonUtility.FromJson<DiceRolledBroadcast>(json);
+                    JsonConvert.DeserializeObject<DiceRolledBroadcast>(json);
                 
                 OnDiceRolled?.Invoke(diceRolledBroadcast.playerId, diceRolledBroadcast.dice1, diceRolledBroadcast.dice2);
                 break;
@@ -110,7 +101,7 @@ public class GameNetwork : Singleton<GameNetwork>
             case GameMessageType.PROPERTIES_SOLD:
             {
                 PropertiesSoldBroadcast propertiesSoldBroadcast =
-                    JsonUtility.FromJson<PropertiesSoldBroadcast>(json);
+                    JsonConvert.DeserializeObject<PropertiesSoldBroadcast>(json);
                 
                 OnPropertiesSold?.Invoke(propertiesSoldBroadcast.playerId, propertiesSoldBroadcast.propertyIds);
                 break;
@@ -118,7 +109,7 @@ public class GameNetwork : Singleton<GameNetwork>
             case GameMessageType.PROPERTY_ACQUIRED:
             {
                 PropertyAcquiredBroadcast propertyAcquiredBroadcast =
-                    JsonUtility.FromJson<PropertyAcquiredBroadcast>(json);
+                    JsonConvert.DeserializeObject<PropertyAcquiredBroadcast>(json);
                 
                 OnPropertyAcquired?.Invoke(propertyAcquiredBroadcast.playerId, propertyAcquiredBroadcast.propertyId, propertyAcquiredBroadcast.isAccept);
                 break;
@@ -126,9 +117,18 @@ public class GameNetwork : Singleton<GameNetwork>
             case GameMessageType.PROPERTY_PURCHASED:
             {
                 PropertyPurchasedBroadcast propertyPurchasedBroadcast =
-                    JsonUtility.FromJson<PropertyPurchasedBroadcast>(json);
+                    JsonConvert.DeserializeObject<PropertyPurchasedBroadcast>(json);
                 
                 OnPropertyPurchased?.Invoke(propertyPurchasedBroadcast.playerId, propertyPurchasedBroadcast.propertyId, propertyPurchasedBroadcast.isAccept);
+                break;
+            }
+            case GameMessageType.GAME_ERROR:
+            {
+                GameErrorResponse gameErrorResponse =
+                    JsonConvert.DeserializeObject<GameErrorResponse>(json);
+                    
+                Debug.LogError($"에러 메시지 수신. code: {gameErrorResponse.code}, message: {gameErrorResponse.message}");
+                Debug.Log($"GameState 동기화 요청을 서버에게 보내야합니다.");
                 break;
             }
             default:
@@ -272,8 +272,10 @@ public class GameNetwork : Singleton<GameNetwork>
     }
 }
 
-public class GameBroadCastMessage
+public class GameServerMessage
 {
     public GameMessageType Type;
     public string Json;
 }
+
+
