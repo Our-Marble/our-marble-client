@@ -241,16 +241,17 @@ public class GameNetwork : Singleton<GameNetwork>
     private void HandleGameStateSync(string json)
     {
         // 정상적인 GameState가 왔는지 확인
-        GameState serverGameState = JsonConvert.DeserializeObject<GameState>(json);
-        if (serverGameState.WaitingType == null)
+        JObject jsonObject = JObject.Parse(json);
+        if (jsonObject["gameState"] == null)
         {
-            Debug.Log("[GameNetwork] 서버측 GameState가 아직 준비되지 않았습니다. 5초 뒤 재요청합니다.");
-            Invoke("SendGameStateRequest", 5f);
+            Debug.Log("[GameNetwork] 서버측 GameState가 아직 준비되지 않았습니다. 3초 뒤 재요청합니다.");
+            Invoke("SendGameStateRequest", 3f);
             return;
         }
-
+        
         Debug.Log("[GameNetwork] 싱크 응답 수신. 큐를 초기화하고 상태를 강제 동기화합니다.");
-
+        GameState serverGameState = jsonObject["gameState"]?.ToObject<GameState>();
+        
         // 메시지 큐 Clear
         lock (messageQueue)
         {

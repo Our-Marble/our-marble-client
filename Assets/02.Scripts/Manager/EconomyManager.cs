@@ -12,7 +12,7 @@ public class EconomyManager : Singleton<EconomyManager>
 
     protected override void OnAwake()
     {
-
+        
     }
 
     // ───────────── 알림 ─────────────

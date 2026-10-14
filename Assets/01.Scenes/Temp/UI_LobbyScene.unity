@@ -14275,7 +14275,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 760069679}
-  - component: {fileID: 760069678}
+  - component: {fileID: 760069680}
   m_Layer: 0
   m_Name: LobbyManager
   m_TagString: Untagged
@@ -14283,27 +14283,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &760069678
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 760069677}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1a91a08119753ae4da3616023983af75, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::LobbyManager_temp
-  uiRoot: {fileID: 853604013}
-  selectedStrokeSprite: {fileID: 21300000, guid: d91eddb9e98056d4c89b15ef81ea6c97, type: 3}
-  mapSprites:
-  - {fileID: 21300000, guid: 0bf210341f14cb04da0b4d4bbe3519f6, type: 3}
-  - {fileID: 21300000, guid: 0eeb556fbf4d3f747af36793ac66e712, type: 3}
-  - {fileID: 21300000, guid: ae52c0c2d78ff794bbfc16c483dc463d, type: 3}
-  simulateLiveUpdates: 1
-  simulateInterval: 2.5
-  serverDelay: 0.6
 --- !u!4 &760069679
 Transform:
   m_ObjectHideFlags: 0
@@ -14319,6 +14298,25 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &760069680
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 760069677}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e6cbffb74cb733441b858c3771cee215, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LobbyManager
+  uiRoot: {fileID: 853604013}
+  selectedStrokeSprite: {fileID: 21300000, guid: d91eddb9e98056d4c89b15ef81ea6c97, type: 3}
+  mapSprites:
+  - {fileID: 21300000, guid: 0bf210341f14cb04da0b4d4bbe3519f6, type: 3}
+  - {fileID: 21300000, guid: 0eeb556fbf4d3f747af36793ac66e712, type: 3}
+  - {fileID: 21300000, guid: ae52c0c2d78ff794bbfc16c483dc463d, type: 3}
+  requestTimeout: 10
 --- !u!1 &773407561
 GameObject:
   m_ObjectHideFlags: 0
@@ -33462,7 +33460,7 @@ MonoBehaviour:
   m_fontMaterials: []
   m_fontColor32:
     serializedVersion: 2
-    rgba: 4285421782
+    rgba: 4285091402
   m_fontColor: {r: 0.2901961, g: 0.30588236, b: 0.4117647, a: 1}
   m_enableVertexGradient: 0
   m_colorMode: 3

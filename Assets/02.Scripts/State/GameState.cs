@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 
 public class GameState
 {
@@ -7,7 +9,8 @@ public class GameState
     public long CurrentPlayerId { get; set; }
     
     public long WelfareFund { get; set; }
-
+    
+    [JsonProperty("phase")]
     public GameMessageType? WaitingType { get; set; }
     
     public bool IsDouble { get; set; }
@@ -16,11 +19,11 @@ public class GameState
     
     public bool IsGameOver { get; set; }
     
-    public GameConfig GameConfig { get; set; }
-    
     public List<long> PlayerOrder { get; set; }
     
     public List<PlayerState> PlayerStates { get; set; }
     
     public List<PropertyState> PropertyStates{ get; set; }
+    
+    public GameConfig Config { get; set; }
 }
