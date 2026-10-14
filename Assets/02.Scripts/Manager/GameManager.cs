@@ -627,7 +627,7 @@ public class GameManager : Singleton<GameManager>
 
                 break;
         }
-
+        
     }
     #endregion
 

@@ -1,0 +1,1057 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
+using DG.Tweening;
+using TMPro;
+using UnityEngine;
+using UnityEngine.UI;
+using static UIPalette;
+
+/// <summary>
+/// 로비 씬 매니저. 서버(LobbyNetwork)가 보내 주는 RoomSummary / RoomSnapshot으로 화면을 그린다.
+/// - 방 목록: RoomSummary 목록 (OnRoomList)
+/// - 방 안(방 설정 화면): RoomSnapshot (OnRoomEntered + OnRoomUpdated)
+/// 클라이언트는 요청만 보내고, 화면은 서버 응답이 올 때만 바꾼다.
+/// 방장이 시작하면(OnGameStarted) 게임 씬으로 넘어가고, 게임이 끝나면 같은 방으로 돌아와 방 설정을 다시 연다. (씬 이동은 SceneFlow가 맡는다)
+/// UI_LobbyScene의 "UI" 루트를 찾아 이름으로 연결한다.
+/// </summary>
+public class LobbyManager : MonoBehaviour
+{
+    // ───────────── 상수 ─────────────
+
+    // mapId → 맵 이름. 서버의 mapId와 같은 순서여야 한다
+    private static readonly string[] Maps = { "클래식 월드", "도시 탐험", "해변 마을" };
+
+    private static readonly Color RowStroke = new Color32(220, 225, 236, 255);
+    private static readonly Color SoloRowBg = new Color32(240, 250, 245, 255);
+    private static readonly Color SoloRowStroke = new Color32(196, 232, 214, 255);
+    private static readonly Color SoloRowStrokeOn = new Color32(92, 201, 154, 255);
+    private static readonly Color DotEmpty = new Color32(226, 229, 238, 255);
+
+    [Header("연결")]
+    [SerializeField] private Transform uiRoot;
+
+    [Tooltip("선택한 방 행의 두꺼운 테두리 (UI_RoundedStroke_Thick).")]
+    [SerializeField] private Sprite selectedStrokeSprite;
+
+    [Tooltip("맵 초상화. mapId 순서(클래식 월드, 도시 탐험, 해변 마을).")]
+    [SerializeField] private Sprite[] mapSprites = new Sprite[3];
+
+    [Header("서버")]
+    [Tooltip("요청을 보낸 뒤 이 시간(초) 안에 응답이 없으면 로딩을 닫고 알린다.")]
+    [SerializeField] private float requestTimeout = 10f;
+
+    private static LobbyNetwork Net => LobbyNetwork.Instance;
+
+    // TODO: LobbyNetwork(또는 로그인 세션)에서 내 playerId를 가져오는 실제 속성 이름으로 바꾼다
+    private static long MyPlayerId => WebSocketNetwork.Instance.LocalPlayerId;
+
+    // ───────────── 상태 ─────────────
+
+    private enum ConnectionState { Connected, Reconnecting, Disconnected }
+    private ConnectionState connection = ConnectionState.Connected;
+
+    // 응답을 기다리는 요청. 기다리는 동안 다른 요청과 입력을 막는다
+    private enum Pending { None, RoomList, Enter, Leave, Start }
+    private Pending pending;
+    private Coroutine timeoutRoutine;
+    private bool refreshToast; // 사용자가 새로고침을 눌러 받은 목록이면 토스트를 띄운다
+    private bool Busy => pending != Pending.None;
+    private bool CanRequest => !Busy && connection == ConnectionState.Connected;
+
+    private readonly List<RoomSummary> rooms = new List<RoomSummary>();
+    private readonly Dictionary<string, RowView> rows = new Dictionary<string, RowView>();
+    private string selectedId;
+    private RoomSummary Selected => selectedId == null ? null : rooms.FirstOrDefault(r => r.roomId == selectedId);
+
+    // OnRoomEntered를 받았고 아직 OnRoomLeft를 받지 않았다
+    private bool inRoom;
+    // 스냅샷을 방 설정 화면에 적용하는 중이면 true. 그 사이 화면이 쏘는 이벤트를 서버로 다시 보내지 않는다
+    private bool applyingSnapshot;
+
+    // ───────────── 방 정보 (방 설정과 게임 씬이 함께 읽는다) ─────────────
+
+    /// <summary>지금 들어가 있는 방의 최신 스냅샷. 로비를 거치지 않고 게임 씬만 실행하면 null.</summary>
+    public static RoomSnapshot CurrentRoom { get; private set; }
+
+    // 에디터에서 도메인 리로드 없이 플레이를 다시 시작해도 이전 플레이의 방 정보가 남지 않게 한다
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics() => CurrentRoom = null;
+
+    // ───────────── UI 참조 ─────────────
+
+    private class RowView
+    {
+        public GameObject Go;
+        public Button Row, Join;
+        public GameObject Lock;
+        public Image Bg, Stroke, Thumb, ThumbStroke, ModeChip, StatusChip, JoinImage;
+        public TMP_Text Number, Name, Info, StatusText, Count, JoinLabel;
+        public Image[] Dots;
+    }
+
+    private class SlotView
+    {
+        public GameObject Go;
+        public Image Bg, Stroke, Portrait, Ring;
+        public GameObject Host;
+        public TMP_Text Nick;
+    }
+
+    // 상단바 / 방 목록 위 버튼
+    private Button settingsButton, exitButton, refreshButton;
+
+    // 방 설정 화면
+    private ExitConfirmView exitConfirm;
+    private RoomSetupView roomSetup;
+
+    // 방 목록
+    private Toggle joinableOnlyToggle;
+    private TMP_Text joinableOnlyLabel;
+    private RectTransform rowContent;
+    private GameObject rowTemplate;
+    private Sprite normalStrokeSprite;
+
+    // 오른쪽 열
+    private GameObject profileCard, playerListCard, detailCard;
+    private TMP_Text nicknameText, recordText, marbleText;
+    private Button quickStartButton, createRoomButton, joinByCodeButton;
+    private GameObject detailLockChip;
+    private TMP_Text detailTitle, detailStatusText, detailMap, detailCount;
+    private Image detailModeChip, detailStatusChip;
+    private Button detailClose, detailJoin;
+    private Image detailJoinImage;
+    private TMP_Text detailJoinLabel;
+    private GameObject detailProgress;
+    private readonly SlotView[] slots = new SlotView[4];
+
+    // 방 만들기 팝업
+    private PopupView createPopup;
+    private TMP_Text mapNameText;
+    private Image mapPreviewImage;
+    private Button prevMapButton, nextMapButton, createCancel, createConfirm, createClose;
+    private Toggle[] maxToggles;
+    private int mapIndex;
+
+    // 코드 입장 팝업
+    private PopupView joinPopup;
+    private TMP_InputField codeInput;
+    private Button joinCancel, joinConfirm, joinClose;
+    private Image joinConfirmImage;
+
+    // 설정 팝업
+    private SettingsView settingsView;
+
+    // 연결 상태 / 빈 화면 / 토스트 / 로딩
+    private Image connectionDot;
+    private TMP_Text connectionText;
+    private CanvasGroup listGroup, sideGroup;
+    private GameObject emptyState;
+    private ToastView toast;
+    private LoadingView loading;
+
+    // ───────────── 초기화 ─────────────
+
+    private void Reset()
+    {
+        var ui = GameObject.Find("UI");
+        if (ui != null) uiRoot = ui.transform;
+    }
+
+    private void Awake()
+    {
+        if (uiRoot == null) Reset();
+        if (uiRoot == null) { Debug.LogError("[Lobby] 'UI' 루트를 찾을 수 없습니다.", this); enabled = false; return; }
+
+        // 게임을 마치고 같은 방으로 돌아온 경우만 방을 유지한다
+        if (!SceneFlow.IsReturningToRoom) CurrentRoom = null;
+        inRoom = CurrentRoom != null;
+
+        Bind();
+        WireEvents();
+        RefreshProfile();
+        ShowProfile(false);
+        SetConnection(ConnectionState.Disconnected, false);
+        SyncAll();
+    }
+
+    private void Start()
+    {
+        // 게임이 끝나 같은 방으로 돌아왔다면 방 설정을 다시 띄운다 (준비 해제 등은 서버가 스냅샷으로 알려 준다)
+        if (SceneFlow.ConsumeReopenRoomSetup() && CurrentRoom != null)
+        {
+            OpenRoomSetup(CurrentRoom);
+            RequestRoomList(false); // 방 설정 뒤의 목록은 조용히 받아 둔다
+        }
+        else
+        {
+            RequestRoomList(true);
+        }
+    }
+    
+    private void OnEnable()
+    {
+        if (Net == null) { Debug.LogError("[Lobby] LobbyNetwork.Instance가 없습니다.", this); return; }
+        Net.OnRoomEntered += HandleRoomEntered;
+        Net.OnRoomLeft += HandleRoomLeft;
+        Net.OnRoomList += HandleRoomList;
+        Net.OnRoomUpdated += HandleRoomUpdated;
+        Net.OnGameStarted += HandleGameStarted;
+        Net.OnLobbyError += HandleLobbyError;
+        
+        Net.OnConnected += HandleConnected;
+    }
+
+    private void OnDisable()
+    {
+        if (Net == null) return;
+        Net.OnRoomEntered -= HandleRoomEntered;
+        Net.OnRoomLeft -= HandleRoomLeft;
+        Net.OnRoomList -= HandleRoomList;
+        Net.OnRoomUpdated -= HandleRoomUpdated;
+        Net.OnGameStarted -= HandleGameStarted;
+        Net.OnLobbyError -= HandleLobbyError;
+        
+        Net.OnConnected -= HandleConnected;
+    }
+
+    private static T Get<T>(Transform root, string path) where T : Component
+    {
+        var t = root.Find(path);
+        if (t == null) { Debug.LogWarning($"[Lobby] '{root.name}/{path}' 없음"); return null; }
+        var c = t.GetComponent<T>();
+        if (c == null) Debug.LogWarning($"[Lobby] '{root.name}/{path}'에 {typeof(T).Name} 없음");
+        return c;
+    }
+
+    private static void Hide(Transform root, string path)
+    {
+        var t = root.Find(path);
+        if (t != null) t.gameObject.SetActive(false);
+    }
+
+    private void Bind()
+    {
+        var lobby = uiRoot.Find("Canvas_Lobby");
+
+        settingsButton = Get<Button>(lobby, "Header/Buttons/SettingsButton");
+        exitButton = Get<Button>(lobby, "Header/Buttons/ExitButton");
+        refreshButton = Get<Button>(lobby, "RoomListPanel/RefreshButton");
+        connectionDot = Get<Image>(lobby, "Header/Brand/ConnectionChip/Dot");
+        connectionText = Get<TMP_Text>(lobby, "Header/Brand/ConnectionChip/ConnectionText");
+        listGroup = UIFx.EnsureGroup(lobby.Find("RoomListPanel").gameObject);
+        sideGroup = UIFx.EnsureGroup(lobby.Find("SidePanel").gameObject);
+        emptyState = lobby.Find("RoomListPanel/EmptyState").gameObject;
+
+        toast = uiRoot.Find("Canvas_Toast").GetComponent<ToastView>();
+        loading = uiRoot.Find("Canvas_Loading").GetComponent<LoadingView>();
+
+        settingsView = uiRoot.Find("Canvas_Settings").GetComponent<SettingsView>();
+        var exitCanvas = uiRoot.Find("Canvas_ExitConfirm");
+        if (exitCanvas != null) exitConfirm = exitCanvas.GetComponent<ExitConfirmView>();
+        var roomSetupCanvas = uiRoot.Find("Canvas_RoomSetup");
+        if (roomSetupCanvas != null) roomSetup = roomSetupCanvas.GetComponent<RoomSetupView>();
+
+        var list = lobby.Find("RoomListPanel");
+        // RoomSummary에 모드(개인전/팀전) 정보가 없어서 모드 필터는 숨긴다
+        Hide(list, "ModeFilter");
+        joinableOnlyToggle = Get<Toggle>(list, "JoinableOnlyToggle");
+        joinableOnlyLabel = Get<TMP_Text>(list, "JoinableOnlyToggle/Label");
+        rowContent = (RectTransform)list.Find("RoomScroll/Viewport/Content");
+
+        // 첫 행을 복제용 틀로 쓰고 나머지 샘플 행은 치운다
+        rowTemplate = rowContent.Find("RoomRow_1").gameObject;
+        foreach (Transform child in rowContent.Cast<Transform>().ToList())
+        {
+            if (child.gameObject == rowTemplate) continue;
+            child.SetParent(null);
+            Destroy(child.gameObject);
+        }
+        rowTemplate.SetActive(false);
+        normalStrokeSprite = rowTemplate.transform.Find("Stroke").GetComponent<Image>().sprite;
+
+        var side = lobby.Find("SidePanel");
+        profileCard = side.Find("ProfileCard").gameObject;
+        nicknameText = Get<TMP_Text>(side, "ProfileCard/NicknameText");
+        recordText = Get<TMP_Text>(side, "ProfileCard/RecordCard/RecordText");
+        marbleText = Get<TMP_Text>(side, "ProfileCard/MarbleChip/AmountText");
+        // 접속자 목록은 서버가 아직 보내 주지 않아서 숨긴다
+        playerListCard = side.Find("PlayerListCard").gameObject;
+        quickStartButton = Get<Button>(side, "QuickStartButton");
+        createRoomButton = Get<Button>(side, "CreateRoomButton");
+        joinByCodeButton = Get<Button>(side, "JoinByCodeButton");
+
+        // 방 상세 카드
+        detailCard = side.Find("RoomDetailCard").gameObject;
+        var d = detailCard.transform;
+        detailTitle = Get<TMP_Text>(d, "TitleText");
+        detailClose = Get<Button>(d, "CloseButton");
+        detailLockChip = d.Find("ChipRow/LockChip").gameObject;
+        detailModeChip = Get<Image>(d, "ChipRow/ModeChip");
+        detailStatusChip = Get<Image>(d, "ChipRow/StatusChip");
+        detailStatusText = Get<TMP_Text>(d, "ChipRow/StatusChip/Text");
+        detailMap = Get<TMP_Text>(d, "MapInfo/ValueText");
+        detailCount = Get<TMP_Text>(d, "PlayerCountText");
+        detailProgress = d.Find("GameProgress").gameObject;
+        detailJoin = Get<Button>(d, "JoinButton");
+        detailJoinImage = detailJoin.GetComponent<Image>();
+        detailJoinLabel = Get<TMP_Text>(d, "JoinButton/Label");
+        for (int i = 0; i < slots.Length; i++)
+        {
+            var s = d.Find($"PlayerSlots/PlayerSlot_{i + 1}");
+            slots[i] = new SlotView
+            {
+                Go = s.gameObject,
+                Bg = s.GetComponent<Image>(),
+                Stroke = Get<Image>(s, "Stroke"),
+                Portrait = Get<Image>(s, "Portrait/PortraitMask/PortraitImage"),
+                Ring = Get<Image>(s, "Portrait/Ring"),
+                Host = s.Find("Portrait/HostBadge").gameObject,
+                Nick = Get<TMP_Text>(s, "NicknameText"),
+            };
+        }
+
+        // 방 만들기 팝업: 서버로 보낼 수 있는 값은 맵과 최대 인원뿐이라 이름/모드/비밀번호 칸은 숨긴다
+        createPopup = uiRoot.Find("Canvas_CreateRoom").GetComponent<PopupView>();
+        var cw = createPopup.Window;
+        Hide(cw, "NameSection");
+        Hide(cw, "ModeSection");
+        Hide(cw, "PasswordSection");
+        mapNameText = Get<TMP_Text>(cw, "MapSection/MapNameText");
+        mapPreviewImage = Get<Image>(cw, "MapSection/MapPreview/MapImage");
+        prevMapButton = Get<Button>(cw, "MapSection/PrevMapButton");
+        nextMapButton = Get<Button>(cw, "MapSection/NextMapButton");
+        maxToggles = cw.Find("MaxPlayersSection/MaxPlayersToggle").GetComponentsInChildren<Toggle>(true);
+        createCancel = Get<Button>(cw, "CancelButton");
+        createConfirm = Get<Button>(cw, "CreateButton");
+        createClose = Get<Button>(cw, "CloseButton");
+
+        // 코드 입장 팝업
+        joinPopup = uiRoot.Find("Canvas_JoinRoom").GetComponent<PopupView>();
+        var jw = joinPopup.Window;
+        codeInput = Get<TMP_InputField>(jw, "CodeInput");
+        joinCancel = Get<Button>(jw, "CancelButton");
+        joinConfirm = Get<Button>(jw, "JoinButton");
+        joinConfirmImage = joinConfirm.GetComponent<Image>();
+        joinClose = Get<Button>(jw, "CloseButton");
+    }
+
+    private void WireEvents()
+    {
+        // 상단바
+        settingsButton.onClick.AddListener(settingsView.Open);
+        exitButton.onClick.AddListener(ExitToLogin);
+        refreshButton.onClick.AddListener(() => RequestRoomList(true));
+
+        // 필터
+        joinableOnlyToggle.onValueChanged.AddListener(isOn =>
+        {
+            UpdateJoinableToggleVisual(isOn);
+            SyncRows();
+        });
+        UpdateJoinableToggleVisual(joinableOnlyToggle.isOn);
+
+        // 오른쪽 열
+        quickStartButton.onClick.AddListener(QuickStart);
+        createRoomButton.onClick.AddListener(OpenCreatePopup);
+        joinByCodeButton.onClick.AddListener(OpenJoinPopup);
+        detailClose.onClick.AddListener(Deselect);
+        detailJoin.onClick.AddListener(() => { if (selectedId != null) TryJoin(selectedId); });
+
+        // 방 만들기
+        prevMapButton.onClick.AddListener(() => ChangeMap(-1));
+        nextMapButton.onClick.AddListener(() => ChangeMap(1));
+        createCancel.onClick.AddListener(createPopup.Close);
+        createClose.onClick.AddListener(createPopup.Close);
+        createConfirm.onClick.AddListener(ConfirmCreate);
+
+        // 코드 입장
+        codeInput.onValueChanged.AddListener(OnCodeChanged);
+        codeInput.onSubmit.AddListener(_ => ConfirmJoinByCode());
+        joinCancel.onClick.AddListener(joinPopup.Close);
+        joinClose.onClick.AddListener(joinPopup.Close);
+        joinConfirm.onClick.AddListener(ConfirmJoinByCode);
+    }
+
+    private void Update()
+    {
+        // 서버 메시지는 매 프레임 처리한다 (Escape 처리보다 먼저)
+        if (Net != null) Net.TryDequeueMessage();
+
+        if (!Input.GetKeyDown(KeyCode.Escape) || Busy) return;
+        if (settingsView.IsOpen) return; // 설정 창은 닫기 버튼으로만 닫는다
+        if (roomSetup != null && roomSetup.IsOpen) return; // 방 안에서는 X 버튼으로만 나간다
+        if (createPopup.IsOpen) createPopup.Close();
+        else if (joinPopup.IsOpen) joinPopup.Close();
+        else if (selectedId != null) Deselect();
+    }
+
+    // ───────────── 서버 요청 ─────────────
+    // TODO: LobbyNetwork의 실제 메서드 이름/인자에 맞춘다
+
+    private void RequestRoomList(bool userTriggered)
+    {
+        Debug.Log("RequestRoomList 는 잘 호출됨.");
+        if (Net == null || connection != ConnectionState.Connected) return;
+        if (userTriggered)
+        {
+            if (Busy) return;
+            BeginRequest(Pending.RoomList, ""); // 문구 없이 점만
+        }
+        refreshToast = userTriggered;
+        Net.SendRoomListRequest();
+    }
+
+    private void RequestJoin(string roomId)
+    {
+        if (!CanRequest || string.IsNullOrEmpty(roomId)) return;
+        Debug.Log($"[Lobby] 입장 요청: {roomId}");
+        BeginRequest(Pending.Enter);
+        Net.SendEnterRoomRequest(roomId);
+    }
+
+    private void RequestCreate(int mapId, int maxPlayers)
+    {
+        if (!CanRequest) return;
+        Debug.Log($"[Lobby] 방 생성 요청: 맵 {mapId}, {maxPlayers}명");
+        Debug.Log("[Lobby] A");
+        BeginRequest(Pending.Enter);
+        Debug.Log("[Lobby] B");
+        Net.SendCreateRoomRequest();
+    }
+
+    private void RequestLeave()
+    {
+        if (Busy || CurrentRoom == null) return;
+        BeginRequest(Pending.Leave);
+        Net.SendLeaveRoomRequest();
+    }
+
+    private void RequestStartGame()
+    {
+        if (!CanRequest || CurrentRoom == null || !IsHost(CurrentRoom)) return;
+        BeginRequest(Pending.Start);
+        Net.SendStartGameRequest();
+    }
+
+    private void BeginRequest(Pending kind, string loadingMessage = null)
+    {
+        pending = kind;
+        ShowLoading(true, loadingMessage);
+        if (timeoutRoutine != null) StopCoroutine(timeoutRoutine);
+        timeoutRoutine = StartCoroutine(TimeoutRoutine());
+    }
+
+    private void EndRequest()
+    {
+        if (timeoutRoutine != null) { StopCoroutine(timeoutRoutine); timeoutRoutine = null; }
+        if (pending == Pending.None) return;
+        pending = Pending.None;
+        ShowLoading(false);
+    }
+
+    private IEnumerator TimeoutRoutine()
+    {
+        yield return new WaitForSecondsRealtime(requestTimeout);
+        timeoutRoutine = null;
+        if (pending == Pending.None) yield break;
+        EndRequest();
+        ShowToast("서버 응답이 없어요. 잠시 후 다시 시도해 주세요");
+    }
+
+    // ───────────── 서버 응답 ─────────────
+
+    public void HandleConnected(string localNickname)
+    {
+        SetConnectionTrue();
+        RefreshNickname(localNickname);
+    }
+
+    public void HandleRoomList(List<RoomSummary> roomSummaries)
+    {
+        rooms.Clear();
+        if (roomSummaries != null) rooms.AddRange(roomSummaries.Where(r => r != null));
+
+        if (pending == Pending.RoomList) EndRequest();
+        SyncAll();
+        if (refreshToast) ShowToast("방 목록을 새로 불러왔어요");
+        refreshToast = false;
+    }
+
+    // 입장(또는 방 만들기)이 받아들여졌다. 방 정보는 OnRoomUpdated로 온다 (순서가 바뀌어 와도 둘 다 받으면 연다)
+    public void HandleRoomEntered()
+    {
+        inRoom = true;
+        TryOpenRoomSetup();
+    }
+
+    public void HandleRoomUpdated(RoomSnapshot snapshot)
+    {
+        if (snapshot == null) return;
+
+        // 입장 중도, 방 안도 아니면 받을 이유가 없다
+        if (!inRoom && pending != Pending.Enter) return;
+        // 방 안에 있는데 다른 방의 스냅샷이면 무시한다
+        if (inRoom && CurrentRoom != null && CurrentRoom.roomId != snapshot.roomId) return;
+
+        CurrentRoom = snapshot;
+        if (roomSetup != null && roomSetup.IsOpen) ApplyRoomSnapshot(snapshot);
+        else TryOpenRoomSetup();
+    }
+
+    public void HandleRoomLeft()
+    {
+        bool requested = pending == Pending.Leave;
+        EndRequest();
+        inRoom = false;
+        CurrentRoom = null;
+        if (roomSetup != null && roomSetup.IsOpen) roomSetup.Close();
+        if (!requested) ShowToast("방에서 나왔어요");
+        RequestRoomList(false);
+        SyncAll();
+    }
+
+    public void HandleGameStarted(string roomId)
+    {
+        if (CurrentRoom == null || CurrentRoom.roomId != roomId) return;
+
+        // 씬이 넘어갈 때까지 로딩을 띄워 둔다 (방장이 아닌 사람도)
+        if (timeoutRoutine != null) { StopCoroutine(timeoutRoutine); timeoutRoutine = null; }
+        pending = Pending.Start;
+        ShowLoading(true);
+
+        Debug.Log($"[Lobby] 게임 씬으로 이동 (방 {roomId})");
+        if (!SceneFlow.ToGame())
+        {
+            EndRequest();
+            ShowToast("게임 화면을 불러오지 못했어요");
+        }
+    }
+
+    public void HandleLobbyError(string code, string message)
+    {
+        Debug.LogWarning($"[Lobby] 서버 오류 {code}: {message}");
+        bool wasEntering = pending == Pending.Enter;
+        EndRequest();
+        ShowToast(string.IsNullOrEmpty(message) ? "요청을 처리하지 못했어요" : message);
+
+        // 입장 실패면 방이 사라졌거나 찼을 수 있으니 목록을 다시 받는다
+        if (wasEntering) RequestRoomList(false);
+    }
+
+    // ───────────── 연결 상태 ─────────────
+
+    // TODO: LobbyNetwork의 연결 상태 이벤트에 연결한다
+    private void SetConnection(ConnectionState state, bool notify)
+    {
+        var previous = connection;
+        connection = state;
+
+        bool online = state == ConnectionState.Connected;
+        connectionDot.color = state == ConnectionState.Connected ? new Color32(140, 220, 184, 255)
+            : state == ConnectionState.Reconnecting ? UIPalette.Gold : UIPalette.Red;
+        connectionText.text = state == ConnectionState.Connected ? "서버 연결됨"
+            : state == ConnectionState.Reconnecting ? "재연결 중..." : "연결 끊김";
+
+        // 연결이 없으면 방 목록과 오른쪽 버튼을 흐리게 하고 누를 수 없게 한다
+        listGroup.interactable = online;
+        sideGroup.interactable = online;
+        listGroup.alpha = online ? 1f : 0.55f;
+        sideGroup.alpha = online ? 1f : 0.55f;
+        if (!online)
+        {
+            EndRequest();
+            createPopup.Close();
+            joinPopup.Close();
+        }
+
+        if (!notify) return;
+        if (state == ConnectionState.Disconnected) ShowToast("서버와 연결이 끊겼어요");
+        else if (state == ConnectionState.Connected && previous != ConnectionState.Connected)
+        {
+            ShowToast("서버에 다시 연결됐어요");
+            RequestRoomList(false);
+        }
+    }
+    
+    private void SetConnectionTrue()
+    {
+        SetConnection(ConnectionState.Connected, true);
+    }
+
+    // ───────────── 토스트 / 로딩 ─────────────
+
+    private void ShowToast(string message) => toast.Show(message);
+
+    private void ShowLoading(bool show, string message = null) => loading.Show(show, message);
+
+    // ───────────── 공통 도우미 ─────────────
+
+    private static bool IsFull(RoomSummary room) => room.playerCount >= room.maxPlayers;
+
+    private static string MapName(int mapId) => mapId >= 0 && mapId < Maps.Length ? Maps[mapId] : $"맵 {mapId}";
+
+    private Sprite MapSprite(int mapId) =>
+        mapSprites != null && mapId >= 0 && mapId < mapSprites.Length ? mapSprites[mapId] : null;
+
+    // 서버 데이터에 방 이름이 없어서 방장 닉네임으로 만든다
+    private static string RoomTitle(string hostNickname) =>
+        string.IsNullOrEmpty(hostNickname) ? "이름 없는 방" : $"{hostNickname}의 방";
+
+    private static bool IsHost(RoomSnapshot room) => room.hostId == MyPlayerId;
+
+    /// <summary>못 들어가는 이유. 들어갈 수 있으면 null.</summary>
+    private static string JoinBlockedMessage(RoomSummary room) => IsFull(room) ? "방이 가득 찼어요" : null;
+
+    // ───────────── 나가기 ─────────────
+
+    private void ExitToLogin()
+    {
+        if (Busy) return;
+        if (exitConfirm != null) exitConfirm.Show(LoadLoginScene, "로그인 화면으로 돌아갈까요?");
+        else LoadLoginScene();
+    }
+
+    private void LoadLoginScene()
+    {
+        if (Busy) return;
+        if (SceneFlow.ToLogin()) return;
+        ShowToast("로그인 화면이 아직 없어요");
+    }
+
+    // ───────────── 방 입장 ─────────────
+
+    /// <summary>목록·상세에서 입장. 가득 찬 방은 미리 막고, 나머지 검증은 서버가 한다.</summary>
+    private void TryJoin(string roomId)
+    {
+        if (!CanRequest) return;
+        var room = rooms.FirstOrDefault(r => r.roomId == roomId);
+        if (room == null) { ShowToast("방이 사라졌어요"); SyncAll(); return; }
+        string blocked = JoinBlockedMessage(room);
+        if (blocked != null) { ShowToast(blocked); return; }
+        RequestJoin(roomId);
+    }
+
+    private void QuickStart()
+    {
+        var target = rooms
+            .Where(r => !IsFull(r))
+            .OrderByDescending(r => r.playerCount)
+            .FirstOrDefault();
+        if (target != null) { RequestJoin(target.roomId); return; }
+
+        Debug.Log("[Lobby] 들어갈 방이 없어 새 방을 만듭니다.");
+        RequestCreate(0, 4);
+    }
+
+    // ───────────── 방 설정 (방 안, 게임 시작 전) ─────────────
+
+    private void TryOpenRoomSetup()
+    {
+        if (!inRoom || CurrentRoom == null) return;
+        if (roomSetup != null && roomSetup.IsOpen) { ApplyRoomSnapshot(CurrentRoom); return; }
+        if (pending == Pending.Enter) EndRequest();
+        Debug.Log($"[Lobby] 방 입장: {CurrentRoom.roomId}, 방장 {IsHost(CurrentRoom)}");
+        OpenRoomSetup(CurrentRoom);
+    }
+
+    private void OpenRoomSetup(RoomSnapshot room)
+    {
+        if (roomSetup == null) { Debug.LogError("[Lobby] Canvas_RoomSetup이 로비 씬에 없습니다."); return; }
+
+        ApplyRoomSnapshot(room);
+
+        roomSetup.ModeChanged -= OnRoomModeChanged;
+        roomSetup.ModeChanged += OnRoomModeChanged;
+        roomSetup.MaxPlayersChanged -= OnRoomMaxPlayersChanged;
+        roomSetup.MaxPlayersChanged += OnRoomMaxPlayersChanged;
+        roomSetup.ReadyToggled -= OnLocalReadyToggled;
+        roomSetup.ReadyToggled += OnLocalReadyToggled;
+        roomSetup.LeaveRequested -= OnLeaveRequested;
+        roomSetup.LeaveRequested += OnLeaveRequested;
+
+        // TODO: 팀 선택은 서버 데이터(PlayerSnapshot)에 팀 필드가 생기면 요청을 보낸다
+        roomSetup.Show(() => RequestChangeMap(-1), () => RequestChangeMap(1),
+            () => { }, () => { },
+            RequestStartGame);
+    }
+
+    /// <summary>스냅샷을 방 설정 화면에 그대로 반영한다. 방 안에서 받는 모든 OnRoomUpdated가 여기로 온다.</summary>
+    private void ApplyRoomSnapshot(RoomSnapshot room)
+    {
+        var players = room.Players ?? new List<PlayerSnapshot>();
+        int local = players.FindIndex(p => p.playerId == MyPlayerId);
+        bool isHost = IsHost(room);
+        var host = players.FirstOrDefault(p => p.playerId == room.hostId);
+
+        applyingSnapshot = true;
+        try
+        {
+            roomSetup.SetRoomInfo(RoomTitle(host?.nickname), room.roomId, null);
+            roomSetup.SetMode(false); // TODO: GameConfig에 모드 정보가 있으면 그 값을 쓴다
+            roomSetup.SetMap(MapName(room.mapId), MapSprite(room.mapId));
+            roomSetup.SetMapSelectable(isHost);
+            roomSetup.SetLocalPlayer(Mathf.Max(0, local));
+            roomSetup.SetMaxPlayers(room.maxPlayers);
+            roomSetup.SetHost(isHost);
+
+            for (int i = 0; i < 4; i++)
+            {
+                if (i >= players.Count) { roomSetup.SetSlot(i, new RoomSetupView.Slot { IsEmpty = true }); continue; }
+                var p = players[i];
+                bool pHost = p.playerId == room.hostId;
+                roomSetup.SetSlot(i, new RoomSetupView.Slot
+                {
+                    IsEmpty = false,
+                    Name = p.nickname,
+                    ColorIndex = i, // 서버 데이터에 색이 없어서 자리 순서로 정한다
+                    IsHost = pHost,
+                    IsReady = pHost || p.ready,
+                    Team = RoomSetupView.Team.None,
+                });
+            }
+            roomSetup.RecountTeams();
+            roomSetup.SetReady(isHost || (local >= 0 && players[local].ready));
+        }
+        finally
+        {
+            applyingSnapshot = false;
+        }
+    }
+
+    // 방장이 맵을 바꿨을 때. 화면은 서버가 새 스냅샷을 보내면 바뀐다
+    private void RequestChangeMap(int step)
+    {
+        var room = CurrentRoom;
+        if (room == null || !IsHost(room) || connection != ConnectionState.Connected) return;
+        int next = ((room.mapId + step) % Maps.Length + Maps.Length) % Maps.Length;
+        //Net.ChangeMap(next);
+    }
+
+    private void OnRoomMaxPlayersChanged(int max)
+    {
+        if (applyingSnapshot || CurrentRoom == null || !IsHost(CurrentRoom)) return;
+        //Net.ChangeMaxPlayers(max);
+    }
+
+    private void OnLocalReadyToggled(bool ready)
+    {
+        if (applyingSnapshot || CurrentRoom == null) return;
+        //Net.SetReady(ready);
+    }
+
+    // TODO: 서버에 모드 변경 요청이 생기면 보낸다. 지금은 서버 값으로 되돌린다
+    private void OnRoomModeChanged(bool isTeam)
+    {
+        if (applyingSnapshot || CurrentRoom == null) return;
+        if (isTeam) ShowToast("팀전은 아직 준비 중이에요");
+        ApplyRoomSnapshot(CurrentRoom);
+    }
+
+    // X 버튼: 방에서 나갈지 묻고, 확인하면 나가기 요청을 보낸다. 화면은 OnRoomLeft를 받으면 닫는다
+    private void OnLeaveRequested()
+    {
+        if (Busy) return;
+        if (exitConfirm != null) exitConfirm.Show(RequestLeave, "방에서 나갈까요?");
+        else RequestLeave();
+    }
+
+    // ───────────── 선택 / 오른쪽 열 전환 ─────────────
+
+    private void Select(string roomId)
+    {
+        bool wasShowingDetail = detailCard.activeSelf;
+        selectedId = roomId;
+        RefreshDetail();
+        UpdateRowHighlights();
+        ShowDetail(!wasShowingDetail);
+    }
+
+    private void Deselect()
+    {
+        if (selectedId == null) return;
+        selectedId = null;
+        UpdateRowHighlights();
+        ShowProfile(true);
+    }
+
+    private void ShowDetail(bool animate)
+    {
+        profileCard.SetActive(false);
+        playerListCard.SetActive(false);
+        detailCard.SetActive(true);
+        if (animate) Fade(detailCard);
+    }
+
+    private void ShowProfile(bool animate)
+    {
+        detailCard.SetActive(false);
+        profileCard.SetActive(true);
+        playerListCard.SetActive(false); // 접속자 목록 데이터가 생기면 다시 켠다
+        if (animate) Fade(profileCard);
+    }
+
+    private static void Fade(GameObject go)
+    {
+        var group = UIFx.EnsureGroup(go);
+        group.DOKill();
+        group.alpha = 0f;
+        group.DOFade(1f, 0.2f).SetUpdate(true).SetLink(go);
+    }
+
+    // ───────────── 방 목록 ─────────────
+
+    private void SyncAll()
+    {
+        // 보고 있던 방이 사라졌으면 내 정보로 돌아간다
+        if (selectedId != null && Selected == null) selectedId = null;
+        if (selectedId == null && detailCard.activeSelf) ShowProfile(true);
+        SyncRows();
+        if (selectedId != null) RefreshDetail();
+    }
+
+    private void UpdateJoinableToggleVisual(bool isOn)
+    {
+        joinableOnlyToggle.targetGraphic.color = isOn ? ReadyBg : Neutral;
+        joinableOnlyLabel.color = isOn ? ReadyText : UIPalette.Ink;
+    }
+
+    private bool IsListed(RoomSummary room) => !joinableOnlyToggle.isOn || !IsFull(room);
+
+    private void SyncRows()
+    {
+        var visible = rooms.Where(IsListed).ToList();
+        var visibleIds = new HashSet<string>(visible.Select(r => r.roomId));
+
+        foreach (var goneId in rows.Keys.Where(id => !visibleIds.Contains(id)).ToList())
+        {
+            rows[goneId].Go.SetActive(false); // Destroy는 프레임 끝에 처리되므로 먼저 숨긴다
+            Destroy(rows[goneId].Go);
+            rows.Remove(goneId);
+        }
+
+        for (int i = 0; i < visible.Count; i++)
+        {
+            var room = visible[i];
+            if (!rows.TryGetValue(room.roomId, out var row))
+            {
+                row = CreateRow(room.roomId);
+                rows[room.roomId] = row;
+            }
+            row.Go.transform.SetSiblingIndex(i + 1); // 0번은 복제용 틀
+            UpdateRow(row, room, i);
+        }
+
+        emptyState.SetActive(visible.Count == 0);
+        UpdateRowHighlights();
+    }
+
+    private RowView CreateRow(string roomId)
+    {
+        var go = Instantiate(rowTemplate, rowContent);
+        go.name = $"RoomRow_{roomId}";
+        go.SetActive(true);
+        var t = go.transform;
+
+        var row = new RowView
+        {
+            Go = go,
+            Row = go.GetComponent<Button>(),
+            Bg = go.GetComponent<Image>(),
+            Stroke = Get<Image>(t, "Stroke"),
+            Thumb = Get<Image>(t, "Thumb"),
+            ThumbStroke = Get<Image>(t, "Thumb/Stroke"),
+            Lock = t.Find("Thumb/LockBadge").gameObject,
+            Number = Get<TMP_Text>(t, "Thumb/NumberText"),
+            Name = Get<TMP_Text>(t, "NameText"),
+            Info = Get<TMP_Text>(t, "InfoText"),
+            ModeChip = Get<Image>(t, "ModeChip"),
+            Count = Get<TMP_Text>(t, "PlayerCountText"),
+            StatusChip = Get<Image>(t, "StatusChip"),
+            StatusText = Get<TMP_Text>(t, "StatusChip/Text"),
+            Join = Get<Button>(t, "JoinButton"),
+            JoinImage = Get<Image>(t, "JoinButton"),
+            JoinLabel = Get<TMP_Text>(t, "JoinButton/Label"),
+            Dots = new Image[4],
+        };
+        for (int i = 0; i < 4; i++) row.Dots[i] = Get<Image>(t, $"PlayerDots/Dot_{i + 1}");
+
+        row.Row.onClick.RemoveAllListeners();
+        row.Row.onClick.AddListener(() => Select(roomId));
+        row.Join.onClick.RemoveAllListeners();
+        row.Join.onClick.AddListener(() => TryJoin(roomId));
+        return row;
+    }
+
+    private void UpdateRow(RowView row, RoomSummary room, int index)
+    {
+        row.Bg.color = SoloRowBg;
+        row.Thumb.color = Color.white;
+        row.ThumbStroke.color = RowStroke;
+        row.Lock.SetActive(false);                 // RoomSummary에 비밀번호 정보가 없다
+        row.ModeChip.gameObject.SetActive(false);  // RoomSummary에 모드 정보가 없다
+        row.Number.text = (index + 1).ToString("00");
+        row.Name.text = RoomTitle(room.hostNickname);
+        row.Info.text = $"{MapName(room.mapId)} · 방장 {room.hostNickname}";
+
+        row.Count.text = $"{room.playerCount} / {room.maxPlayers}";
+        for (int i = 0; i < row.Dots.Length; i++)
+        {
+            row.Dots[i].gameObject.SetActive(i < room.maxPlayers);
+            row.Dots[i].color = i < room.playerCount ? UIPalette.PlayerColor(i) : DotEmpty;
+        }
+
+        bool full = IsFull(room);
+        ApplyStatus(full, row.StatusChip, row.StatusText);
+
+        bool canJoin = !full;
+        row.Join.interactable = canJoin;
+        row.JoinImage.color = canJoin ? Mint : Neutral;
+        row.JoinLabel.text = canJoin ? "참가" : "입장 불가";
+        row.JoinLabel.fontSize = canJoin ? 24 : 18;
+        row.JoinLabel.color = canJoin ? Color.white : UIPalette.InkSub;
+    }
+
+    private static void ApplyStatus(bool full, Image chip, TMP_Text text)
+    {
+        chip.color = full ? RedBg : ReadyBg;
+        text.text = full ? "가득 참" : "대기 중";
+        text.color = full ? RedText : ReadyText;
+    }
+
+    private void UpdateRowHighlights()
+    {
+        foreach (var pair in rows)
+        {
+            bool on = pair.Key == selectedId;
+            var stroke = pair.Value.Stroke;
+            stroke.color = on ? SoloRowStrokeOn : SoloRowStroke;
+            if (selectedStrokeSprite != null && normalStrokeSprite != null)
+                stroke.sprite = on ? selectedStrokeSprite : normalStrokeSprite;
+        }
+    }
+
+    // ───────────── 방 상세 ─────────────
+
+    private void RefreshDetail()
+    {
+        var room = Selected;
+        if (room == null) return;
+
+        detailTitle.text = RoomTitle(room.hostNickname);
+        detailLockChip.SetActive(false);
+        detailModeChip.gameObject.SetActive(false);
+        bool full = IsFull(room);
+        ApplyStatus(full, detailStatusChip, detailStatusText);
+        detailMap.text = MapName(room.mapId);
+        detailCount.text = $"{room.playerCount} / {room.maxPlayers}";
+
+        // RoomSummary에는 참가자 명단이 없어서 방장 이름과 인원 수만 보여 준다
+        for (int i = 0; i < slots.Length; i++)
+        {
+            var s = slots[i];
+            s.Go.SetActive(i < room.maxPlayers);
+            if (i >= room.maxPlayers) continue;
+            if (i >= room.playerCount) { SetEmptySlot(s); continue; }
+
+            Color color = UIPalette.PlayerColor(i);
+            s.Bg.color = UIPalette.PlayerLightColor(i);
+            s.Stroke.color = color;
+            s.Ring.color = color;
+            s.Portrait.color = color;
+            s.Host.SetActive(i == 0);
+            s.Nick.text = i == 0 ? room.hostNickname : "참가자";
+            s.Nick.color = UIPalette.Ink;
+        }
+
+        detailProgress.SetActive(false); // 목록에는 대기 중인 방 정보만 온다
+
+        bool canJoin = !full;
+        detailJoin.interactable = canJoin;
+        detailJoinImage.color = canJoin ? Mint : Neutral;
+        detailJoinLabel.text = canJoin ? "참가하기" : "입장 불가";
+        detailJoinLabel.color = canJoin ? Color.white : UIPalette.InkSub;
+    }
+
+    private static void SetEmptySlot(SlotView s)
+    {
+        s.Bg.color = Neutral;
+        s.Stroke.color = Neutral;
+        s.Ring.color = Neutral;
+        s.Portrait.color = Neutral;
+        s.Host.SetActive(false);
+        s.Nick.text = "빈 자리";
+        s.Nick.color = UIPalette.InkSub;
+    }
+
+    // ───────────── 방 만들기 ─────────────
+
+    private void OpenCreatePopup()
+    {
+        mapIndex = 0;
+        ShowMap();
+        for (int i = 0; i < maxToggles.Length; i++) maxToggles[i].SetIsOnWithoutNotify(i == maxToggles.Length - 1);
+        createPopup.Open();
+    }
+
+    private void ChangeMap(int step)
+    {
+        mapIndex = (mapIndex + step + Maps.Length) % Maps.Length;
+        ShowMap();
+    }
+
+    private void ShowMap()
+    {
+        mapNameText.text = Maps[mapIndex];
+        if (mapPreviewImage != null) mapPreviewImage.sprite = MapSprite(mapIndex);
+    }
+
+    private void ConfirmCreate()
+    {
+        int max = 2 + Mathf.Max(0, Array.FindIndex(maxToggles, t => t.isOn)); // 최대 인원 토글은 2명부터
+        RequestCreate(mapIndex, max);
+        createPopup.Close();
+    }
+
+    // ───────────── 코드로 입장 ─────────────
+
+    private void OpenJoinPopup()
+    {
+        codeInput.text = "";
+        SetJoinConfirmEnabled(false);
+        joinPopup.Open();
+    }
+
+    private void OnCodeChanged(string value) => SetJoinConfirmEnabled(value.Trim().Length > 0);
+
+    private void SetJoinConfirmEnabled(bool enabled)
+    {
+        joinConfirm.interactable = enabled;
+        joinConfirmImage.color = enabled ? Mint : Neutral;
+    }
+
+    // 방 코드 = roomId. 존재 여부·인원 검증은 서버가 하고, 실패하면 OnLobbyError로 알려 준다
+    private void ConfirmJoinByCode()
+    {
+        string code = codeInput.text.Trim();
+        if (code.Length == 0) { UIFx.Shake(codeInput.transform); return; }
+        RequestJoin(code);
+        joinPopup.Close();
+    }
+
+    // ───────────── 내 정보 ─────────────
+
+    // TODO: 서버가 전적과 보유 마블을 내려 주면 채운다
+    private void RefreshProfile()
+    {
+        recordText.text = "-";
+        marbleText.text = "-";
+    }
+
+    private void RefreshNickname(string localNickname)
+    {
+        Debug.Log($"로비화면 닉네임 업데이트 -> {WebSocketNetwork.Instance.LocalNickname}");
+        nicknameText.text = localNickname;
+    }
+}

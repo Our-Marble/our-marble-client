@@ -3,10 +3,30 @@ using System.Collections.Generic;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class LobbyNetwork : Singleton<LobbyNetwork>
 {
     private Queue<LobbyServerMessage> messageQueue = new Queue<LobbyServerMessage>();
+
+    [SerializeField] private string lobbySceneName = "UI_LobbyScene";
+    private bool isLobbySceneActive = false;
+    
+    private void OnEnable()
+    {
+        SceneManager.sceneLoaded += OnSceneLoaded;
+    }
+
+    private void OnDisable()
+    {
+        SceneManager.sceneLoaded -= OnSceneLoaded;
+    }
+    
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        // 씬이 로드될 딱 한 번만 검사해서 플래그를 켭니다.
+        isLobbySceneActive = (scene.name == lobbySceneName);
+    }
     
     private async void SendGameMessage(string message)
     {
@@ -26,18 +46,29 @@ public class LobbyNetwork : Singleton<LobbyNetwork>
             messageQueue.Enqueue(serverMessage);
         }
         
-        Debug.Log($"[GameNetwork] 메시지 큐 적재: {parsedType} (현재 큐 대기 수: {messageQueue.Count})");
+        Debug.Log($"[LobbyNetwork] 메시지 큐 적재: {parsedType} (현재 큐 대기 수: {messageQueue.Count})");
     }
     
     public void TryDequeueMessage()
     {
         LobbyServerMessage serverMessage;
         
+        // 현재 씬이 로비이면 다 바로바로 꺼내면 된다.
+        // 근데 현재 씬이 로비씬이 아니면? 에러만 꺼내야한다.
         lock (messageQueue)
         {
             if (messageQueue.Count > 0)
             {
-                serverMessage = messageQueue.Dequeue();
+                serverMessage = messageQueue.Peek();
+
+                if (!isLobbySceneActive) // 로비씬이 아닌 경우 (게임씬인 경우) 
+                {
+                    if (serverMessage.Type != LobbyMessageType.LOBBY_ERROR) // 로비에러를 제외한 로비 메시지는 꺼내지 않는다. ROOM_UPDATED가 유실되지 않게 하기 위함.
+                        return;
+                }
+                
+                Debug.Log($"[LobbyNetwork] 메시지 디큐");
+                messageQueue.Dequeue(); 
             }
             else
             {
@@ -50,19 +81,12 @@ public class LobbyNetwork : Singleton<LobbyNetwork>
 
         switch (type)
         {
-            case LobbyMessageType.CONNECTED:
-            {
-                ConnectedResponse connectedResponse =
-                    JsonConvert.DeserializeObject<ConnectedResponse>(json);
-
-                OnCreateRoom?.Invoke();
-                break;
-            }
             case LobbyMessageType.ROOM_ENTERED:
             {
                 RoomEnteredResponse roomEnteredResponse =
                     JsonConvert.DeserializeObject<RoomEnteredResponse>(json);
                 
+                OnRoomEntered?.Invoke();
                 break;
             }
             case LobbyMessageType.ROOM_LEFT:
@@ -70,6 +94,7 @@ public class LobbyNetwork : Singleton<LobbyNetwork>
                 RoomLeftResponse roomLeftResponse =
                     JsonConvert.DeserializeObject<RoomLeftResponse>(json);
                 
+                OnRoomLeft?.Invoke();
                 break;
             }
             case LobbyMessageType.ROOM_LIST:
@@ -77,24 +102,43 @@ public class LobbyNetwork : Singleton<LobbyNetwork>
                 RoomListResponse roomListResponse =
                     JsonConvert.DeserializeObject<RoomListResponse>(json);
                 
+                List<RoomSummary> rooms = roomListResponse.rooms;
+                
+                OnRoomList?.Invoke(rooms);
                 break;
             }
             case LobbyMessageType.ROOM_UPDATED:
             {
                 RoomUpdatedBroadcast roomUpdatedBroadcast =
                     JsonConvert.DeserializeObject<RoomUpdatedBroadcast>(json);
+
+                RoomSnapshot roomSnapshot = roomUpdatedBroadcast.room;
                 
+                OnRoomUpdated?.Invoke(roomSnapshot);
+                break;
+            }
+            case LobbyMessageType.GAME_STARTED:
+            {
+                GameStartedBroadcast gameStartedBroadcast =
+                    JsonConvert.DeserializeObject<GameStartedBroadcast>(json);
+
+                string roomId = gameStartedBroadcast.roomId;
+                
+                OnGameStarted?.Invoke(roomId);
                 break;
             }
             case LobbyMessageType.LOBBY_ERROR:
             {
                 LobbyErrorResponse lobbyErrorResponse =
                     JsonConvert.DeserializeObject<LobbyErrorResponse>(json);
+
+                string code = lobbyErrorResponse.code;
+                string message = lobbyErrorResponse.message;
                 
-                Debug.LogError($"에러 메시지 수신. code: {lobbyErrorResponse.code}, message: {lobbyErrorResponse.message}");
+                Debug.LogError($"에러 메시지 수신. code: {code}, message: {message}");
                 
                 // 여기서 뭘해야하지..? 떠잇는 로딩 창 닫기?
-                
+                OnLobbyError?.Invoke(code, message);
                 break;
             }
             default:
@@ -105,11 +149,87 @@ public class LobbyNetwork : Singleton<LobbyNetwork>
         }
     }
     
-    public event Action OnCreateRoom;
+    public event Action<string> OnConnected;
+
+    public void InvokeOnConnected(string localNickname)
+    {
+        OnConnected?.Invoke(localNickname);
+    }
+
+    public event Action OnRoomEntered;
+    public event Action OnRoomLeft;
+    public event Action<List<RoomSummary>> OnRoomList;
+    public event Action<RoomSnapshot> OnRoomUpdated;
+    public event Action<string> OnGameStarted;
+    public event Action<string, string> OnLobbyError;
    
     public void SendCreateRoomRequest()
     {
+        Debug.Log("[Net] C");
+        CreateRoomRequest message = new CreateRoomRequest
+        {
+            type = "CREATE_ROOM"
+        };
 
+        string json = JsonConvert.SerializeObject(message);
+        WebSocketNetwork.Instance.SendMessage(json);
+    }
+    
+    public void SendEnterRoomRequest(string roomId)
+    {
+        EnterRoomRequest message = new EnterRoomRequest
+        {
+            type = "ENTER_ROOM",
+            roomId = roomId
+        };
+
+        string json = JsonConvert.SerializeObject(message);
+        WebSocketNetwork.Instance.SendMessage(json);
+    }
+    
+    public void SendLeaveRoomRequest()
+    {
+        LeaveRoomRequest message = new LeaveRoomRequest
+        {
+            type = "LEAVE_ROOM"
+        };
+
+        string json = JsonConvert.SerializeObject(message);
+        WebSocketNetwork.Instance.SendMessage(json);
+    }
+    
+    public void SendSetReadyRequest(bool ready)
+    {
+        SetReadyRequest message = new SetReadyRequest
+        {
+            type = "SET_READY",
+            ready = ready
+        };
+
+        string json = JsonConvert.SerializeObject(message);
+        WebSocketNetwork.Instance.SendMessage(json);
+    }
+    
+    public void SendStartGameRequest()
+    {
+        StartGameRequest message = new StartGameRequest
+        {
+            type = "START_GAME"
+        };
+
+        string json = JsonConvert.SerializeObject(message);
+        WebSocketNetwork.Instance.SendMessage(json);
+    }
+    
+    public void SendRoomListRequest()
+    {
+        RoomListRequest message = new RoomListRequest
+        {
+            type = "ROOM_LIST_REQUEST"
+        };
+
+        string json = JsonConvert.SerializeObject(message);
+        WebSocketNetwork.Instance.SendMessage(json);
     }
 }
 

@@ -4,6 +4,6 @@ using System;
 public class ConnectedResponse
 {
     public string type;
-    public long plyaerId;
+    public long playerId;
     public string nickname;
 }

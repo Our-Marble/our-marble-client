@@ -4,5 +4,5 @@ using System;
 public class RoomUpdatedBroadcast
 {
     public string type;
-    //public Room room
+    public RoomSnapshot room;
 }

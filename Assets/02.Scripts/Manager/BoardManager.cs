@@ -39,7 +39,7 @@ public class BoardManager : Singleton<BoardManager>
 
 
 
-    protected override void Awake()
+    protected override void OnAwake()
     {
         ChangeToInspectMode();
         
