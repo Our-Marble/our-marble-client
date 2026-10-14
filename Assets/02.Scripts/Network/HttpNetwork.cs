@@ -10,8 +10,64 @@ public class HttpNetwork : Singleton<HttpNetwork>
 
     private const string BaseUrl = "http://localhost:8080"; // 서버 주소
 
-    // 1. 회원가입
-    public IEnumerator Signup(string email, string password, string nickname, System.Action<bool> onResult = null)
+    // 0. 이메일 인증번호 전송
+    public IEnumerator SendCode(string email, System.Action<bool> onResult = null)
+    {
+        EmailSendRequest req = new EmailSendRequest { email = email };
+        string jsonBody = JsonConvert.SerializeObject(req);
+
+        using (UnityWebRequest webRequest = new UnityWebRequest($"{BaseUrl}/auth/email/send", "POST"))
+        {
+            byte[] bodyRaw = Encoding.UTF8.GetBytes(jsonBody);
+            webRequest.uploadHandler = new UploadHandlerRaw(bodyRaw);
+            webRequest.downloadHandler = new DownloadHandlerBuffer();
+            webRequest.SetRequestHeader("Content-Type", "application/json");
+
+            yield return webRequest.SendWebRequest();
+
+            if (webRequest.result != UnityWebRequest.Result.Success)
+            {
+                Debug.LogError($"인증번호 전송 실패: {webRequest.error} | 응답: {webRequest.downloadHandler.text}");
+                onResult?.Invoke(false);
+            }
+            else
+            {
+                Debug.Log("인증번호 전송 성공!");
+                onResult?.Invoke(true);
+            }
+        }
+    }
+
+    //1. 이메일 인증번호 확인
+    public IEnumerator VerifyCode(string email, string code, System.Action<bool> onResult = null)
+    {
+        EmailVerifyRequest req = new EmailVerifyRequest { email = email, code = code };
+        string jsonBody = JsonConvert.SerializeObject(req);
+
+        using (UnityWebRequest webRequest = new UnityWebRequest($"{BaseUrl}/auth/email/verify", "POST"))
+        {
+            byte[] bodyRaw = Encoding.UTF8.GetBytes(jsonBody);
+            webRequest.uploadHandler = new UploadHandlerRaw(bodyRaw);
+            webRequest.downloadHandler = new DownloadHandlerBuffer();
+            webRequest.SetRequestHeader("Content-Type", "application/json");
+
+            yield return webRequest.SendWebRequest();
+
+            if (webRequest.result != UnityWebRequest.Result.Success)
+            {
+                Debug.LogError($"인증번호 확인 실패: {webRequest.error} | 응답: {webRequest.downloadHandler.text}");
+                onResult?.Invoke(false);
+            }
+            else
+            {
+                Debug.Log("이메일 인증 성공!");
+                onResult?.Invoke(true);
+            }
+        }
+    }
+
+    // 2. 회원가입
+    public IEnumerator Signup(string email, string password, string nickname, System.Action<string, bool> onResult = null)
     {
         SignupRequest req = new SignupRequest { email = email, password = password, nickname = nickname };
         string jsonBody = JsonConvert.SerializeObject(req);
@@ -28,17 +84,17 @@ public class HttpNetwork : Singleton<HttpNetwork>
             if (webRequest.result != UnityWebRequest.Result.Success)
             {
                 Debug.LogError($"회원가입 실패: {webRequest.error} | 응답: {webRequest.downloadHandler.text}");
-                onResult?.Invoke(false);
+                onResult?.Invoke(email, false);
             }
             else
             {
                 Debug.Log("회원가입 성공!");
-                onResult?.Invoke(true);
+                onResult?.Invoke(email, true);
             }
         }
     }
 
-    // 2. 로그인
+    // 3. 로그인
     public IEnumerator Login(string email, string password, System.Action<string, bool> onResult = null)
     {
         LoginRequest req = new LoginRequest { email = email, password = password };
@@ -71,7 +127,7 @@ public class HttpNetwork : Singleton<HttpNetwork>
         }
     }
 
-    // 3. 로그아웃
+    // 4. 로그아웃
     public IEnumerator Logout(System.Action<bool> onResult = null)
     {
         if (string.IsNullOrEmpty(JwtToken))
@@ -104,6 +160,8 @@ public class HttpNetwork : Singleton<HttpNetwork>
             }
         }
     }
+
+
 }
 
 // --- DTO 클래스들 ---
@@ -127,4 +185,18 @@ public class LoginRequest
 public class LoginResponse 
 { 
     public string accessToken; 
+}
+
+[System.Serializable]
+public class EmailSendRequest
+{
+    public string email;
+
+}
+
+[System.Serializable]
+public class EmailVerifyRequest
+{
+    public string email;
+    public string code;
 }

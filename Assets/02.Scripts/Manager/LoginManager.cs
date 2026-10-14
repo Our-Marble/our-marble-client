@@ -19,7 +19,7 @@ public class LoginManager : MonoBehaviour
     [SerializeField] private Transform uiRoot;
 
 
-    private TMP_InputField emailInput, passwordInput;
+    private TMP_InputField emailInput, passwordInput, nicknameInput;
     private Toggle saveEmailToggle;
     private Button loginButton, signupButton, forgotButton;
 
@@ -132,9 +132,9 @@ public class LoginManager : MonoBehaviour
         busy = true;
         ShowLoading(true);
 
-        // ── 서버 쪽 계정 확인 (목업) ──
         yield return StartCoroutine(HttpNetwork.Instance.Login(email, password, HandleLoginResponse));
     }
+
 
     private void HandleLoginResponse(string email, bool success)
     {
@@ -143,10 +143,10 @@ public class LoginManager : MonoBehaviour
             fails = 0;
             SaveEmail(email);
             Debug.Log($"[Login] 로그인 성공: {email}");
-            
+
             Debug.Log($"TCP 연결을 시도합니다...");
             WebSocketNetwork.Instance.Connect();
-            
+
             if (!SceneFlow.ToLobby())
             {
                 ShowLoading(false);
@@ -169,17 +169,6 @@ public class LoginManager : MonoBehaviour
             passwordInput.text = "";
             UIFx.Shake(passwordInput.transform);
             passwordInput.ActivateInputField();
-            yield break;
-        }
-
-        fails = 0;
-        SaveId(email);
-        Debug.Log($"[Login] 로그인 성공: {email}");
-        if (!SceneFlow.ToLobby())
-        {
-            ShowLoading(false);
-            busy = false;
-            ShowToast("로비 화면을 불러오지 못했어요");
         }
     }
 
@@ -192,9 +181,115 @@ public class LoginManager : MonoBehaviour
     }
 
     // ───────────── 회원가입 ─────────────
-    
-    
-    
+
+    private void TrySignUp()
+    {
+        if (busy) return;
+        string email = emailInput.text.Trim();
+        string password = passwordInput.text;
+        string nickname = nicknameInput.text;
+        if (email.Length == 0) { UIFx.Shake(emailInput.transform); ShowToast("이메일를 입력해 주세요"); return; }
+        if (password.Length == 0) { UIFx.Shake(passwordInput.transform); ShowToast("비밀번호를 입력해 주세요"); return; }
+        if (nickname.Length == 0) { UIFx.Shake(nicknameInput.transform); ShowToast("닉네임을 입력해 주세요"); return; }
+        if (Time.unscaledTime < lockUntil) { ShowToast("잠시 후 다시 시도해 주세요"); return; }
+
+        StartCoroutine(SignUpRoutine(email, password, nickname));
+    }
+
+    private IEnumerator SignUpRoutine(string email, string password, string nickname)
+    {
+        busy = true;
+        ShowLoading(true);
+
+        yield return StartCoroutine(HttpNetwork.Instance.Signup(email, password, nickname, HandleSignUpResponse));
+    }
+
+    private void HandleSignUpResponse(string email, bool success)
+    {
+        ShowLoading(false);
+        busy = false;
+
+        if (success)
+        {
+            Debug.Log("[Signup] 회원가입 성공");
+            ShowToast("회원가입이 완료됐어요. 로그인해 주세요");
+        }
+        else
+        {
+            ShowToast("회원가입에 실패했어요");
+        }
+    }
+
+    // ───────────── 이메일 인증 ─────────────
+
+    private void SendEmailCode(string email)
+    {
+        if (busy) return;
+        email = email.Trim();
+        if (email.Length == 0) { UIFx.Shake(emailInput.transform); ShowToast("이메일을 입력해 주세요"); return; }
+
+        StartCoroutine(SendEmailCodeRoutine(email));
+    }
+
+    private IEnumerator SendEmailCodeRoutine(string email)
+    {
+        busy = true;
+        ShowLoading(true);
+
+        yield return StartCoroutine(HttpNetwork.Instance.SendCode(email, HandleSendEmailCodeResponse));
+    }
+
+    private void HandleSendEmailCodeResponse(bool success)
+    {
+        ShowLoading(false);
+        busy = false;
+
+        if (success)
+        {
+            Debug.Log("[Email] 인증번호 전송 성공");
+            ShowToast("인증번호를 전송했어요");
+        }
+        else
+        {
+            ShowToast("인증번호 전송에 실패했어요");
+        }
+    }
+
+    private void VerifyEmailCode(string email, string code)
+    {
+        if (busy) return;
+        email = email.Trim();
+        code = code.Trim();
+        if (email.Length == 0) { UIFx.Shake(emailInput.transform); ShowToast("이메일을 입력해 주세요"); return; }
+        if (code.Length == 0) { ShowToast("인증번호를 입력해 주세요"); return; }
+
+        StartCoroutine(VerifyEmailCodeRoutine(email, code));
+    }
+
+    private IEnumerator VerifyEmailCodeRoutine(string email, string code)
+    {
+        busy = true;
+        ShowLoading(true);
+
+        yield return StartCoroutine(HttpNetwork.Instance.VerifyCode(email, code, HandleVerifyEmailCodeResponse));
+    }
+
+    private void HandleVerifyEmailCodeResponse(bool success)
+    {
+        ShowLoading(false);
+        busy = false;
+
+        if (success)
+        {
+            Debug.Log("[Email] 이메일 인증 성공");
+            ShowToast("이메일 인증이 완료됐어요");
+        }
+        else
+        {
+            ShowToast("인증번호가 맞지 않아요");
+        }
+    }
+
     // ───────────── 알림 메시지(토스트) / 로딩 화면 ─────────────
 
     private void ShowToast(string message) => toast.Show(message);

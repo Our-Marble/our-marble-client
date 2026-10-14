@@ -11,25 +11,25 @@ public class GameManager : Singleton<GameManager>
     private System.Random random; // 선턴 정하기나 랜덤 주사위 값을 계산할 때 사용합니다.
 
     private const int IslandTurns = 3; // 무인도 영업정지 턴 수
-    
+
     [SerializeField] private long salaryAmount = 100000;   // TODO: 월급 금액 확정 필요
     [SerializeField] private long taxAmount = 100000;      // 세무조사 벌금 
     [SerializeField] private long startMoney = 500000;     // 초기 자금 (테스트할 때 인스펙터에서 늘려서 사용)
     [SerializeField, Min(1)] private int maxRound = 30;     // 최대 라운드 (모든 플레이어가 한 번씩 하면 1라운드). 넘으면 게임 종료
-    
+
     private bool isMoving;
-    
+
     // ────────────────────────── 기능 테스트용 주사위 값 지정 필드 ──────────────────────────
     [Header("기능 테스트용 주사위 값 강제")]
     public int forceDice1 = -1;
     public int forceDice2 = -1;
-    
+
     // ────────────────────────── MVP 단계에서 봇 테스트용 ──────────────────────────
     [Header("Bot (Test)")]
     [SerializeField] private bool autoPlayAllPlayers = false;   // 테스트용: 켜면 사람도 자동 진행
     [SerializeField] private float botActionDelay = 3f;         // 봇이 행동하기 전 대기 시간(초)
     private Dictionary<long, IBotStrategy> botStrategies; // 플레이어별 봇 전략. 보드·가격 정보가 필요해서 Start에서 생성합니다.
-    
+
     [System.Serializable]
     private class PlayerSetup
     {
@@ -38,42 +38,15 @@ public class GameManager : Singleton<GameManager>
         public BotPersonality personality = BotPersonality.Balanced; // 봇 성향 (봇일 때만 사용)
     }
 
-    [Header("Players")] [SerializeField] private List<PlayerSetup> playerSetups = new List<PlayerSetup>();
-    
-    
+    [Header("Players")][SerializeField] private List<PlayerSetup> playerSetups = new List<PlayerSetup>();
+
+
     // 플레이어 색상 관련 필드
-    private Color[] playerColors = new Color[]{Color.red, Color.green, Color.blue, Color.yellow};
+    private Color[] playerColors = new Color[] { Color.red, Color.green, Color.blue, Color.yellow };
     private Dictionary<long, Color> playerColorMap;
     public Color GetPlayerColor(long playerId) => playerColorMap[playerId];
-    
-    
-    protected override void Awake()
-    {
-        // gameState 초기화. PropertyStates의 초기화는 Start에서 진행.
-        gameState = new  GameState();
-        gameState.TurnNumber = 0;
-        gameState.RoundNumber = 0;
-        gameState.CurrentPlayerId = 0;
-        gameState.WelfareFund = 0;
-        
-        gameState.PlayerStates = new List<PlayerState>();
-        foreach (PlayerSetup setup in playerSetups)
-            gameState.PlayerStates.Add(new PlayerState(setup.playerId));
 
-        // 그 외 필드 변수 초기화
-        random = new System.Random();
-        playerOrder = new List<long>();
-        isDouble = false;
-        consecutiveDoubleCount = 0;
-        
-        // player의 색상 지정. gameState.playerStates 의 순서대로 배정
-        playerColorMap = new Dictionary<long, Color>();
-        for (int i = 0; i < gameState.PlayerStates.Count; i++)
-        {
-            PlayerState playerState = gameState.PlayerStates[i];
-            playerColorMap.Add(playerState.PlayerId, playerColors[i]);
-        }
-    }
+
 
     void Start()
     {
@@ -94,9 +67,9 @@ public class GameManager : Singleton<GameManager>
         // MVP 단계에서 플레이어의 playerId는 123, 봇의 playerId는 456 입니다.
         PlayerManager.Instance.Initialize(gameState.PlayerOrder); // 다른 Monobehaviour 클래스를 참조하여 초기화할때는 Awake말고 Start에서 하는게 안전
         */
-        
+
         // StartGame();
-        
+
         GameNetwork.Instance.SendGameStateRequest();
     }
 
@@ -122,10 +95,10 @@ public class GameManager : Singleton<GameManager>
         GameNetwork.Instance.OnPropertiesSold -= HandlePropertiesSold;
         GameNetwork.Instance.OnPropertyAcquired -= HandlePropertyAcquired;
         GameNetwork.Instance.OnPropertyPurchased -= HandlePropertyPurchased;
-        
+
         GameNetwork.Instance.OnSync -= SyncGameState;
     }
-    
+
     private void Update()
     {
         if (gameState.WaitingType == null) return;
@@ -260,15 +233,15 @@ public class GameManager : Singleton<GameManager>
         if (UIManager.Instance != null)
             UIManager.Instance.ShowGameResultPopup();
     }
-    
+
     // ────────────────────────── 게임 진행 ──────────────────────────
-    
+
     void StartGame()
     {
         PlayerManager.Instance.Initialize(gameState.PlayerStates.ConvertAll(state => state.PlayerId));
-        
+
         Log($"게임 시작! 플레이어 {gameState.PlayerStates.Count}명, 초기 자금 {Won(startMoney)}, 자동 진행(전원) = {autoPlayAllPlayers}");
-        
+
         // UI를 초기화합니다. (이 화면을 조작하는 사람 플레이어를 지정하고, 플레이어 정보 카드를 GameState에 맞춰 채웁니다.)
         if (UIManager.Instance != null)
         {
@@ -301,7 +274,7 @@ public class GameManager : Singleton<GameManager>
         gameState.CurrentPlayerId = playerId;
         gameState.TurnNumber += 1;
         gameState.RoundNumber = nextRound;
-        
+
         // 'OO의 턴'이라는 UI를 표시합니다.
         PlayerState playerState = GetPlayerState(playerId);
         Log($"===== {gameState.RoundNumber}/{maxRound}라운드 ({gameState.TurnNumber}번째 턴): {P(playerId)} 차례 (현금 {Won(playerState.Money)}, 위치 {TileName(playerState.Position)}) =====");
@@ -311,9 +284,9 @@ public class GameManager : Singleton<GameManager>
         // 필드 변수를 갱신합니다.
         gameState.IsDouble = false;
         gameState.ConsecutiveDoubleCount = 0;
-        
+
         // 새 차례가 온 플레이어의 위치가 자유여행인 경우
-        if(BoardManager.Instance.GetTileData(GetPlayerState(playerId).Position).Type == TileType.WORLD_TRAVEL)
+        if (BoardManager.Instance.GetTileData(GetPlayerState(playerId).Position).Type == TileType.WORLD_TRAVEL)
         {
             // 주사위를 굴리는 창 대신, 원하는 타일을 선택하는 창을 띄웁니다.
             HandleChooseDestinationPrompt();
@@ -338,7 +311,7 @@ public class GameManager : Singleton<GameManager>
             });
             return;
         }
-        
+
         // 플레이어의 경우, 자유 여행할 타일을 선택하는 UI를 표시합니다.
         if (UIManager.Instance != null)
         {
@@ -349,13 +322,13 @@ public class GameManager : Singleton<GameManager>
     public void ChooseDestination(int destinationPosition)
     {
         // 자신의 차례인 경우에만 요청을 보냅니다.
-        if(IsLocalPlayerTurn()) 
+        if (IsLocalPlayerTurn())
             GameNetwork.Instance.SendChooseDestinationRequest(destinationPosition);
 
         // broadcast메시지 수신 대기 상태에 들어갑니다.
         gameState.WaitingType = GameMessageType.DESTINATION_CHOSEN;
     }
-    
+
     /// <summary>
     /// 화면에서 자유 이동할 위치를 누르면 이 함수가 호출됩니다.
     /// </summary>
@@ -372,7 +345,7 @@ public class GameManager : Singleton<GameManager>
             Log("게임 종료: 남은 플레이어가 1명 이하입니다.");
             return;
         }
-        
+
         // 봇의 경우 RollDice를 호출합니다.
         if ((IsBot(gameState.CurrentPlayerId)))
         {
@@ -392,14 +365,14 @@ public class GameManager : Singleton<GameManager>
 
     [ContextMenu("RollDiceTest")]   // 플레이 모드에서 테스트용
     private void RollDiceTest() => RollDice();
-    
+
     /// <summary>
     /// 화면의 '주사위 굴리기' 버튼을 누르면 이 함수가 호출됩니다.
     /// </summary>
     public void RollDice()
     {
         // 자신의 차례인 경우에만 요청을 보냅니다.
-        if(IsLocalPlayerTurn()) 
+        if (IsLocalPlayerTurn())
             GameNetwork.Instance.SendRollDiceRequest();
 
         // broadcast메시지 수신 대기 상태에 들어갑니다.
@@ -409,11 +382,11 @@ public class GameManager : Singleton<GameManager>
     public void HandleDiceRolled(long playerId, int dice1, int dice2)
     {
         PlayerState player = GetPlayerState(playerId);
-        
+
         Log($"[주사위] {P(playerId)}: {dice1}+{dice2}={dice1 + dice2}{(dice1 == dice2 ? " (더블!)" : "")}");
         if (UIManager.Instance != null)
             UIManager.Instance.ShowDiceResult(dice1, dice2);
-        
+
         // 더블 처리
         if (dice1 == dice2)
         {
@@ -425,7 +398,7 @@ public class GameManager : Singleton<GameManager>
             gameState.IsDouble = false;
             gameState.ConsecutiveDoubleCount = 0;
         }
-        
+
         // if (현재 위치가 무인도 && PlayerStates.IslandTurnsRemaining > 0 && !isDouble )  무인도 탈출 실패 판정.
         bool onIslandTile = BoardManager.Instance.GetTileData(player.Position).Type == TileType.ISLAND;
         bool isIslandTurnsRemaining = player.IslandTurnsRemaining > 0;
@@ -433,7 +406,7 @@ public class GameManager : Singleton<GameManager>
         {
             // 남은 감금 턴수 차감
             player.IslandTurnsRemaining -= 1;
-            
+
             Log($"[무인도] {P(playerId)}: 탈출 실패 (남은 영업정지 {player.IslandTurnsRemaining}턴)");
             SpecialTileManager.Instance.PlayIslandEscapeFailed(playerId, player.IslandTurnsRemaining); // 탈출 실패 연출
             HandleTurnChanged(GetNextPlayerId()); // 강제로 턴을 넘깁니다.
@@ -445,13 +418,13 @@ public class GameManager : Singleton<GameManager>
             player.IslandTurnsRemaining = 0;
             Log($"[무인도 탈출] {P(playerId)}: 더블로 탈출했습니다!");
             SpecialTileManager.Instance.PlayIslandEscaped(playerId); // 탈출 연출
-            
+
             // isDouble을 false로 갱신하여 추가턴 진행을 막습니다.
             gameState.IsDouble = false;
         }
 
         if (isMoving) return;
-        
+
         // 3연속 더블이면 이동하지 않고 무인도로 보낸다.
         if (gameState.ConsecutiveDoubleCount >= 3)
         {
@@ -465,17 +438,17 @@ public class GameManager : Singleton<GameManager>
                 return;
             }
         }
-        
+
         int tileCount = BoardManager.Instance.TileCount;
         int fromPosition = player.Position;
         int toPosition = (fromPosition + dice1 + dice2) % tileCount;
         bool shouldReceiveSalary = toPosition < fromPosition;   // 출발 지점을 지나침
 
         Log($"[이동] {P(playerId)}: {TileName(fromPosition)} → {TileName(toPosition)}");
-        
+
         HandlePlayerMoved(playerId, fromPosition, toPosition, shouldReceiveSalary);
     }
-    
+
     public void HandlePlayerMoved(long playerId, int fromPosition, int toPosition, bool shouldReceiveSalary)
     {
         PlayerState player = GetPlayerState(playerId);
@@ -512,16 +485,16 @@ public class GameManager : Singleton<GameManager>
             });
     }
 
-#region ProcessArrival
+    #region ProcessArrival
     private void ProcessArrival(long playerId, int toPosition)
     {
         PlayerState player = GetPlayerState(playerId);
         TileData arrivalTile = BoardManager.Instance.GetTileData(toPosition);
 
         Log($"[도착] {P(playerId)} → {TileName(toPosition)} (현금 {Won(player.Money)})");
-        
-        switch (arrivalTile.Type) 
-        { 
+
+        switch (arrivalTile.Type)
+        {
             case TileType.START: // 시작지점에 도착
                 Log("  출발 칸: 특별한 효과 없음");
                 ProcessEndTurn(); // 턴을 종료합니다. 
@@ -560,14 +533,14 @@ public class GameManager : Singleton<GameManager>
                 int propertyId = arrivalTile.PropertyId;
                 PropertyState propertyState = GetPropertyState(propertyId);
                 PropertyData propertyData = PropertyManager.Instance.GetData(propertyId);
-                
+
                 if (propertyState == null || propertyData == null)
                 {
                     Debug.LogError($"[GameManager] 땅 데이터 없음: propertyId {propertyId}");
                     ProcessEndTurn();
                     break;
                 }
-                
+
                 if (propertyState.OwnerId == null) // 주인 없는 땅인 경우
                 {
                     long landPrice = PropertyManager.Instance.GetLandPrice(propertyState.PropertyId);
@@ -586,15 +559,15 @@ public class GameManager : Singleton<GameManager>
                 else if (propertyState.OwnerId.Value == playerId) // 본인 소유의 땅인 경우
                 {
                     bool canBuild = propertyData.CanBuild;
-                    
+
                     // 건설 불가 자산 Case 처리
-                    if(!canBuild)
+                    if (!canBuild)
                     {
                         Log($"  내 땅: {CityName(propertyId)} 현재 BuildingLevel : {BuildingLevel.Land} / 건설 불가능 - 건설 불가 칸");
                         HandleBuildPrompt(playerId, propertyId, false);
                         return;
                     }
-                    
+
                     // 이미 최고 레벨인 Case 처리
                     BuildingLevel currentLevel = propertyState.BuildingLevel;
                     bool isMaxLevel = currentLevel == BuildingLevel.Hotel;
@@ -613,7 +586,7 @@ public class GameManager : Singleton<GameManager>
                         HandleBuildPrompt(playerId, propertyId, false);
                         return;
                     }
-                    
+
                     // 건설 가능한 Case 처리
                     Log($"  내 땅: {CityName(propertyId)} 현재 BuildingLevel : {currentLevel}) 건설 가능 (비용 {Won(buildCost)})");
                     HandleBuildPrompt(playerId, propertyId, true);
@@ -621,12 +594,12 @@ public class GameManager : Singleton<GameManager>
                 else // 타인 소유의 땅인 경우
                 {
                     long ownerId = propertyState.OwnerId.Value;
-                    long toll =PropertyManager.Instance.GetToll(propertyState);
+                    long toll = PropertyManager.Instance.GetToll(propertyState);
                     Log($"  남의 땅: {CityName(propertyId)} (주인 {P(ownerId)}, 통행료 {Won(toll)})");
                     if (player.Money >= toll) // 통행료 납부 가능하면
                     {
                         HandleTollPaid(playerId, ownerId, toll); // 통행료 납부 처리. GameState를 갱신합니다.
-                    
+
                         long acquireValue = PropertyManager.Instance.GetAcquireValue(propertyState);
                         if (player.Money >= acquireValue) // 납부하고도 인수할 돈이 있다면 
                         {
@@ -644,19 +617,19 @@ public class GameManager : Singleton<GameManager>
                         Log($"  현금 부족: 자산을 팔아서 통행료를 내야 합니다.");
                         HandleSellPropertiesPrompt(playerId, ownerId, toll); // 자산 매각 선택지 UI를 표시합니다. ( 호출에 필요한 매개변수는 GameState 와 Data를 조회하여 얻습니다. )
                     }
-                    else 
+                    else
                     {
                         Log($"  현금과 자산을 모두 팔아도 통행료를 낼 수 없습니다. 파산!");
                         HandleBankruptcy(playerId, ownerId); // 재산 현금화 -> 수납자 지급 -> 파산 처리. GameState를 갱신합니다.                  
                         HandleTurnChanged(GetNextPlayerId()); // 강제로 턴을 넘깁니다.
                     }
                 }
-                
+
                 break;
         }
-        
+
     }
-#endregion
+    #endregion
 
     /// <summary>
     /// 말이 목적지로 직접 이동합니다. (자유여행, 뒤로 이동 카드, 무인도행 등) 월급은 없으며, 이동이 끝나면 도착 처리를 합니다.
@@ -667,7 +640,7 @@ public class GameManager : Singleton<GameManager>
         if (player == null) return;
 
         Log($"[직접 이동] {P(playerId)}: {TileName(player.Position)} → {TileName(toPosition)}");
-        
+
         player.Position = toPosition;
         isMoving = true;
         PlayerManager.Instance.MoveToTile(playerId, toPosition, () =>
@@ -676,14 +649,14 @@ public class GameManager : Singleton<GameManager>
             ProcessArrival(playerId, toPosition);
         });
     }
-    
+
     /// <summary>
     /// 턴을 종료하는 함수입니다. 무조건 턴을 넘기는게 아닙니다! 추가턴 진행 조건(isDouble == true)를 만족하면 추가턴을 진행합니다.
     /// </summary>
     private void ProcessEndTurn()
     {
         // isDouble인 경우 추가턴을 진행합니다.
-        if(gameState.IsDouble)
+        if (gameState.IsDouble)
             HandleRollDicePrompt();
         else
         {
@@ -745,7 +718,7 @@ public class GameManager : Singleton<GameManager>
         }
     }
 
-#region Card Effect
+    #region Card Effect
     // ────────────────────────── 황금 열쇠 CardEffect 실행 ──────────────────────────
     // HandleCardDrawn → ExecuteCardEffect에서 카드의 EffectType을 확인한 뒤 호출합니다.
     // 대상은 현재 턴 플레이어(gameState.CurrentPlayerId)이며, 게임 상태 변경 후 다음 흐름(턴 종료, 도착 칸 처리)까지 진행합니다.
@@ -837,7 +810,7 @@ public class GameManager : Singleton<GameManager>
         bool shouldReceiveSalary = toPosition < fromPosition; // RollDice와 같은 규칙: toPosition < fromPosition 이면 출발지 통과
 
         Log($"[카드:이동] {P(playerId)}: {TileName(toPosition)}(으)로 이동");
-        
+
         // 이동이 끝나면 HandlePlayerMoved가 알아서 ProcessArrival을 호출합니다.
         HandlePlayerMoved(playerId, fromPosition, toPosition, shouldReceiveSalary);
     }
@@ -859,7 +832,7 @@ public class GameManager : Singleton<GameManager>
         bool shouldReceiveSalary = steps > 0 && fromPosition + steps >= boardSize;
 
         Log($"[카드:이동] {P(playerId)}: {steps}칸 이동 ({TileName(fromPosition)} → {TileName(toPosition)})");
-        
+
         // 이동이 끝나면 두 함수 모두 알아서 ProcessArrival을 호출합니다.
         if (steps > 0)
             HandlePlayerMoved(playerId, fromPosition, toPosition, shouldReceiveSalary);
@@ -896,7 +869,7 @@ public class GameManager : Singleton<GameManager>
 
         return -1;
     }
-#endregion
+    #endregion
 
 
     // ────────────────────────── 토지 구매 ──────────────────────────
@@ -935,7 +908,7 @@ public class GameManager : Singleton<GameManager>
     public void PurchaseProperty(long playerId, int propertyId, bool isAccept = true)
     {
         // 자신의 차례인 경우에만 요청을 보냅니다.
-        if(IsLocalPlayerTurn()) 
+        if (IsLocalPlayerTurn())
             GameNetwork.Instance.SendPurchasePropertyRequest(propertyId, isAccept);
 
         // broadcast메시지 수신 대기 상태에 들어갑니다.
@@ -958,11 +931,11 @@ public class GameManager : Singleton<GameManager>
             ProcessEndTurn();
             return;
         }
-        
+
         var player = GetPlayerState(playerId); //사는 사람
         var property = GetPropertyState(propertyId); //사는 땅
-        if (player == null || property == null)  return;
-        
+        if (player == null || property == null) return;
+
         long amount = PropertyManager.Instance.GetLandPrice(propertyId);
 
         // GameState를 갱신합니다. (플레이어 현금 차감, 자산 주인 갱신)
@@ -970,7 +943,7 @@ public class GameManager : Singleton<GameManager>
         SetOwnerId(property, playerId);
         SetBuildingLevel(property, BuildingLevel.Land); // 새로 산 땅은 건물 없음
         Log($"[구매] {P(playerId)}: {CityName(propertyId)} 구매 (-{Won(amount)}, 남은 현금 {Won(player.Money)})");
-        
+
         // 자산 구매 연출을 재생합니다.
         if (UIManager.Instance != null)
             UIManager.Instance.PlayMoneyChange(playerId, -amount, "땅 구매");
@@ -1017,7 +990,7 @@ public class GameManager : Singleton<GameManager>
     public void Build(long playerId, int propertyId, bool isAccept = true)
     {
         // 자신의 차례인 경우에만 전파 요청을 보냅니다.
-        if(IsLocalPlayerTurn()) 
+        if (IsLocalPlayerTurn())
             GameNetwork.Instance.SendBuildRequest(propertyId, true);
 
         // broadcast메시지 수신 대기 상태에 들어갑니다.
@@ -1044,11 +1017,11 @@ public class GameManager : Singleton<GameManager>
         var playerState = GetPlayerState(playerId);
         var propertyState = GetPropertyState(propertyId);
         if (playerState == null || propertyState == null) return;
-        
+
         var propertyData = PropertyManager.Instance.GetData(propertyId);
-        
+
         long amount = propertyData.GetBuildCost((BuildingLevel)(propertyState.BuildingLevel + 1));
-        
+
         // GameState를 갱신합니다. (플레이어 현금 차감, 건설 레벨 갱신)
         playerState.Money -= amount; //건설비 차감
         SetBuildingLevel(propertyState, propertyState.BuildingLevel + 1); // 건설 레벨 증가
@@ -1076,7 +1049,7 @@ public class GameManager : Singleton<GameManager>
             });
             return;
         }
-        
+
         // 플레이어의 경우, 인수할 것인지 선택 가능한 UI를 표시합니다.
         UIManager.Instance.ShowAcquirePropertyPopup(playerId, propertyId);
     }
@@ -1087,7 +1060,7 @@ public class GameManager : Singleton<GameManager>
     public void AcquireProperty(long playerId, int propertyId, bool isAccept = true)
     {
         // 자신의 차례인 경우에만 요청을 보냅니다.
-        if(IsLocalPlayerTurn()) 
+        if (IsLocalPlayerTurn())
             GameNetwork.Instance.SendAcquirePropertyRequest(propertyId, isAccept);
 
         // broadcast메시지 수신 대기 상태에 들어갑니다.
@@ -1101,7 +1074,7 @@ public class GameManager : Singleton<GameManager>
     {
         AcquireProperty(playerId, propertyId, false);
     }
-    
+
     public void HandlePropertyAcquired(long playerId, int propertyId, bool isAccept)
     {
         if (!isAccept)
@@ -1110,19 +1083,19 @@ public class GameManager : Singleton<GameManager>
             ProcessEndTurn();
             return;
         }
-        
+
         // GameState를 갱신합니다. (인수자 현금 차감, 인수당하는 사람 현금 증가, 자산 주인 갱신)
         var acquirer = GetPlayerState(playerId); //인수하는 사람
         var property = GetPropertyState(propertyId); //인수할 땅
         var owner = property != null && property.OwnerId.HasValue ? GetPlayerState(property.OwnerId.Value) : null; //인수당하는 사람
-        if (acquirer == null || property == null || owner == null)  return;
+        if (acquirer == null || property == null || owner == null) return;
 
         long amount = property != null ? PropertyManager.Instance.GetAcquireValue(property) : 0; //인수가 조회
-        
+
         acquirer.Money -= amount; //인수자 돈 차감
         owner.Money += amount; //소유자 돈 증가
         SetOwnerId(property, playerId); //소유권 이전
-        
+
         // 인수 연출을 재생합니다.
         if (UIManager.Instance != null)
             UIManager.Instance.PlayMoneyTransfer(playerId, owner.PlayerId, amount, "인수", "인수 대금");
@@ -1130,8 +1103,8 @@ public class GameManager : Singleton<GameManager>
         // 턴을 종료합니다.
         ProcessEndTurn();
     }
-    
-    
+
+
     // ────────────────────────── 자산 매각 ──────────────────────────
     public void HandleSellPropertiesPrompt(long payerId, long receiverId, long requiredAmount)
     {
@@ -1146,12 +1119,12 @@ public class GameManager : Singleton<GameManager>
             });
             return;
         }
-        
+
         // 플레이어의 경우, 청산할 자산들을 선택 가능한 UI를 표시합니다.
         UIManager.Instance.ShowSellPropertiesPopup(payerId, receiverId, requiredAmount);
     }
 
-        /// <summary>
+    /// <summary>
     /// 유저 매각 창의 "자동 선택" 버튼에서 호출합니다.
     /// 부족분을 채울 땅 목록을 골라 돌려주기만 하고, 실제 매각은 유저가 확인하면 SellProperties에서 합니다.
     /// 봇은 이 함수를 쓰지 않고 BotStrategy.ChooseSellProperties로 고릅니다.
@@ -1169,45 +1142,45 @@ public class GameManager : Singleton<GameManager>
         long shortage = requiredAmount - payer.Money;
         return PropertyManager.Instance.AutoChooseSellProperties(payerId, shortage, gameState.PropertyStates, mode);
     }
-    
+
     /// <summary>
     /// 화면의 '선택 완료' 버튼을 누르면 이 함수가 호출됩니다.
     /// </summary>
     public void SellProperties(long payerId, List<int> propertyIds)
     {
         // 자신의 차례인 경우에만 요청을 보냅니다.
-        if(IsLocalPlayerTurn()) 
+        if (IsLocalPlayerTurn())
             GameNetwork.Instance.SendSellPropertiesRequest(propertyIds);
 
         // broadcast메시지 수신 대기 상태에 들어갑니다.
         gameState.WaitingType = GameMessageType.PROPERTIES_SOLD;
     }
-    
+
     public void HandlePropertiesSold(long payerId, List<int> propertyIds)
     {
         var payer = GetPlayerState(payerId);
-        
+
         int landedPropertyId = BoardManager.Instance.GetTileData(payer.Position).PropertyId;
         PropertyData landedPropertyData = PropertyManager.Instance.GetData(landedPropertyId);
         PropertyState landedPropertyState = GetPropertyState(landedPropertyId);
-        
+
         long receiverId = GetPropertyState(landedPropertyId).OwnerId.Value;
-        
+
         var receiver = GetPlayerState(receiverId);
         if (payer == null || receiver == null) return;
 
         long toll = PropertyManager.Instance.GetToll(landedPropertyState);
-        
+
         // 매각가 총합 계산
         long totalAmount = 0;
         foreach (var id in propertyIds)
         {
             var property = GetPropertyState(id);
             if (property == null || property.OwnerId != payerId) continue; // 소유자가 맞는지 확인
-                
+
             totalAmount += PropertyManager.Instance.GetSellValue(property);
         }
-        
+
         // 매각 결과가 유효한지 확인
         if (payer.Money + totalAmount < toll)
         {
@@ -1219,12 +1192,12 @@ public class GameManager : Singleton<GameManager>
         foreach (var id in propertyIds)
         {
             var property = GetPropertyState(id);
-            if (property == null || property.OwnerId != payerId)  continue; // 소유자가 맞는지 확인
-            
+            if (property == null || property.OwnerId != payerId) continue; // 소유자가 맞는지 확인
+
             SetBuildingLevel(property, BuildingLevel.Land); // 건설 레벨 초기화
             SetOwnerId(property, null); // 주인 없는 땅으로
         }
-        
+
         // PlayerState 갱신
         payer.Money = payer.Money + totalAmount - toll; // 판 돈 받고 통행료 냄
         receiver.Money += toll; //통행료 전액 지급
@@ -1332,7 +1305,7 @@ public class GameManager : Singleton<GameManager>
     public void DrawCard()
     {
         // 자신의 차례인 경우에만 요청을 보냅니다.
-        if(IsLocalPlayerTurn()) 
+        if (IsLocalPlayerTurn())
             GameNetwork.Instance.SendDrawCardRequest();
 
         // broadcast메시지 수신 대기 상태에 들어갑니다.
@@ -1348,9 +1321,9 @@ public class GameManager : Singleton<GameManager>
             ProcessEndTurn(); // 카드 조회 실패 시 턴이 멈추지 않도록 종료
             return;
         }
-        
+
         Log($"[황금열쇠] {P(playerId)}: '{card.cardName}' 카드를 뽑았습니다.");
-        
+
         // 카드 연출을 재생합니다. 연출이 끝나면 EffectType에 맞는 CardEffect 실행 메서드를 호출합니다.
         // 내 카드면 확인을 눌렀을 때, 다른 플레이어 카드면 자동으로 닫힐 때 실행됩니다. (전원 자동 진행 테스트에서는 모두 자동으로 닫힘)
         UIManager.Instance.ShowCardDrawPopup(playerId, card.id, autoPlayAllPlayers, () => ExecuteCardEffect(playerId, card));
@@ -1359,15 +1332,15 @@ public class GameManager : Singleton<GameManager>
     private void SetOwnerId(PropertyState state, long? playerId)
     {
         state.OwnerId = playerId;
-        
+
         int propertyId = state.PropertyId;
         BoardManager.Instance.UpdatePropertyTileColor(propertyId, playerId);
     }
-    
+
     private void SetBuildingLevel(PropertyState state, BuildingLevel buildingLevel)
     {
         state.BuildingLevel = buildingLevel;
-        
+
         int propertyId = state.PropertyId;
         BoardManager.Instance.UpdatePropertyBuildingVisual(propertyId, buildingLevel);
     }
@@ -1375,8 +1348,8 @@ public class GameManager : Singleton<GameManager>
     public void SyncGameState(GameState serverGameState)
     {
         // gameState 동기화. 덮어씀
-        gameState =  serverGameState;
-        
+        gameState = serverGameState;
+
         // player의 색상 지정. gameState.playerStates 의 순서대로 배정
         playerColorMap = new Dictionary<long, Color>();
         for (int i = 0; i < gameState.PlayerStates.Count; i++)
@@ -1384,11 +1357,11 @@ public class GameManager : Singleton<GameManager>
             PlayerState playerState = gameState.PlayerStates[i];
             playerColorMap.Add(playerState.PlayerId, playerColors[i]);
         }
-        
+
         // UI 리프레시 함수 호출
-        
+
         // Board 리프레시 함수 호출
-        
+
         // PlayerPawn 리프레시 함수 호출
 
         if (gameState.TurnNumber == 0) StartGame();
@@ -1409,7 +1382,7 @@ public class GameManager : Singleton<GameManager>
     {
         PlayerState playerState = gameState.PlayerStates.Find(p => p.PlayerId == playerId);
 
-        if(playerState == null)
+        if (playerState == null)
             Debug.LogError($"GameState - PlayerState not found: {playerId}");
 
         return playerState;
@@ -1425,7 +1398,7 @@ public class GameManager : Singleton<GameManager>
     {
         PropertyState propertyState = gameState.PropertyStates.Find(p => p.PropertyId == propertyId);
 
-        if(propertyState == null)
+        if (propertyState == null)
             Debug.LogError($"GameState - PropertyState not found: {propertyId}");
 
         return propertyState;
