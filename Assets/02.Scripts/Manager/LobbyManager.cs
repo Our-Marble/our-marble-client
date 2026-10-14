@@ -738,7 +738,7 @@ public class LobbyManager : MonoBehaviour
     private void OnLocalReadyToggled(bool ready)
     {
         if (applyingSnapshot || CurrentRoom == null) return;
-        //Net.SetReady(ready);
+        Net.SendSetReadyRequest(ready);
     }
 
     // TODO: 서버에 모드 변경 요청이 생기면 보낸다. 지금은 서버 값으로 되돌린다
