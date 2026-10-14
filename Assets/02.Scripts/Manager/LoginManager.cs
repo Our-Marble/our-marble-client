@@ -228,8 +228,10 @@ public class LoginManager : MonoBehaviour
     }
 
 
-    private void HandleLoginResponse(string email, bool success)
+    private void HandleLoginResponse(string email, bool success, long statusCode, string message)
     {
+        Debug.Log($"[Login] HTTP {statusCode}: {message}");
+
         if (success)
         {
             fails = 0;
@@ -257,7 +259,7 @@ public class LoginManager : MonoBehaviour
                 lockUntil = Time.unscaledTime + LockSeconds;
                 ShowToast("여러 번 틀렸어요. 잠시 후 다시 시도해 주세요");
             }
-            else ShowToast($"아이디 또는 비밀번호가 맞지 않아요 ({fails}/{MaxFails})");
+            else ShowToast($"{message} ({fails}/{MaxFails})");
             passwordInput.text = "";
             UIFx.Shake(passwordInput.transform);
             passwordInput.ActivateInputField();
@@ -333,8 +335,9 @@ public class LoginManager : MonoBehaviour
         yield return StartCoroutine(HttpNetwork.Instance.SendCode(email, HandleSendEmailCodeResponse));
     }
 
-    private void HandleSendEmailCodeResponse(bool success)
+    private void HandleSendEmailCodeResponse(bool success, long statusCode, string message)
     {
+        Debug.Log($"[Email/Send] HTTP {statusCode}: {message}");
         ShowLoading(false);
         busy = false;
 
@@ -343,12 +346,12 @@ public class LoginManager : MonoBehaviour
             Debug.Log("[Email] 인증번호 전송 성공");
             SetVerifyCodeEnabled(true);
             verificationCodeInput.ActivateInputField();
-            ShowToast("인증번호를 전송했어요");
+            ShowToast(message);
         }
         else
         {
             SetVerifyCodeEnabled(false);
-            ShowToast("인증번호 전송에 실패했어요");
+            ShowToast(message);
         }
     }
 
@@ -373,8 +376,9 @@ public class LoginManager : MonoBehaviour
         yield return StartCoroutine(HttpNetwork.Instance.VerifyCode(email, code, HandleVerifyEmailCodeResponse));
     }
 
-    private void HandleVerifyEmailCodeResponse(bool success)
+    private void HandleVerifyEmailCodeResponse(bool success, long statusCode, string message)
     {
+        Debug.Log($"[Email/Verify] HTTP {statusCode}: {message}");
         ShowLoading(false);
         busy = false;
 
@@ -382,11 +386,11 @@ public class LoginManager : MonoBehaviour
         {
             Debug.Log("[Email] 이메일 인증 성공");
             ShowSignupCard();
-            ShowToast("이메일 인증이 완료됐어요");
+            ShowToast(message);
         }
         else
         {
-            ShowToast("인증번호가 맞지 않아요");
+            ShowToast(message);
         }
     }
 

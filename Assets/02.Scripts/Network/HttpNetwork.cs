@@ -10,8 +10,34 @@ public class HttpNetwork : Singleton<HttpNetwork>
 
     private const string BaseUrl = "http://localhost:8080"; // 서버 주소
 
+    private static string ReadErrorMessage(UnityWebRequest webRequest, string fallbackMessage)
+    {
+        byte[] responseBytes = webRequest.downloadHandler?.data;
+        string responseBody = responseBytes != null && responseBytes.Length > 0
+            ? Encoding.UTF8.GetString(responseBytes)
+            : webRequest.downloadHandler?.text;
+
+        if (string.IsNullOrWhiteSpace(responseBody))
+        {
+            Debug.Log($"[HTTP] {webRequest.responseCode} 응답 본문이 비어 있습니다.");
+            return fallbackMessage;
+        }
+
+        try
+        {
+            AuthExceptionResponse response = JsonUtility.FromJson<AuthExceptionResponse>(responseBody);
+            if (!string.IsNullOrWhiteSpace(response?.message)) return response.message;
+        }
+        catch (System.ArgumentException exception)
+        {
+            Debug.LogWarning($"오류 응답 파싱 실패: {exception.Message} | 본문: {responseBody}");
+        }
+
+        return fallbackMessage;
+    }
+
     // 0. 이메일 인증번호 전송
-    public IEnumerator SendCode(string email, System.Action<bool> onResult = null)
+    public IEnumerator SendCode(string email, System.Action<bool, long, string> onResult = null)
     {
         EmailSendRequest req = new EmailSendRequest { email = email };
         string jsonBody = JsonConvert.SerializeObject(req);
@@ -22,24 +48,28 @@ public class HttpNetwork : Singleton<HttpNetwork>
             webRequest.uploadHandler = new UploadHandlerRaw(bodyRaw);
             webRequest.downloadHandler = new DownloadHandlerBuffer();
             webRequest.SetRequestHeader("Content-Type", "application/json");
+            webRequest.SetRequestHeader("Accept", "application/json");
 
             yield return webRequest.SendWebRequest();
 
             if (webRequest.result != UnityWebRequest.Result.Success)
             {
                 Debug.LogError($"인증번호 전송 실패: {webRequest.error} | 응답: {webRequest.downloadHandler.text}");
-                onResult?.Invoke(false);
+                onResult?.Invoke(
+                    false,
+                    webRequest.responseCode,
+                    ReadErrorMessage(webRequest, "인증번호 전송에 실패했어요."));
             }
             else
             {
                 Debug.Log("인증번호 전송 성공!");
-                onResult?.Invoke(true);
+                onResult?.Invoke(true, webRequest.responseCode, "인증번호를 전송했어요.");
             }
         }
     }
 
     //1. 이메일 인증번호 확인
-    public IEnumerator VerifyCode(string email, string code, System.Action<bool> onResult = null)
+    public IEnumerator VerifyCode(string email, string code, System.Action<bool, long, string> onResult = null)
     {
         EmailVerifyRequest req = new EmailVerifyRequest { email = email, code = code };
         string jsonBody = JsonConvert.SerializeObject(req);
@@ -50,18 +80,22 @@ public class HttpNetwork : Singleton<HttpNetwork>
             webRequest.uploadHandler = new UploadHandlerRaw(bodyRaw);
             webRequest.downloadHandler = new DownloadHandlerBuffer();
             webRequest.SetRequestHeader("Content-Type", "application/json");
+            webRequest.SetRequestHeader("Accept", "application/json");
 
             yield return webRequest.SendWebRequest();
 
             if (webRequest.result != UnityWebRequest.Result.Success)
             {
                 Debug.LogError($"인증번호 확인 실패: {webRequest.error} | 응답: {webRequest.downloadHandler.text}");
-                onResult?.Invoke(false);
+                onResult?.Invoke(
+                    false,
+                    webRequest.responseCode,
+                    ReadErrorMessage(webRequest, "이메일 인증에 실패했어요."));
             }
             else
             {
                 Debug.Log("이메일 인증 성공!");
-                onResult?.Invoke(true);
+                onResult?.Invoke(true, webRequest.responseCode, "이메일 인증이 완료됐어요.");
             }
         }
     }
@@ -95,7 +129,7 @@ public class HttpNetwork : Singleton<HttpNetwork>
     }
 
     // 3. 로그인
-    public IEnumerator Login(string email, string password, System.Action<string, bool> onResult = null)
+    public IEnumerator Login(string email, string password, System.Action<string, bool, long, string> onResult = null)
     {
         LoginRequest req = new LoginRequest { email = email, password = password };
         string jsonBody = JsonConvert.SerializeObject(req);
@@ -106,13 +140,18 @@ public class HttpNetwork : Singleton<HttpNetwork>
             webRequest.uploadHandler = new UploadHandlerRaw(bodyRaw);
             webRequest.downloadHandler = new DownloadHandlerBuffer();
             webRequest.SetRequestHeader("Content-Type", "application/json");
+            webRequest.SetRequestHeader("Accept", "application/json");
 
             yield return webRequest.SendWebRequest();
 
             if (webRequest.result != UnityWebRequest.Result.Success)
             {
                 Debug.LogError($"로그인 실패: {webRequest.error} | 응답: {webRequest.downloadHandler.text}");
-                onResult?.Invoke(email, false);
+                onResult?.Invoke(
+                    email,
+                    false,
+                    webRequest.responseCode,
+                    ReadErrorMessage(webRequest, "로그인에 실패했어요."));
             }
             else
             {
@@ -122,7 +161,7 @@ public class HttpNetwork : Singleton<HttpNetwork>
                 
                 JwtToken = res.accessToken; // 토큰 저장
                 Debug.Log("로그인 성공! JWT 토큰 저장 완료");
-                onResult?.Invoke(email, true);
+                onResult?.Invoke(email, true, webRequest.responseCode, "로그인에 성공했어요.");
             }
         }
     }
@@ -185,6 +224,12 @@ public class LoginRequest
 public class LoginResponse 
 { 
     public string accessToken; 
+}
+
+[System.Serializable]
+public class AuthExceptionResponse
+{
+    public string message;
 }
 
 [System.Serializable]
