@@ -23164,7 +23164,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3323424037278181017, guid: e68d1045b5133b74bae320ba12c8d418, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 10
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 3323424037278181017, guid: e68d1045b5133b74bae320ba12c8d418, type: 3}
       propertyPath: m_LocalRotation.w
@@ -23172,15 +23172,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3323424037278181017, guid: e68d1045b5133b74bae320ba12c8d418, type: 3}
       propertyPath: m_LocalRotation.x
-      value: -0
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 3323424037278181017, guid: e68d1045b5133b74bae320ba12c8d418, type: 3}
       propertyPath: m_LocalRotation.y
-      value: -0
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 3323424037278181017, guid: e68d1045b5133b74bae320ba12c8d418, type: 3}
       propertyPath: m_LocalRotation.z
-      value: -0
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 3323424037278181017, guid: e68d1045b5133b74bae320ba12c8d418, type: 3}
       propertyPath: m_AnchoredPosition.x
@@ -23205,6 +23205,10 @@ PrefabInstance:
     - target: {fileID: 5609220369424734334, guid: e68d1045b5133b74bae320ba12c8d418, type: 3}
       propertyPath: m_Name
       value: Canvas_RoomSetup
+      objectReference: {fileID: 0}
+    - target: {fileID: 5609220369424734334, guid: e68d1045b5133b74bae320ba12c8d418, type: 3}
+      propertyPath: m_IsActive
+      value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -33462,7 +33466,7 @@ MonoBehaviour:
   m_fontMaterials: []
   m_fontColor32:
     serializedVersion: 2
-    rgba: 4285421782
+    rgba: 4285091402
   m_fontColor: {r: 0.2901961, g: 0.30588236, b: 0.4117647, a: 1}
   m_enableVertexGradient: 0
   m_colorMode: 3

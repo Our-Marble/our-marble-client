@@ -1133,6 +1133,29 @@ public class UIManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 지금 열려 있는 선택창(땅 구매·건설, 인수, 매각, 여행지 선택)만 닫는다. 선택 중이던 내용은 버리고, 아무것도 GameManager에 넘기지 않는다.
+    /// 보드 선택 모드(여행지·매각)였다면 둘러보기 모드로 되돌린다. 주사위, 카드, 결과 창과 HUD는 그대로 둔다.
+    /// immediate면 닫힘 연출 없이 바로 끈다.
+    /// </summary>
+    public void CloseSelectionPopups(bool immediate = false)
+    {
+        bool boardSelecting = chooseDestinationMode || sellMode;
+
+        chooseDestinationMode = false;
+        travelTileIndex = -1;
+        ExitSellMode();
+        if (boardSelecting && BoardManager.Instance != null) BoardManager.Instance.ChangeToInspectMode();
+
+        UIView[] popups = { purchase, takeover, sell, destinationSelect };
+        foreach (var popup in popups)
+        {
+            if (popup == null || !popup.gameObject.activeSelf) continue;
+            if (immediate) popup.CloseImmediate();
+            else popup.Close();
+        }
+    }
+
     #region 조회 도우미
 
     // 파괴된 Unity 객체도 진짜 null로 돌려줘서 "Game != null"만 확인하면 되게 한다

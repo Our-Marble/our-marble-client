@@ -500,7 +500,7 @@ public class LobbyManager_temp : MonoBehaviour
 
     /// <summary>
     /// 방 정보(CurrentRoom)를 채운다. 방 설정 화면과 게임 씬이 읽는다.
-    /// 내가 방장이면 맨 앞, 아니면 빈 색 중 첫 번째 자리로 들어간다. (목업: 방장으로 만든 방은 빈자리를 가짜 인원으로 채우고, 팀전이면 팀을 번갈아 배정한다)
+    /// 내가 방장이면 맨 앞, 아니면 빈 색 중 첫 번째 자리로 들어간다. 방장으로 만든 방은 방장 혼자 시작하고, 방 설정에서 봇을 넣는다. 팀전이면 팀을 번갈아 배정한다.
     /// </summary>
     private void FillCurrentRoom(RoomData room, bool asHost)
     {
@@ -511,15 +511,6 @@ public class LobbyManager_temp : MonoBehaviour
         int color = Enumerable.Range(0, 4).FirstOrDefault(c => players.All(p => p.ColorIndex != c));
         var mine = new RoomPlayerInfo { Name = me.Name, ColorIndex = color, IsHost = asHost, IsReady = asHost };
         if (asHost) players.Insert(0, mine); else players.Add(mine);
-
-        // 방금 만든 방은 비어 있으니, 시작 조건을 확인해 볼 수 있게 다른 플레이어가 이미 들어와 있다고 본다 (목업)
-        while (asHost && players.Count < room.MaxPlayers)
-        {
-            string botName = PickFreeName() ?? $"손님{players.Count}";
-            int botColor = Enumerable.Range(0, 4).FirstOrDefault(c => players.All(p => p.ColorIndex != c));
-            players.Add(new RoomPlayerInfo { Name = botName, ColorIndex = botColor, IsReady = true });
-            idlers.Add(botName); // PickFreeName이 같은 이름을 또 고르지 않게
-        }
 
         // 팀전의 기본 팀은 자리 순서대로 레드, 블루, 레드, 블루. (팀 "미선택"은 없다) 방 설정에서 바꿀 수 있다.
         AssignDefaultTeams(players, room.IsTeam);
@@ -549,6 +540,9 @@ public class LobbyManager_temp : MonoBehaviour
         public string Map;       // 맵 이름. 방 설정에서 방장이 바꾼다
         public bool IsTeam;      // 팀전 여부. 방 설정에서 방장이 바꾼다
         public int MaxPlayers;   // 최대 인원(2~4). 방 설정에서 방장이 바꾼다
+        public long StartMoney = 500000; // 시작 자금. 방 설정에서 방장이 바꾼다
+        public int MaxRound = 30;        // 최대 라운드. 방 설정에서 방장이 바꾼다
+        public long Salary = 100000;     // 출발 지점을 지날 때 받는 월급. 방 설정에서 방장이 바꾼다
         public bool HasPassword;
         public string Password; // 방 안에 있는 사람에게만 보여 주는 값. 서버 연동 후에는 서버가 내려 준다
         public bool IsHost;
@@ -561,6 +555,7 @@ public class LobbyManager_temp : MonoBehaviour
         public string Name;
         public int ColorIndex;
         public bool IsHost;
+        public bool IsBot;   // 방장이 방 설정에서 넣은 봇. 항상 준비된 상태
         public bool IsReady;
         public int Team; // 0 없음, 1 레드, 2 블루
     }
@@ -764,44 +759,47 @@ public class LobbyManager_temp : MonoBehaviour
 
     // ───────────── 방 설정 (방 안, 게임 시작 전) ─────────────
 
-    /// <summary>방 설정 화면에 방 정보를 채워 연다. 모드, 맵, 팀, 준비, 최대 인원을 바꾸면 방 정보(RoomInfo)에 기록한다.</summary>
+    /// <summary>
+    /// 방 설정 화면에 방 정보를 채워 연다. 게임 설정은 적용된 값(RoomInfo)을 보여 주고,
+    /// 방장이 "설정 적용"을 누르면 OnSettingsApplied가 방 정보에 기록한다. 팀 선택과 준비는 바로 방 정보에 기록한다.
+    /// </summary>
     private void OpenRoomSetup(RoomInfo room)
     {
         if (roomSetup == null) { Debug.LogError("[Lobby] Canvas_RoomSetup이 로비 씬에 없습니다."); return; }
 
         roomSetup.SetRoomInfo(room.Name, room.Code, room.HasPassword ? room.Password : null);
-        roomSetup.SetMode(room.IsTeam);
-        roomSetup.SetMap(room.Map, MapSpriteOf(room.Map));
-        roomSetup.SetMapSelectable(room.IsHost); // 맵은 방장만 바꾼다
+        roomSetup.SetMapChoices(Maps, mapSprites);
         roomSetup.SetLocalPlayer(room.LocalIndex);
-        roomSetup.SetMaxPlayers(room.MaxPlayers);
         roomSetup.SetHost(room.IsHost);
-        ApplyRoomSetupSlots(room);
+        ApplyRoomSetupSlots(room);                // 자리를 먼저 채워야 설정이 사람 수를 기준으로 맞춰진다
+        roomSetup.SetSettings(ToSettings(room));  // 적용된 설정. 방장의 초안도 이 값에서 시작한다
         roomSetup.SetReady(room.Players[room.LocalIndex].IsReady);
 
-        roomSetup.ModeChanged -= OnRoomModeChanged;
-        roomSetup.ModeChanged += OnRoomModeChanged;
-        roomSetup.MaxPlayersChanged -= OnRoomMaxPlayersChanged;
-        roomSetup.MaxPlayersChanged += OnRoomMaxPlayersChanged;
+        roomSetup.SettingsApplied -= OnSettingsApplied;
+        roomSetup.SettingsApplied += OnSettingsApplied;
         roomSetup.ReadyToggled -= OnLocalReadyToggled;
         roomSetup.ReadyToggled += OnLocalReadyToggled;
         roomSetup.LeaveRequested -= OnLeaveRequested;
         roomSetup.LeaveRequested += OnLeaveRequested;
 
         // 내가 팀을 고르면 방 정보에도 기록한다
-        roomSetup.Show(() => ChangeRoomMap(room, -1), () => ChangeRoomMap(room, 1),
+        roomSetup.Show(
             () => { room.Players[room.LocalIndex].Team = 1; ApplyRoomSetupSlots(room); },
             () => { room.Players[room.LocalIndex].Team = 2; ApplyRoomSetupSlots(room); },
             StartGameFromRoom);
     }
 
-    // 방장이 맵을 바꿨을 때. 방 정보에 기록하고 방 설정 화면의 맵 이름과 초상화를 바꾼다.
-    private void ChangeRoomMap(RoomInfo room, int step)
+    // 방 정보(RoomInfo)를 방 설정 화면이 쓰는 설정 묶음으로 바꾼다
+    private static RoomSetupView.Settings ToSettings(RoomInfo room) => new RoomSetupView.Settings
     {
-        int index = Mathf.Max(0, Array.IndexOf(Maps, room.Map));
-        room.Map = Maps[(index + step + Maps.Length) % Maps.Length];
-        roomSetup.SetMap(room.Map, MapSpriteOf(room.Map));
-    }
+        Map = room.Map,
+        IsTeam = room.IsTeam,
+        MaxPlayers = room.MaxPlayers,
+        StartMoney = room.StartMoney,
+        MaxRound = room.MaxRound,
+        Salary = room.Salary,
+        BotCount = room.Players.Count(p => p.IsBot),
+    };
 
     private void ApplyRoomSetupSlots(RoomInfo room)
     {
@@ -815,6 +813,7 @@ public class LobbyManager_temp : MonoBehaviour
                 Name = p.Name,
                 ColorIndex = p.ColorIndex,
                 IsHost = p.IsHost,
+                IsBot = p.IsBot,
                 IsReady = p.IsReady,
                 Team = (RoomSetupView.Team)p.Team,
             });
@@ -828,20 +827,73 @@ public class LobbyManager_temp : MonoBehaviour
         for (int i = 0; i < players.Count; i++) players[i].Team = isTeam ? 1 + (i % 2) : 0;
     }
 
-    // 방장이 모드를 바꿨을 때. 팀전으로 바꾸면 기본 팀은 자리 순서대로 레드, 블루, 레드, 블루다. 개인전이면 팀이 없다.
-    private void OnRoomModeChanged(bool isTeam)
+    // 방장이 "설정 적용"을 눌렀을 때. 방장이 바꾼 설정 전체를 한 번에 서버로 보내는 흐름이다. (목업: 응답을 기다린 뒤 방 정보에 기록한다)
+    private void OnSettingsApplied(RoomSetupView.Settings settings)
     {
-        var room = CurrentRoom;
-        if (room == null) return;
-        room.IsTeam = isTeam;
-        AssignDefaultTeams(room.Players, isTeam);
-        ApplyRoomSetupSlots(room);
+        if (entering || CurrentRoom == null || !CurrentRoom.IsHost) return;
+        if (connection != ConnectionState.Connected) { ShowToast("서버와 연결이 끊겨 설정을 적용할 수 없어요"); return; }
+        StartCoroutine(ApplySettingsRoutine(settings));
     }
 
-    // 방장이 최대 인원을 바꿨을 때. 지금 들어와 있는 인원보다 적게는 못 줄인다(창이 막아 준다).
-    private void OnRoomMaxPlayersChanged(int max)
+    private IEnumerator ApplySettingsRoutine(RoomSetupView.Settings settings)
     {
-        if (CurrentRoom != null) CurrentRoom.MaxPlayers = max;
+        entering = true; // 요청하는 동안 시작, 나가기 같은 다른 입력을 막는다
+        ShowLoading(true, "");
+        yield return new WaitForSecondsRealtime(serverDelay);
+        ShowLoading(false);
+        entering = false;
+
+        var room = CurrentRoom;
+        if (room == null || !room.IsHost) yield break; // 기다리는 사이 방을 나갔다
+        if (connection != ConnectionState.Connected) { ShowToast("서버와 연결이 끊겨 설정을 적용할 수 없어요"); yield break; }
+
+        // 서버가 받아들인 것처럼 방 정보에 기록한다
+        bool modeChanged = room.IsTeam != settings.IsTeam;
+        room.Map = settings.Map;
+        room.IsTeam = settings.IsTeam;
+        room.MaxPlayers = settings.MaxPlayers;
+        room.StartMoney = settings.StartMoney;
+        room.MaxRound = settings.MaxRound;
+        room.Salary = settings.Salary;
+        AdjustBots(room, settings.BotCount);
+        if (modeChanged) AssignDefaultTeams(room.Players, room.IsTeam); // 모드가 바뀌면 팀을 처음부터 나눈다
+
+        // 게임이 플레이어 목록 순서로 색을 정하므로, 색은 자리 순서(0, 1, 2, 3)로 맞춘다
+        for (int i = 0; i < room.Players.Count; i++) room.Players[i].ColorIndex = i;
+
+        ApplyRoomSetupSlots(room);
+        roomSetup.SetSettings(ToSettings(room)); // 적용된 값을 돌려주면 화면의 초안도 이 값으로 맞춰진다
+        ShowToast("설정을 적용했어요");
+    }
+
+    // 봇 수를 맞춘다. 봇은 맨 뒤에 붙이고 맨 뒤에서 뺀다. (게임의 플레이어 목록에는 빈 자리가 없고 순서만 있다)
+    // 최대 인원을 넘지 않고, 봇은 항상 준비된 상태다.
+    private static void AdjustBots(RoomInfo room, int botCount)
+    {
+        // 줄이기: 맨 뒤의 봇부터 뺀다. 최대 인원보다 많이 들어와 있어도 봇을 먼저 뺀다.
+        while (room.Players.Any(p => p.IsBot) && (room.Players.Count(p => p.IsBot) > botCount || room.Players.Count > room.MaxPlayers))
+        {
+            int last = room.Players.FindLastIndex(p => p.IsBot);
+            room.Players.RemoveAt(last);
+            if (last < room.LocalIndex) room.LocalIndex--; // 내 앞 자리가 빠지면 내 번호도 하나 당겨진다
+        }
+
+        // 늘리기: 맨 뒤에 붙인다
+        while (room.Players.Count(p => p.IsBot) < botCount && room.Players.Count < room.MaxPlayers)
+        {
+            int number = 1; // "봇 1", "봇 2"처럼 아직 쓰지 않은 가장 작은 번호
+            while (room.Players.Any(p => p.Name == $"봇 {number}")) number++;
+
+            // 팀전이면 인원이 적은 팀에 넣어 두 팀 인원이 맞게 한다. 개인전이면 팀이 없다.
+            int red = room.Players.Count(p => p.Team == 1), blue = room.Players.Count(p => p.Team == 2);
+            room.Players.Add(new RoomPlayerInfo
+            {
+                Name = $"봇 {number}",
+                IsBot = true,
+                IsReady = true,
+                Team = room.IsTeam ? (red <= blue ? 1 : 2) : 0,
+            });
+        }
     }
 
     // 방장이 아닌 내가 준비하기/준비 취소를 눌렀을 때
