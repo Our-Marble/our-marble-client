@@ -43,6 +43,9 @@ public class UIDebugPanel : MonoBehaviour
         yield return null;
         if (UI == null || Game == null) yield break;
 
+        // 서버에서 게임 상태(GAME_STATE_SYNC)를 받기 전에는 플레이어 목록이 비어 있다. 받을 때까지 기다린다.
+        while (State == null || State.PlayerStates == null || State.PlayerStates.Count == 0) yield return null;
+
         for (int i = 0; i < Players.Count; i++) UI.SetPlayerProfile(Players[i].PlayerId, NameOf(i));
         ready = true;
 
