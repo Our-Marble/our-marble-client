@@ -401,7 +401,8 @@ public class RoomSetupView : UIView
     private void OnApplyClicked()
     {
         if (!isHost || SameSettings(applied, draft)) return;
-        if (legacyMode) { ApplyLegacy(); return; }
+        // SettingsApplied를 받는 쪽이 있으면 설정 묶음 전체를 넘긴다. 없을 때만 예전 방식(모드, 최대 인원만 이벤트)으로 처리한다
+        if (SettingsApplied == null && legacyMode) { ApplyLegacy(); return; }
         SettingsApplied?.Invoke(draft);
     }
 
