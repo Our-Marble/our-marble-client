@@ -11,6 +11,7 @@ public class RoomSnapshot
     public GameConfig config;
     public List<PlayerSnapshot> Players;
     public int maxPlayers;
+    public int botCount;
 }
 
 public enum RoomStatus

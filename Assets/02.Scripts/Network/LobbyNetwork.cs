@@ -231,6 +231,20 @@ public class LobbyNetwork : Singleton<LobbyNetwork>
         string json = JsonConvert.SerializeObject(message);
         WebSocketNetwork.Instance.SendMessage(json);
     }
+    
+    public void SendRoomConfigRequest(GameConfig config, int maxPlayers, int botCount)
+    {
+        RoomConfigRequest message = new RoomConfigRequest
+        {
+            type = "ROOM_CONFIG_REQUEST",
+            config = config,
+            maxPlayers = maxPlayers,
+            botCount = botCount
+        };
+
+        string json = JsonConvert.SerializeObject(message);
+        WebSocketNetwork.Instance.SendMessage(json);
+    }
 }
 
 public class LobbyServerMessage

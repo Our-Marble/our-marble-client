@@ -434,6 +434,14 @@ public class LobbyManager : MonoBehaviour
         BeginRequest(Pending.Start);
         Net.SendStartGameRequest();
     }
+    
+    private void RequestRoomConfig(GameConfig config, int maxPlayers, int  botCount)
+    {
+        if (!CanRequest || CurrentRoom == null || !IsHost(CurrentRoom)) return;
+        // 매개변수 값이 유효한지 확인하는 if문 있으면 좋을 것 같음.
+        BeginRequest(Pending.Enter);
+        Net.SendRoomConfigRequest(config, maxPlayers, botCount);
+    }
 
     private void BeginRequest(Pending kind, string loadingMessage = null)
     {
@@ -738,7 +746,7 @@ public class LobbyManager : MonoBehaviour
     private void OnLocalReadyToggled(bool ready)
     {
         if (applyingSnapshot || CurrentRoom == null) return;
-        //Net.SetReady(ready);
+        Net.SendSetReadyRequest(ready);
     }
 
     // TODO: 서버에 모드 변경 요청이 생기면 보낸다. 지금은 서버 값으로 되돌린다
