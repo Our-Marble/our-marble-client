@@ -434,6 +434,14 @@ public class LobbyManager : MonoBehaviour
         BeginRequest(Pending.Start);
         Net.SendStartGameRequest();
     }
+    
+    private void RequestRoomConfig(GameConfig config, int maxPlayers, int  botCount)
+    {
+        if (!CanRequest || CurrentRoom == null || !IsHost(CurrentRoom)) return;
+        // 매개변수 값이 유효한지 확인하는 if문 있으면 좋을 것 같음.
+        BeginRequest(Pending.Enter);
+        Net.SendRoomConfigRequest(config, maxPlayers, botCount);
+    }
 
     private void BeginRequest(Pending kind, string loadingMessage = null)
     {
