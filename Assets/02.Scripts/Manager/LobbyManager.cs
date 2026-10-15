@@ -53,7 +53,7 @@ public class LobbyManager : MonoBehaviour
     private ConnectionState connection = ConnectionState.Connected;
 
     // 응답을 기다리는 요청. 기다리는 동안 다른 요청과 입력을 막는다
-    private enum Pending { None, RoomList, Enter, Leave, Start }
+    private enum Pending { None, RoomList, Enter, Leave, Start, Config }
     private Pending pending;
     private Coroutine timeoutRoutine;
     private bool refreshToast; // 사용자가 새로고침을 눌러 받은 목록이면 토스트를 띄운다
@@ -435,11 +435,33 @@ public class LobbyManager : MonoBehaviour
         Net.SendStartGameRequest();
     }
     
-    private void RequestRoomConfig(GameConfig config, int maxPlayers, int  botCount)
+    // 방장이 방 설정 화면에서 "설정 적용"을 눌렀을 때 바뀐 설정을 서버에 보낸다.
+    // 서버가 받아들이면 새 설정이 담긴 ROOM_UPDATED가 오고(HandleRoomUpdated), 거절하면 LOBBY_ERROR가 온다.
+    private void RequestRoomConfig(GameConfig config, int maxPlayers, int botCount)
     {
-        if (!CanRequest || CurrentRoom == null || !IsHost(CurrentRoom)) return;
-        // 매개변수 값이 유효한지 확인하는 if문 있으면 좋을 것 같음.
-        BeginRequest(Pending.Enter);
+        var room = CurrentRoom;
+        if (!CanRequest || room == null || !IsHost(room) || config == null) return;
+
+        // 값이 서버가 받을 수 있는 범위인지 먼저 확인한다
+        int humans = room.Players != null ? room.Players.Count : 1; // 지금 들어와 있는 사람 수
+        if (maxPlayers < 2 || maxPlayers > 4 || maxPlayers < humans)
+        {
+            ShowToast(maxPlayers < humans ? "지금 들어와 있는 인원보다 적게는 줄일 수 없어요" : "최대 인원은 2~4명이에요");
+            return;
+        }
+        if (botCount < 0 || humans + botCount > maxPlayers)
+        {
+            ShowToast("사람과 봇을 합쳐 최대 인원을 넘을 수 없어요");
+            return;
+        }
+        if (config.startMoney <= 0 || config.salaryAmount < 0 || config.maxRound <= 0)
+        {
+            ShowToast("게임 설정 값이 올바르지 않아요");
+            return;
+        }
+
+        Debug.Log($"[Lobby] 방 설정 요청: 맵 {config.mapId}, 최대 {maxPlayers}명, 봇 {botCount}명, 시작 자금 {config.startMoney}, 라운드 {config.maxRound}, 월급 {config.salaryAmount}");
+        BeginRequest(Pending.Config);
         Net.SendRoomConfigRequest(config, maxPlayers, botCount);
     }
 
@@ -504,6 +526,19 @@ public class LobbyManager : MonoBehaviour
         if (inRoom && CurrentRoom != null && CurrentRoom.roomId != snapshot.roomId) return;
 
         CurrentRoom = snapshot;
+
+        // 내가 보낸 설정 요청에 대한 응답이다: 로딩을 닫고, 방장의 초안도 서버가 적용한 값으로 맞춘다
+        if (pending == Pending.Config)
+        {
+            EndRequest();
+            if (roomSetup != null && roomSetup.IsOpen)
+            {
+                ApplyRoomSnapshot(snapshot, keepDraft: false);
+                ShowToast("설정을 적용했어요");
+                return;
+            }
+        }
+
         if (roomSetup != null && roomSetup.IsOpen) ApplyRoomSnapshot(snapshot);
         else TryOpenRoomSetup();
     }
@@ -668,25 +703,24 @@ public class LobbyManager : MonoBehaviour
     {
         if (roomSetup == null) { Debug.LogError("[Lobby] Canvas_RoomSetup이 로비 씬에 없습니다."); return; }
 
-        ApplyRoomSnapshot(room);
+        ApplyRoomSnapshot(room, keepDraft: false); // 방을 처음 열 때는 방장의 초안도 서버 값에서 시작한다
 
-        roomSetup.ModeChanged -= OnRoomModeChanged;
-        roomSetup.ModeChanged += OnRoomModeChanged;
-        roomSetup.MaxPlayersChanged -= OnRoomMaxPlayersChanged;
-        roomSetup.MaxPlayersChanged += OnRoomMaxPlayersChanged;
+        roomSetup.SettingsApplied -= OnSettingsApplied;
+        roomSetup.SettingsApplied += OnSettingsApplied;
         roomSetup.ReadyToggled -= OnLocalReadyToggled;
         roomSetup.ReadyToggled += OnLocalReadyToggled;
         roomSetup.LeaveRequested -= OnLeaveRequested;
         roomSetup.LeaveRequested += OnLeaveRequested;
 
         // TODO: 팀 선택은 서버 데이터(PlayerSnapshot)에 팀 필드가 생기면 요청을 보낸다
-        roomSetup.Show(() => RequestChangeMap(-1), () => RequestChangeMap(1),
-            () => { }, () => { },
-            RequestStartGame);
+        roomSetup.Show(() => { }, () => { }, RequestStartGame);
     }
 
-    /// <summary>스냅샷을 방 설정 화면에 그대로 반영한다. 방 안에서 받는 모든 OnRoomUpdated가 여기로 온다.</summary>
-    private void ApplyRoomSnapshot(RoomSnapshot room)
+    /// <summary>
+    /// 스냅샷을 방 설정 화면에 그대로 반영한다. 방 안에서 받는 모든 OnRoomUpdated가 여기로 온다.
+    /// keepDraft: 방장이 바꾸던 설정(적용 전)을 그대로 둘지. 방을 처음 열 때와 설정 적용 응답을 받았을 때만 false다.
+    /// </summary>
+    private void ApplyRoomSnapshot(RoomSnapshot room, bool keepDraft = true)
     {
         var players = room.Players ?? new List<PlayerSnapshot>();
         int local = players.FindIndex(p => p.playerId == MyPlayerId);
@@ -697,11 +731,8 @@ public class LobbyManager : MonoBehaviour
         try
         {
             roomSetup.SetRoomInfo(RoomTitle(host?.nickname), room.roomId, null);
-            roomSetup.SetMode(false); // TODO: GameConfig에 모드 정보가 있으면 그 값을 쓴다
-            roomSetup.SetMap(MapName(room.mapId), MapSprite(room.mapId));
-            roomSetup.SetMapSelectable(isHost);
+            roomSetup.SetMapChoices(Maps, mapSprites);
             roomSetup.SetLocalPlayer(Mathf.Max(0, local));
-            roomSetup.SetMaxPlayers(room.maxPlayers);
             roomSetup.SetHost(isHost);
 
             for (int i = 0; i < 4; i++)
@@ -720,6 +751,19 @@ public class LobbyManager : MonoBehaviour
                 });
             }
             roomSetup.RecountTeams();
+
+            // 서버에 적용된 설정. 자리를 채운 뒤에 넣어야 사람 수를 기준으로 맞춰진다. 서버에 없는 항목(모드)은 개인전이다.
+            var config = room.config;
+            roomSetup.SetSettings(new RoomSetupView.Settings
+            {
+                Map = MapName(room.mapId),
+                IsTeam = false, // TODO: 서버에 모드 항목이 생기면 그 값을 쓴다
+                MaxPlayers = room.maxPlayers,
+                StartMoney = config != null && config.startMoney > 0 ? config.startMoney : 500000,
+                MaxRound = config != null && config.maxRound > 0 ? config.maxRound : 30,
+                Salary = config != null && config.salaryAmount > 0 ? config.salaryAmount : 100000,
+                BotCount = room.botCount,
+            }, keepDraft);
             roomSetup.SetReady(isHost || (local >= 0 && players[local].ready));
         }
         finally
@@ -728,33 +772,36 @@ public class LobbyManager : MonoBehaviour
         }
     }
 
-    // 방장이 맵을 바꿨을 때. 화면은 서버가 새 스냅샷을 보내면 바뀐다
-    private void RequestChangeMap(int step)
+    // 방장이 "설정 적용"을 눌렀을 때. 방장이 바꾼 맵, 인원, 시작 자금, 최대 라운드, 월급, 봇 수 전체가 한 번에 넘어온다.
+    // 화면은 서버가 새 스냅샷을 보내면 적용된 값으로 바뀐다 (HandleRoomUpdated).
+    private void OnSettingsApplied(RoomSetupView.Settings settings)
     {
         var room = CurrentRoom;
-        if (room == null || !IsHost(room) || connection != ConnectionState.Connected) return;
-        int next = ((room.mapId + step) % Maps.Length + Maps.Length) % Maps.Length;
-        //Net.ChangeMap(next);
-    }
+        if (applyingSnapshot || room == null || !IsHost(room)) return;
 
-    private void OnRoomMaxPlayersChanged(int max)
-    {
-        if (applyingSnapshot || CurrentRoom == null || !IsHost(CurrentRoom)) return;
-        //Net.ChangeMaxPlayers(max);
+        // 서버의 요청에는 모드 항목이 없어서 팀전은 아직 적용할 수 없다. 선택은 할 수 있게 두고, 적용할 때 안내한다.
+        // 다른 설정과 섞어 일부만 적용되지 않도록 아무것도 보내지 않는다. (개인전으로 바꾸고 적용하면 나머지 설정이 전달된다)
+        if (settings.IsTeam) { ShowToast("팀전은 아직 구현되지 않은 기능이에요"); return; }
+
+        // 서버가 가진 나머지 설정(세금, 무인도 턴, 제한 시간)은 지금 값을 그대로 보낸다
+        var current = room.config;
+        var config = new GameConfig
+        {
+            startMoney = settings.StartMoney,
+            salaryAmount = settings.Salary,
+            taxAmount = current != null ? current.taxAmount : 0,
+            maxRound = settings.MaxRound,
+            islandTurns = current != null ? current.islandTurns : 0,
+            mapId = Mathf.Max(0, Array.IndexOf(Maps, settings.Map)),
+            limitTimeSeconds = current != null ? current.limitTimeSeconds : 0,
+        };
+        RequestRoomConfig(config, settings.MaxPlayers, settings.BotCount);
     }
 
     private void OnLocalReadyToggled(bool ready)
     {
         if (applyingSnapshot || CurrentRoom == null) return;
         Net.SendSetReadyRequest(ready);
-    }
-
-    // TODO: 서버에 모드 변경 요청이 생기면 보낸다. 지금은 서버 값으로 되돌린다
-    private void OnRoomModeChanged(bool isTeam)
-    {
-        if (applyingSnapshot || CurrentRoom == null) return;
-        if (isTeam) ShowToast("팀전은 아직 준비 중이에요");
-        ApplyRoomSnapshot(CurrentRoom);
     }
 
     // X 버튼: 방에서 나갈지 묻고, 확인하면 나가기 요청을 보낸다. 화면은 OnRoomLeft를 받으면 닫는다
