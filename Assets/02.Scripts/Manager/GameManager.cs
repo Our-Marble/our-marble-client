@@ -28,26 +28,6 @@ public class GameManager : Singleton<GameManager>
 
     void Start()
     {
-        /*
-        // 봇 전략 생성 (보드 배치와 가격 계산이 필요해서 매니저 초기화 이후에 생성)
-        botStrategies = new Dictionary<long, IBotStrategy>();
-        foreach (PlayerSetup setup in playerSetups)
-        {
-            botStrategies[setup.playerId] = new BasicBotStrategy(
-                BoardManager.Instance.BoardData.Tiles,
-                PropertyManager.Instance.GetToll,
-                PropertyManager.Instance.GetData,
-                BotSettings.For(setup.personality),
-                maxRound,
-                Log);
-        }
-            
-        // MVP 단계에서 플레이어의 playerId는 123, 봇의 playerId는 456 입니다.
-        PlayerManager.Instance.Initialize(gameState.PlayerOrder); // 다른 Monobehaviour 클래스를 참조하여 초기화할때는 Awake말고 Start에서 하는게 안전
-        */
-
-        // StartGame();
-
         GameNetwork.Instance.SendGameStateRequest();
     }
 
@@ -79,7 +59,7 @@ public class GameManager : Singleton<GameManager>
 
     private void Update()
     {
-        if (gameState.WaitingType == null) return;
+        if (gameState == null || gameState.WaitingType == null) return;
 
         GameMessageType waitingType = gameState.WaitingType.Value;
         GameNetwork.Instance.TryDequeueMessage(waitingType);
@@ -252,21 +232,23 @@ public class GameManager : Singleton<GameManager>
 
     public void HandleChooseDestinationPrompt()
     {
-        // 플레이어의 경우, 자유 여행할 타일을 선택하는 UI를 표시합니다.
-        if (UIManager.Instance != null)
+        // 자신의 차례인 경우에만 자유 여행할 타일을 선택하는 UI를 표시합니다.
+        if (IsLocalPlayerTurn())
         {
-            UIManager.Instance.ShowChooseDestinationPopup();
+            if (UIManager.Instance != null)
+            {
+                UIManager.Instance.ShowChooseDestinationPopup();
+            }
         }
+
+        gameState.WaitingType = GameMessageType.DESTINATION_CHOSEN;
     }
 
     public void ChooseDestination(int destinationPosition)
     {
-        // 자신의 차례인 경우에만 요청을 보냅니다.
         if (IsLocalPlayerTurn())
             GameNetwork.Instance.SendChooseDestinationRequest(destinationPosition);
-
-        // broadcast메시지 수신 대기 상태에 들어갑니다.
-        gameState.WaitingType = GameMessageType.DESTINATION_CHOSEN;
+        
     }
 
     /// <summary>
@@ -274,25 +256,29 @@ public class GameManager : Singleton<GameManager>
     /// </summary>
     public void HandleDestinationChosen(long playerId, int destinationPosition)
     {
-        // 말이 목적지로 이동하는 것을 연출합니다. (주사위 굴림으로 이동하는것과 연출이 다를 수 있음.)
-        MovePlayerDirectly(playerId, destinationPosition);
+        var player = GetPlayerState(playerId);
+
+        int fromPosition = player.Position;
+        int toPosition = destinationPosition;
+        bool shouldReceiveSalary = toPosition < fromPosition;   // 출발 지점을 지나침
+
+        Log($"[세계여행] {P(playerId)}: {TileName(fromPosition)} → {TileName(toPosition)}");
+
+        HandlePlayerMoved(playerId, fromPosition, toPosition, shouldReceiveSalary);
     }
 
     public void HandleRollDicePrompt()
     {
-        if (IsGameOver())
+        if (IsLocalPlayerTurn())
         {
-            Log("게임 종료: 남은 플레이어가 1명 이하입니다.");
-            return;
+            if (UIManager.Instance != null)
+            {
+                UIManager.Instance.ShowRollDicePopup();
+            }
         }
-        
-        if (UIManager.Instance != null)
-        {
-            UIManager.Instance.ShowRollDicePopup();
-            return;
-        }
-        // 플레이어인 경우 주사위 굴림 UI를 표시합니다.
-        Debug.Log("주사위 굴림 창 뜨는 기능 미구현... 인스펙터에서 RollDiceTest를 직접 호출하세요");
+
+        // broadcast메시지 수신 대기 상태에 들어갑니다.
+        gameState.WaitingType = GameMessageType.DICE_ROLLED;
     }
 
     [ContextMenu("RollDiceTest")]   // 플레이 모드에서 테스트용
@@ -303,12 +289,7 @@ public class GameManager : Singleton<GameManager>
     /// </summary>
     public void RollDice()
     {
-        // 자신의 차례인 경우에만 요청을 보냅니다.
-        if (IsLocalPlayerTurn())
-            GameNetwork.Instance.SendRollDiceRequest();
-
-        // broadcast메시지 수신 대기 상태에 들어갑니다.
-        gameState.WaitingType = GameMessageType.DICE_ROLLED;
+        GameNetwork.Instance.SendRollDiceRequest();
     }
 
     public void HandleDiceRolled(long playerId, int dice1, int dice2)
@@ -587,6 +568,12 @@ public class GameManager : Singleton<GameManager>
     /// </summary>
     private void ProcessEndTurn()
     {
+        if (IsGameOver())
+        {
+            Log("게임 종료: 남은 플레이어가 1명 이하입니다.");
+            return;
+        }
+        
         // isDouble인 경우 추가턴을 진행합니다.
         if (gameState.IsDouble)
             HandleRollDicePrompt();
@@ -807,12 +794,17 @@ public class GameManager : Singleton<GameManager>
     // ────────────────────────── 토지 구매 ──────────────────────────
     public void HandlePurchasePropertyPrompt(long playerId, int propertyId, bool isPurchasable)
     {
-        // 땅을 구매할 것인지 선택 가능한 UI를 표시합니다.
-        if (UIManager.Instance != null)
+        // 자신의 차례인 경우에만 선택 가능한 UI를 표시합니다.
+        if (IsLocalPlayerTurn())
         {
-            UIManager.Instance.ShowPurchasePropertyPopup(playerId, propertyId, isPurchasable);
-            return;
+            if (UIManager.Instance != null)
+            {
+                UIManager.Instance.ShowPurchasePropertyPopup(playerId, propertyId, isPurchasable);
+            }
         }
+        
+        // broadcast메시지 수신 대기 상태에 들어갑니다.
+        gameState.WaitingType = GameMessageType.PROPERTY_PURCHASED;
     }
 
     /// <summary>
@@ -820,12 +812,7 @@ public class GameManager : Singleton<GameManager>
     /// </summary>
     public void PurchaseProperty(long playerId, int propertyId, bool isAccept = true)
     {
-        // 자신의 차례인 경우에만 요청을 보냅니다.
-        if (IsLocalPlayerTurn())
-            GameNetwork.Instance.SendPurchasePropertyRequest(propertyId, isAccept);
-
-        // broadcast메시지 수신 대기 상태에 들어갑니다.
-        gameState.WaitingType = GameMessageType.PROPERTY_PURCHASED;
+        GameNetwork.Instance.SendPurchasePropertyRequest(propertyId, isAccept);
     }
 
     /// <summary>
@@ -869,12 +856,17 @@ public class GameManager : Singleton<GameManager>
     // ────────────────────────── 건물 건설 ──────────────────────────
     public void HandleBuildPrompt(long playerId, int propertyId, bool isBuildable)
     {
-        // 건설할 것인지 선택 가능한 UI를 표시합니다.
-        if (UIManager.Instance != null)
+        // 자신의 차례인 경우에만 건설할 것인지 선택 가능한 UI를 표시합니다.
+        if (IsLocalPlayerTurn())
         {
-            UIManager.Instance.ShowBuildPopup(playerId, propertyId, isBuildable);
-            return;
+            if (UIManager.Instance != null)
+            {
+                UIManager.Instance.ShowBuildPopup(playerId, propertyId, isBuildable);
+            }
         }
+        
+        // broadcast메시지 수신 대기 상태에 들어갑니다.
+        gameState.WaitingType = GameMessageType.BUILT;
     }
 
     /// <summary>
@@ -882,12 +874,7 @@ public class GameManager : Singleton<GameManager>
     /// </summary>
     public void Build(long playerId, int propertyId, bool isAccept = true)
     {
-        // 자신의 차례인 경우에만 전파 요청을 보냅니다.
-        if (IsLocalPlayerTurn())
-            GameNetwork.Instance.SendBuildRequest(propertyId, true);
-
-        // broadcast메시지 수신 대기 상태에 들어갑니다.
-        gameState.WaitingType = GameMessageType.BUILT;
+        GameNetwork.Instance.SendBuildRequest(propertyId, true);
     }
 
     /// <summary>
@@ -930,8 +917,17 @@ public class GameManager : Singleton<GameManager>
     // ────────────────────────── 자산 인수 ──────────────────────────
     public void HandleAcquirePropertyPrompt(long playerId, int propertyId, long amount)
     {
-        // 인수할 것인지 선택 가능한 UI를 표시합니다.
-        UIManager.Instance.ShowAcquirePropertyPopup(playerId, propertyId);
+        // 자신의 차례인 경우에만 인수할 것인지 선택 가능한 UI를 표시합니다.
+        if (IsLocalPlayerTurn())
+        {
+            if (UIManager.Instance != null)
+            {
+                UIManager.Instance.ShowAcquirePropertyPopup(playerId, propertyId);
+            }
+        }
+
+        // broadcast메시지 수신 대기 상태에 들어갑니다.
+        gameState.WaitingType = GameMessageType.PROPERTY_ACQUIRED;
     }
 
     /// <summary>
@@ -939,12 +935,7 @@ public class GameManager : Singleton<GameManager>
     /// </summary>
     public void AcquireProperty(long playerId, int propertyId, bool isAccept = true)
     {
-        // 자신의 차례인 경우에만 요청을 보냅니다.
-        if (IsLocalPlayerTurn())
-            GameNetwork.Instance.SendAcquirePropertyRequest(propertyId, isAccept);
-
-        // broadcast메시지 수신 대기 상태에 들어갑니다.
-        gameState.WaitingType = GameMessageType.PROPERTY_ACQUIRED;
+        GameNetwork.Instance.SendAcquirePropertyRequest(propertyId, isAccept);
     }
 
     /// <summary>
@@ -988,8 +979,17 @@ public class GameManager : Singleton<GameManager>
     // ────────────────────────── 자산 매각 ──────────────────────────
     public void HandleSellPropertiesPrompt(long payerId, long receiverId, long requiredAmount)
     {
-        // 청산할 자산들을 선택 가능한 UI를 표시합니다.
-        UIManager.Instance.ShowSellPropertiesPopup(payerId, receiverId, requiredAmount);
+        // 자신의 차례인 경우에만 청산할 자산들을 선택 가능한 UI를 표시합니다.
+        if (IsLocalPlayerTurn())
+        {
+            if (UIManager.Instance != null)
+            {
+                UIManager.Instance.ShowSellPropertiesPopup(payerId, receiverId, requiredAmount);
+            }
+        }
+
+        // broadcast메시지 수신 대기 상태에 들어갑니다.
+        gameState.WaitingType = GameMessageType.PROPERTIES_SOLD;
     }
 
     /// <summary>
@@ -997,12 +997,7 @@ public class GameManager : Singleton<GameManager>
     /// </summary>
     public void SellProperties(long payerId, List<int> propertyIds)
     {
-        // 자신의 차례인 경우에만 요청을 보냅니다.
-        if (IsLocalPlayerTurn())
-            GameNetwork.Instance.SendSellPropertiesRequest(propertyIds);
-
-        // broadcast메시지 수신 대기 상태에 들어갑니다.
-        gameState.WaitingType = GameMessageType.PROPERTIES_SOLD;
+        GameNetwork.Instance.SendSellPropertiesRequest(propertyIds);
     }
 
     public void HandlePropertiesSold(long payerId, List<int> propertyIds)
@@ -1213,7 +1208,15 @@ public class GameManager : Singleton<GameManager>
 
         // PlayerPawn 리프레시 함수 호출
 
-        if (gameState.TurnNumber == 0) StartGame();
+        if (gameState.TurnNumber == 1)
+        {
+            Debug.Log("SyncGameState - 최초 SyncGameState 이므로 StartGame을 호출합니다.");
+            StartGame();
+        }
+        else
+        {
+            Debug.Log("SyncGameState");
+        }
     }
 
     private bool IsLocalPlayerTurn()
