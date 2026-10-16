@@ -65,6 +65,8 @@ public class WebSocketNetwork : Singleton<WebSocketNetwork>
         websocket.OnClose += (closeCode) =>
         {
             Debug.Log($"WebSocket 연결 종료: {closeCode}");
+            
+            if (SceneFlow.ToLogin()) return;
         };
 
         websocket.OnMessage += (bytes) =>
@@ -135,7 +137,19 @@ public class WebSocketNetwork : Singleton<WebSocketNetwork>
     {
         if (websocket != null)
         {
-            await websocket.Close();
+            WebSocket oldWebSocket = websocket;
+            websocket = null;
+            await oldWebSocket.Close();
+        }
+    }
+
+    public async void closeWebSocketSession()
+    {
+        if (websocket != null)
+        {
+            WebSocket oldWebSocket = websocket;
+            websocket = null;
+            await oldWebSocket.Close();
         }
     }
 }

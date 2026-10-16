@@ -15,16 +15,36 @@ public class BoardManager : Singleton<BoardManager>
     
     private Dictionary<int, TileData> tilesByIndex;
 
-    
-    
-    
-    
 
 
 
 
 
 
+
+
+
+    public void RefreshBoard()
+    {
+        for (int i = 0; i < boardData.Tiles.Count; i++)
+        {
+            TileData tileData = tilesByIndex[i];
+
+            if (tileData.Type == TileType.PROPERTY)
+            {
+                int propertyId = tileData.PropertyId;
+                PropertyState propertyState = GameManager.Instance.GetPropertyState(propertyId);
+                long? ownerPlayerId = propertyState.OwnerId;
+
+                if (ownerPlayerId == null) continue;
+
+                BuildingLevel buildingLevel = propertyState.BuildingLevel;
+
+                UpdatePropertyTileColor(propertyId, ownerPlayerId);
+                UpdatePropertyBuildingVisual(propertyId, buildingLevel);
+            }
+        }
+    }
 
     public void UpdatePropertyTileColor(int propertyId, long? playerId)
     {

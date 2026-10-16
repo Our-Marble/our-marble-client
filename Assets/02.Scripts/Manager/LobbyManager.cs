@@ -392,7 +392,6 @@ public class LobbyManager : MonoBehaviour
 
     private void RequestRoomList(bool userTriggered)
     {
-        Debug.Log("RequestRoomList 는 잘 호출됨.");
         if (Net == null || connection != ConnectionState.Connected) return;
         if (userTriggered)
         {
@@ -557,7 +556,7 @@ public class LobbyManager : MonoBehaviour
 
     public void HandleGameStarted(string roomId)
     {
-        if (CurrentRoom == null || CurrentRoom.roomId != roomId) return;
+        //if (CurrentRoom == null || CurrentRoom.roomId != roomId) return;
 
         // 씬이 넘어갈 때까지 로딩을 띄워 둔다 (방장이 아닌 사람도)
         if (timeoutRoutine != null) { StopCoroutine(timeoutRoutine); timeoutRoutine = null; }
@@ -652,10 +651,18 @@ public class LobbyManager : MonoBehaviour
     private void ExitToLogin()
     {
         if (Busy) return;
-        if (exitConfirm != null) exitConfirm.Show(LoadLoginScene, "로그인 화면으로 돌아갈까요?");
-        else LoadLoginScene();
+        
+        if (exitConfirm != null)
+        {
+            exitConfirm.Show(LoadLoginScene, "로그인 화면으로 돌아갈까요?");
+            //WebSocketNetwork.Instance.closeWebSocketSession();
+        }
+        else
+        {
+            LoadLoginScene();
+        }
     }
-
+    
     private void LoadLoginScene()
     {
         if (Busy) return;
