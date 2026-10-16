@@ -6,6 +6,8 @@ using Newtonsoft.Json; // Newtonsoft.Json 사용
 
 public class HttpNetwork : Singleton<HttpNetwork>
 {
+    protected override bool PersistAcrossScenes => true;
+    
     public string JwtToken { get; private set; } // 전역으로 접근할 수 있도록 관리
 
     private const string BaseUrl = "http://localhost:8080"; // 서버 주소

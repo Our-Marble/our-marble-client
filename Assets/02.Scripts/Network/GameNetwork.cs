@@ -6,6 +6,8 @@ using UnityEngine;
 
 public class GameNetwork : Singleton<GameNetwork>
 {
+    protected override bool PersistAcrossScenes => false;
+    
     private Queue<GameServerMessage> messageQueue = new Queue<GameServerMessage>();
     
     private async void SendGameMessage(string message)
@@ -258,6 +260,7 @@ public class GameNetwork : Singleton<GameNetwork>
             messageQueue.Clear();
         }
 
+        Debug.Log("before OnSync?.Invoke");
         OnSync?.Invoke(serverGameState);
     }
     
