@@ -252,6 +252,7 @@ public class LobbyManager : MonoBehaviour
         Net.OnRoomUpdated += HandleRoomUpdated;
         Net.OnGameStarted += HandleGameStarted;
         Net.OnLobbyError += HandleLobbyError;
+        Net.OnGameRecord += HandleGameRecord;
         
         Net.OnConnected += HandleConnected;
     }
@@ -265,6 +266,7 @@ public class LobbyManager : MonoBehaviour
         Net.OnRoomUpdated -= HandleRoomUpdated;
         Net.OnGameStarted -= HandleGameStarted;
         Net.OnLobbyError -= HandleLobbyError;
+        Net.OnGameRecord -= HandleGameRecord;
         
         Net.OnConnected -= HandleConnected;
     }
@@ -676,6 +678,12 @@ public class LobbyManager : MonoBehaviour
 
         // 입장 실패면 방이 사라졌거나 찼을 수 있으니 목록을 다시 받는다
         if (wasEntering) RequestRoomList(false);
+    }
+    
+    public void HandleGameRecord(string nickname, int gamesPlayed, int gamesWon)
+    {
+        if (!string.IsNullOrEmpty(nickname)) RefreshNickname(nickname);
+        RefreshRecord(gamesPlayed, gamesWon);
     }
 
     // ───────────── 연결 상태 ─────────────
@@ -1205,11 +1213,18 @@ public class LobbyManager : MonoBehaviour
     {
         recordText.text = "-";
         marbleText.text = "-";
-
-        // CONNECTED는 접속할 때 한 번만 오므로, 게임에서 돌아와 로비 씬이 새로 열리면 저장된 닉네임으로 다시 채운다
-        // (이게 없으면 씬에 들어 있는 임시 닉네임이 그대로 보인다)
+        
         string nickname = WebSocketNetwork.Instance.LocalNickname;
         if (!string.IsNullOrEmpty(nickname)) RefreshNickname(nickname);
+    }
+    
+    private void RefreshRecord(int gamesPlayed, int gamesWon)
+    {
+        if (recordText == null) return;
+
+        // 한 판도 안 했으면 0으로 나누게 되므로 승률은 0%로 보여 준다
+        int winRate = gamesPlayed > 0 ? Mathf.RoundToInt(100f * gamesWon / gamesPlayed) : 0;
+        recordText.text = $"{gamesPlayed}전 {gamesWon}승 <size=80%><color=#8C90A8>({winRate}%)</color></size>";
     }
 
     private void RefreshNickname(string localNickname)

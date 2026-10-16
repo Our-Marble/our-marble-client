@@ -20,7 +20,7 @@ public enum GameMessageType
     [EnumMember(Value = "AWAITING_ACQUIRE")]
     PROPERTY_ACQUIRED,
     
-    [EnumMember(Value = "AWAITING_DRAW")]
+    [EnumMember(Value = "AWAITING_DRAW_CARD")] // 서버 TurnPhase.AWAITING_DRAW_CARD와 이름이 같아야 GAME_STATE_SYNC의 phase를 읽을 수 있다
     CARD_DRAWN,
     
     [EnumMember(Value = "AWAITING_SELL")]
