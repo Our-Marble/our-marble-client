@@ -239,4 +239,17 @@ public class PlayerManager : Singleton<PlayerManager>
     {
         return count <= 0 ? 0 : ((value % count) + count) % count;
     }
+
+    public void RefreshPawns(List<PlayerState> playerStates)
+    {
+        int maxPlayers = playerStates.Count;
+
+        for (int i = 0; i < maxPlayers; i++)
+        {
+            long playerId =  playerStates[i].PlayerId;
+            int tileIndex = playerStates[i].Position;
+
+            SnapToTile(playerId, tileIndex);
+        }
+    }
 }

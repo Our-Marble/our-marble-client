@@ -20,7 +20,11 @@ public static class SceneFlow
     private static void ResetStatics() => reopenRoomSetup = false;
 
     /// <summary>로그인 화면으로 간다. (로비의 나가기)</summary>
-    public static bool ToLogin() => Load(LoginScenePath, false);
+    public static bool ToLogin()
+    {
+        WebSocketNetwork.Instance.closeWebSocketSession();
+        return Load(LoginScenePath, false);
+    }
 
     /// <summary>로비로 간다. 로그인 성공 후, 또는 게임에서 방을 떠날 때. 방 정보는 로비가 비운다.</summary>
     public static bool ToLobby() => Load(LobbyScenePath, false);

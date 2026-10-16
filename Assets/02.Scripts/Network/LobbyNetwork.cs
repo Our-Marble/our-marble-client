@@ -67,7 +67,7 @@ public class LobbyNetwork : Singleton<LobbyNetwork>
                         return;
                 }
                 
-                Debug.Log($"[LobbyNetwork] 메시지 디큐");
+                Debug.Log($"[LobbyNetwork] 메시지 디큐. type : {serverMessage.Type}");
                 messageQueue.Dequeue(); 
             }
             else
