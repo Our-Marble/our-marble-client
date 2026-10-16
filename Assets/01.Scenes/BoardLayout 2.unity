@@ -694,20 +694,6 @@ MonoBehaviour:
   taxAmount: 100000
   startMoney: 1000000
   maxRound: 10
-  forceDice1: -1
-  forceDice2: -1
-  autoPlayAllPlayers: 0
-  botActionDelay: 1
-  playerSetups:
-  - playerId: 123
-    isBot: 0
-    personality: 0
-  - playerId: 456
-    isBot: 1
-    personality: 0
-  - playerId: 789
-    isBot: 1
-    personality: 0
 --- !u!4 &337382219
 Transform:
   m_ObjectHideFlags: 0
@@ -2022,9 +2008,14 @@ MonoBehaviour:
   - {fileID: 417582401}
   - {fileID: 148148698}
   - {fileID: 2101722630}
-  defaultColor: {r: 0.44001427, g: 0.9056604, b: 0.7870102, a: 1}
+  defaultColor: {r: 0.9585614, g: 1, b: 0.740566, a: 1}
   defaultTextColor: {r: 0.21698111, g: 0.0775333, b: 0, a: 1}
   cornerColor: {r: 1, g: 0.87574923, b: 0.2783019, a: 1}
+  goldenKeyColor: {r: 1, g: 0.6064428, b: 0.25098038, a: 1}
+  islandColor: {r: 0.19339621, g: 1, b: 0.8287358, a: 1}
+  worldTravelColor: {r: 0.5330188, g: 0.93548346, b: 1, a: 1}
+  taxColor: {r: 1, g: 0.759434, b: 0.759434, a: 1}
+  charityColor: {r: 1, g: 0.6084906, b: 0.71253675, a: 1}
   selectedIndexes: 
 --- !u!4 &839385235
 Transform:

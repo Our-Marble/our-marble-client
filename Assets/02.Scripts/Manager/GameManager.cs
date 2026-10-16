@@ -20,7 +20,6 @@ public class GameManager : Singleton<GameManager>
     private bool isMoving;
 
     // 플레이어 색상 관련 필드
-    private Color[] playerColors = new Color[] { Color.red, Color.green, Color.blue, Color.yellow };
     private Dictionary<long, Color> playerColorMap;
     public Color GetPlayerColor(long playerId) => playerColorMap[playerId];
 
@@ -1199,7 +1198,7 @@ public class GameManager : Singleton<GameManager>
         for (int i = 0; i < gameState.PlayerStates.Count; i++)
         {
             PlayerState playerState = gameState.PlayerStates[i];
-            playerColorMap.Add(playerState.PlayerId, playerColors[i]);
+            playerColorMap.Add(playerState.PlayerId, UIPalette.PlayerColor(i));
         }
 
         // UI 리프레시 함수 호출

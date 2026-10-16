@@ -24,6 +24,11 @@ public class BoardController : MonoBehaviour
     [SerializeField] private Color defaultColor = Color.gray8;
     [SerializeField] private Color defaultTextColor = Color.brown;
     [SerializeField] private Color cornerColor = Color.aliceBlue;
+    [SerializeField] private Color goldenKeyColor = new Color32(255, 205, 64, 255);
+    [SerializeField] private Color islandColor = new Color32(142, 205, 255, 255);
+    [SerializeField] private Color worldTravelColor = new Color32(190, 160, 255, 255);
+    [SerializeField] private Color taxColor = new Color32(255, 154, 154, 255);
+    [SerializeField] private Color charityColor = new Color32(154, 255, 188, 255);
     public IReadOnlyList<BoardTile> BoardTiles => boardTiles;
     public int TileCount => boardTiles.Count;
     
@@ -66,13 +71,36 @@ public class BoardController : MonoBehaviour
             // 글자 설정
             TileData tileData = BoardManager.Instance.GetTileData(i);
             boardTiles[i].SetText(defaultTextColor, GetTileLabel(tileData));
+            boardTiles[i].SetGoldKeyActive(tileData != null && tileData.Type == TileType.GOLDEN_KEY);
+            boardTiles[i].SetIslandActive(tileData != null && tileData.Type == TileType.ISLAND);
+            boardTiles[i].SetWorldTravelActive(tileData != null && tileData.Type == TileType.WORLD_TRAVEL);
+            boardTiles[i].SetCharityActive(tileData != null && tileData.Type == TileType.CHARITY);
+
+            PropertyData propertyData = tileData != null && tileData.Type == TileType.PROPERTY
+                ? PropertyManager.Instance.GetData(tileData.PropertyId)
+                : null;
+            boardTiles[i].SetCanNotBuildActive(propertyData != null && !propertyData.CanBuild);
             
             // 색상 설정
-            if(i % 8 == 0)
-                boardTiles[i].SetSpriteColor(cornerColor);
-            else
-                boardTiles[i].SetSpriteColor(defaultColor);
+            boardTiles[i].SetSpriteColor(GetTileColor(i, tileData));
         }
+    }
+
+    private Color GetTileColor(int index, TileData tileData)
+    {
+        if (tileData != null)
+        {
+            switch (tileData.Type)
+            {
+                case TileType.GOLDEN_KEY:    return goldenKeyColor;
+                case TileType.ISLAND:       return islandColor;
+                case TileType.WORLD_TRAVEL: return worldTravelColor;
+                case TileType.DONATION:     return taxColor;
+                case TileType.CHARITY:      return charityColor;
+            }
+        }
+
+        return index % 8 == 0 ? cornerColor : defaultColor;
     }
 
     private string GetTileLabel(TileData tileData)
