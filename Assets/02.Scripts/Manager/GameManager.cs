@@ -251,8 +251,10 @@ public class GameManager : Singleton<GameManager>
 
     public void HandleChooseDestinationPrompt()
     {
-        HandleRoutine();
-        
+        // 다른 Prompt 함수들처럼 HandleRoutine을 부르지 않습니다.
+        // HandleRoutine은 브로드캐스트를 받았을 때 쓰는 함수라서, 요청을 보내기 전인 여기서 부르면
+        // isAfk = !sendAndWaiting 이 true가 되어 잠수용 짧은 제한시간(afkSelectSeconds)으로 여행지 선택창이 금방 닫힙니다.
+
         // 자신의 차례인 경우에만 자유 여행할 타일을 선택하는 UI를 표시합니다.
         if (IsLocalPlayerTurn())
         {
