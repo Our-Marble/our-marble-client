@@ -143,6 +143,18 @@ public class LobbyNetwork : Singleton<LobbyNetwork>
                 OnLobbyError?.Invoke(code, message);
                 break;
             }
+            case LobbyMessageType.PLAYER_RECORD:
+            {
+                PlayerRecordResponse playerRecordResponse =
+                    JsonConvert.DeserializeObject<PlayerRecordResponse>(json);
+
+                string nickname = playerRecordResponse.nickname;
+                int gamesPlayed = playerRecordResponse.gamesPlayed;
+                int gamesWon = playerRecordResponse.gamesWon;
+                
+                OnGameRecord?.Invoke(nickname, gamesPlayed, gamesWon);
+                break;
+            }
             default:
             {
                 Debug.LogError($"식별할 수 없는 type입니다.: {type}");
@@ -152,6 +164,8 @@ public class LobbyNetwork : Singleton<LobbyNetwork>
     }
     
     public event Action<string> OnConnected;
+    
+    public event Action<string,int,int> OnGameRecord;
 
     public void InvokeOnConnected(string localNickname)
     {
