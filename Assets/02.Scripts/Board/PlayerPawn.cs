@@ -29,6 +29,18 @@ public class PlayerPawn : MonoBehaviour
         Move(tileIndex, targetPosition);
     }
 
+    /// <summary>한 칸 미끄러지는 이동 (점프 없음). 타일을 따라 빠르게 이동할 때 한 칸씩 이어서 사용합니다.</summary>
+    public IEnumerator GlideTo(int tileIndex, Vector3 targetPosition, float duration)
+    {
+        Vector3 start = transform.position;
+        for (float t = 0f; t < 1f; t += Time.deltaTime / duration)
+        {
+            transform.position = Vector3.Lerp(start, targetPosition, t);
+            yield return null;
+        }
+        Move(tileIndex, targetPosition);
+    }
+
     /// <summary>목적지로 한 번에 미끄러지는 이동 (자유여행, 무인도용)</summary>
     public IEnumerator SlideTo(int tileIndex, Vector3 targetPosition, float duration)
     {

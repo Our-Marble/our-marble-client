@@ -4,6 +4,9 @@ using UnityEngine;
 
 public class BoardManager : Singleton<BoardManager>
 {
+    // 게임 씬 전용 매니저입니다. 씬 오브젝트(말, 타일, 보드)를 참조하므로 게임 씬이 로드될 때마다 새로 만들어지게 합니다.
+    protected override bool PersistAcrossScenes => false;
+
     [SerializeField] private BoardController boardController;
     [SerializeField] private BoardData boardData;
 

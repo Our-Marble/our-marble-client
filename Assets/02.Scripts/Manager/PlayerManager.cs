@@ -5,13 +5,18 @@ using UnityEngine;
 
 public class PlayerManager : Singleton<PlayerManager>
 {
+    // 게임 씬 전용 매니저입니다. 씬 오브젝트(말, 타일, 보드)를 참조하므로 게임 씬이 로드될 때마다 새로 만들어지게 합니다.
+    protected override bool PersistAcrossScenes => false;
+
     [SerializeField] private BoardController boardController;
     [Tooltip("로비 슬롯 순서(1P, 2P, 3P, 4P)대로 연결하세요. 턴 순서와는 무관합니다.")]
     [SerializeField] private List<PlayerPawn> pawns = new();
 
     [Header("Move")]
-    [SerializeField] private float hopDuration = 0.25f;
+    [SerializeField] private float hopDuration = 0.2f;
     [SerializeField] private float slideDuration = 0.6f;
+    [Tooltip("타일을 따라 빠르게 이동할 때(세계여행, 황금열쇠 지정 위치 이동) 한 칸을 지나는 시간(초)")]
+    [SerializeField] private float glideStepDuration = 0.07f;
 
     [Header("말 겹침 방지 (슬롯별 칸 안 위치)")]
     [Tooltip("칸 중심 기준 오프셋입니다. 기본값은 3D 보드(XZ 평면)용이며, 2D 보드라면 Z 대신 Y 값을 쓰세요.")]
@@ -125,6 +130,35 @@ public class PlayerManager : Singleton<PlayerManager>
         MoveBySteps(playerId, from, steps, onTileReached, onCompleted);
     }
     
+    /// <summary>
+    /// fromIndex에서 toIndex까지 타일을 따라 시계방향으로 빠르게 미끄러져 이동합니다. (점프 없음)
+    /// 세계여행, 황금열쇠 지정 위치 이동처럼 출발지를 지나면 월급을 받을 수 있는 지정 위치 이동에 사용합니다.
+    /// 칸을 지날 때마다 onTileReached(칸 index), 끝나면 onCompleted.
+    /// </summary>
+    public void MoveAlongTiles(long playerId, int fromIndex, int toIndex, Action<int> onTileReached, Action onCompleted)
+    {
+        if (!TryGetPawn(playerId, out PlayerPawn pawn))
+        {
+            onCompleted?.Invoke();   // 말이 없어도 게임이 멈추지 않게
+            return;
+        }
+
+        int tileCount = boardController.TileCount;
+        int from = Mod(fromIndex, tileCount);
+        int to = Mod(toIndex, tileCount);
+        int steps = Mod(to - from, tileCount); // 시계방향 칸 수
+
+        if (steps <= 0)
+        {
+            StopMove(playerId);
+            pawn.Move(from, GetPawnPosition(playerId, from));
+            onCompleted?.Invoke();
+            return;
+        }
+
+        StartMove(playerId, MoveAlongTilesRoutine(playerId, pawn, from, steps, tileCount, onTileReached, onCompleted));
+    }
+
     /// <summary>목적지로 직접 이동 (자유여행, 무인도 이동 등)</summary>
     public void MoveToTile(long playerId, int tileIndex, Action onCompleted)
     {
@@ -176,6 +210,26 @@ public class PlayerManager : Singleton<PlayerManager>
         pawn.Move(current, GetPawnPosition(playerId, current)); // 도착 위치 스냅 (오차 제거)
 
         // 콜백 안에서 같은 말의 새 이동이 시작될 수 있으므로, 기록을 먼저 지우고 콜백을 호출합니다.
+        FinishMove(playerId);
+        onCompleted?.Invoke();
+    }
+
+    private IEnumerator MoveAlongTilesRoutine(long playerId, PlayerPawn pawn, int from, int steps, int tileCount,
+        Action<int> onTileReached, Action onCompleted)
+    {
+        int current = from;
+        pawn.Move(current, GetPawnPosition(playerId, current)); // 시작점을 GameState 기준으로 맞춤
+
+        for (int i = 0; i < steps; i++)
+        {
+            int next = (current + 1) % tileCount;
+            yield return pawn.GlideTo(next, GetPawnPosition(playerId, next), glideStepDuration);
+            current = next;
+            onTileReached?.Invoke(next);
+        }
+
+        pawn.Move(current, GetPawnPosition(playerId, current)); // 도착 위치 스냅 (오차 제거)
+
         FinishMove(playerId);
         onCompleted?.Invoke();
     }

@@ -82,9 +82,22 @@ public class LobbyManager : MonoBehaviour
     /// <summary>지금 들어가 있는 방의 최신 스냅샷. 로비를 거치지 않고 게임 씬만 실행하면 null.</summary>
     public static RoomSnapshot CurrentRoom { get; private set; }
 
+    /// <summary>
+    /// GAME_STARTED로 들어간 방의 id. 재접속으로 게임에 바로 들어가면 방 스냅샷(CurrentRoom)이 없으므로,
+    /// 게임이 끝나 돌아왔을 때 이 id로 "방 안에 있다"는 것을 알고 서버의 ROOM_UPDATED를 받아 대기방을 연다.
+    /// </summary>
+    private static string PlayingRoomId;
+
+    // 게임을 마치고 돌아왔는데 방 스냅샷이 없을 때(재접속 후 게임), 서버의 ROOM_UPDATED를 기다리는 최대 시간(초)
+    private const float RoomSnapshotWaitSeconds = 5f;
+
     // 에디터에서 도메인 리로드 없이 플레이를 다시 시작해도 이전 플레이의 방 정보가 남지 않게 한다
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    private static void ResetStatics() => CurrentRoom = null;
+    private static void ResetStatics()
+    {
+        CurrentRoom = null;
+        PlayingRoomId = null;
+    }
 
     // ───────────── UI 참조 ─────────────
 
@@ -172,8 +185,13 @@ public class LobbyManager : MonoBehaviour
         if (uiRoot == null) { Debug.LogError("[Lobby] 'UI' 루트를 찾을 수 없습니다.", this); enabled = false; return; }
 
         // 게임을 마치고 같은 방으로 돌아온 경우만 방을 유지한다
-        if (!SceneFlow.IsReturningToRoom) CurrentRoom = null;
-        inRoom = CurrentRoom != null;
+        if (!SceneFlow.IsReturningToRoom)
+        {
+            CurrentRoom = null;
+            PlayingRoomId = null;
+        }
+        // 재접속으로 게임에 들어갔다 돌아온 경우 CurrentRoom은 없지만 PlayingRoomId는 있다. 이때도 방 안으로 본다.
+        inRoom = CurrentRoom != null || PlayingRoomId != null;
         
         Debug.Log($"inRoom = {inRoom}");
         
@@ -193,15 +211,36 @@ public class LobbyManager : MonoBehaviour
     private void Start()
     {
         // 게임이 끝나 같은 방으로 돌아왔다면 방 설정을 다시 띄운다 (준비 해제 등은 서버가 스냅샷으로 알려 준다)
-        if (SceneFlow.ConsumeReopenRoomSetup() && CurrentRoom != null)
+        bool returning = SceneFlow.ConsumeReopenRoomSetup();
+        if (returning && CurrentRoom != null)
         {
             OpenRoomSetup(CurrentRoom);
             RequestRoomList(false); // 방 설정 뒤의 목록은 조용히 받아 둔다
+        }
+        else if (returning && inRoom)
+        {
+            // 재접속 후 게임을 마치고 돌아왔다: 방 스냅샷이 없으므로 서버가 보내는 ROOM_UPDATED로 대기방을 연다 (HandleRoomUpdated)
+            RequestRoomList(false);
+            StartCoroutine(WaitRoomSnapshotRoutine());
         }
         else
         {
             RequestRoomList(true);
         }
+    }
+
+    // ROOM_UPDATED가 끝내 오지 않으면(방이 사라졌거나 서버에서 내보낸 경우) 방 밖 상태로 되돌린다
+    private IEnumerator WaitRoomSnapshotRoutine()
+    {
+        yield return new WaitForSecondsRealtime(RoomSnapshotWaitSeconds);
+        if (CurrentRoom != null) yield break;
+
+        Debug.LogWarning($"[Lobby] 방({PlayingRoomId}) 정보를 받지 못해 로비 목록으로 돌아갑니다.");
+        inRoom = false;
+        PlayingRoomId = null;
+        ShowToast("방 정보를 불러오지 못했어요");
+        RequestRoomList(false);
+        SyncAll();
     }
     
     private void OnEnable()
@@ -573,8 +612,11 @@ public class LobbyManager : MonoBehaviour
         if (!inRoom && pending != Pending.Enter) return;
         // 방 안에 있는데 다른 방의 스냅샷이면 무시한다
         if (inRoom && CurrentRoom != null && CurrentRoom.roomId != snapshot.roomId) return;
+        // 재접속 후 게임에서 돌아와 스냅샷을 기다리는 중인데 다른 방의 스냅샷이면 무시한다
+        if (inRoom && CurrentRoom == null && PlayingRoomId != null && PlayingRoomId != snapshot.roomId) return;
 
         CurrentRoom = snapshot;
+        PlayingRoomId = null; // 이제 CurrentRoom이 방 정보를 가진다
 
         // 내가 보낸 설정 요청에 대한 응답이다: 로딩을 닫고, 방장의 초안도 서버가 적용한 값으로 맞춘다
         if (pending == Pending.Config)
@@ -598,6 +640,7 @@ public class LobbyManager : MonoBehaviour
         EndRequest();
         inRoom = false;
         CurrentRoom = null;
+        PlayingRoomId = null;
         if (roomSetup != null && roomSetup.IsOpen) roomSetup.Close();
         if (!requested) ShowToast("방에서 나왔어요");
         RequestRoomList(false);
@@ -607,6 +650,9 @@ public class LobbyManager : MonoBehaviour
     public void HandleGameStarted(string roomId)
     {
         //if (CurrentRoom == null || CurrentRoom.roomId != roomId) return;
+
+        // 재접속으로 바로 게임에 들어가는 경우 CurrentRoom이 없으므로, 게임이 끝나 돌아올 방을 id로 기억해 둔다
+        PlayingRoomId = roomId;
 
         // 씬이 넘어갈 때까지 로딩을 띄워 둔다 (방장이 아닌 사람도)
         if (timeoutRoutine != null) { StopCoroutine(timeoutRoutine); timeoutRoutine = null; }
@@ -1159,11 +1205,16 @@ public class LobbyManager : MonoBehaviour
     {
         recordText.text = "-";
         marbleText.text = "-";
+
+        // CONNECTED는 접속할 때 한 번만 오므로, 게임에서 돌아와 로비 씬이 새로 열리면 저장된 닉네임으로 다시 채운다
+        // (이게 없으면 씬에 들어 있는 임시 닉네임이 그대로 보인다)
+        string nickname = WebSocketNetwork.Instance.LocalNickname;
+        if (!string.IsNullOrEmpty(nickname)) RefreshNickname(nickname);
     }
 
     private void RefreshNickname(string localNickname)
     {
-        Debug.Log($"로비화면 닉네임 업데이트 -> {WebSocketNetwork.Instance.LocalNickname}");
+        Debug.Log($"로비화면 닉네임 업데이트 -> {localNickname}");
         nicknameText.text = localNickname;
     }
 }

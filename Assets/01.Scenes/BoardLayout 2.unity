@@ -386,7 +386,7 @@ MonoBehaviour:
   - {fileID: 747579192}
   - {fileID: 1877955607}
   - {fileID: 1279938394}
-  hopDuration: 0.25
+  hopDuration: 0.2
   slideDuration: 0.6
   slotOffsets:
   - {x: -0.25, y: 0.25, z: 0}
