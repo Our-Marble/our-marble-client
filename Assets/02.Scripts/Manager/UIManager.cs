@@ -10,6 +10,17 @@ using UnityEngine.UI;
 /// 버튼을 누르면 주석에 적힌 GameManager 함수를 호출한다.
 /// 뷰 참조는 메뉴 Tools > Our Marble > Game UI 연결 로 채운다.
 /// </summary>
+/// <summary>제한 시간이 있는 선택창의 종류. 시간이 끝났을 때 어떤 창이었는지 알려주는 데 쓴다.</summary>
+public enum SelectionKind
+{
+    RollDice,          // 주사위 굴리기
+    PurchaseOrBuild,   // 땅 구매 / 건설
+    Takeover,          // 인수
+    Sell,              // 매각
+    Destination,       // 세계여행 목적지
+    IslandEscape,      // 무인도 탈출 방법
+}
+
 public class UIManager : MonoBehaviour
 {
     public static UIManager Instance { get; private set; }
@@ -40,6 +51,13 @@ public class UIManager : MonoBehaviour
     [SerializeField] private float otherCardShowSeconds = 2f;
     [Tooltip("게임이 끝난 뒤 결과를 보여 주는 시간(초). 이 시간이 지나면 확인을 누르지 않아도 방(로비)으로 돌아간다.")]
     [SerializeField] private float resultSeconds = 15f;
+    [Header("선택 제한시간")]
+    [Tooltip("주사위 굴리기와 각종 선택창의 제한시간(초). 평소(잠수 아님)")]
+    [SerializeField] private float selectSeconds = 15f;
+    [Tooltip("잠수 중인 플레이어(GameManager.isAfk)의 제한시간(초)")]
+    [SerializeField] private float afkSelectSeconds = 3f;
+    [Tooltip("시간이 끝난 뒤 버튼을 잠그고 창을 닫기까지 기다리는 시간(초)")]
+    [SerializeField] private float timeoutCloseDelay = 0.3f;
     private int maxRound = 30; // 상단바에 '라운드 N / 최대'로 보여줄 최대 라운드. 값은 GameManager가 SetMaxRound로 알려주고, 그 전까지는 이 기본값을 쓴다.
 
     // ───────────── 밖에서 연결하는 곳 ─────────────
@@ -49,6 +67,12 @@ public class UIManager : MonoBehaviour
     /// 지정하지 않거나 빈 문장이면 기본 안내가 나옵니다. (설명 데이터가 PropertyData에 생기면 여기서 읽으면 됩니다.)
     /// </summary>
     public Func<int, string> PropertyEffectDescription { get; set; }
+
+    /// <summary>
+    /// 선택 제한시간이 끝나 창이 닫혔을 때 (어떤 창이었는지). UIManager는 창을 잠그고 닫기만 하고,
+    /// 시간이 끝난 뒤의 처리(예: 구매하지 않기, 자동 주사위)는 구독하는 쪽(GameManager)이 정한다.
+    /// </summary>
+    public event Action<SelectionKind> SelectionTimedOut;
 
     /// <summary>매각 창의 '은행 대출' 버튼 (payerId, receiverId). 구독자가 없으면 버튼이 잠긴다.</summary>
     public event Action<long, long> BankLoanRequested;
@@ -77,6 +101,14 @@ public class UIManager : MonoBehaviour
         }
         // 주사위 결과창이 닫히면 게이지를 비운다 (두 뷰가 이 오브젝트와 같은 수명이라 구독을 해제하지 않는다)
         if (diceResult != null && diceRoll != null) diceResult.Closed += () => diceRoll.SetGauge(0f);
+
+        // 선택창이 열리면 제한시간을 세기 시작한다 (각 Show 함수는 손대지 않는다)
+        HookSelectionTimer(diceRoll, SelectionKind.RollDice);
+        HookSelectionTimer(purchase, SelectionKind.PurchaseOrBuild);
+        HookSelectionTimer(takeover, SelectionKind.Takeover);
+        HookSelectionTimer(sell, SelectionKind.Sell);
+        HookSelectionTimer(destinationSelect, SelectionKind.Destination);
+        HookSelectionTimer(islandEscape, SelectionKind.IslandEscape);
 
         // 상단바: 로비에서 넘어온 방 정보 표시, 설정은 설정 창 열기/닫기, 나가기는 확인 후 로비로 돌아간다
         if (topBar != null)
@@ -546,6 +578,8 @@ public class UIManager : MonoBehaviour
         SetTurn(index, NameOf(playerId), PortraitOf(playerId));
         if (topBar != null) topBar.SetRound(DisplayRound(), maxRound);
         if (playerId != LocalPlayerId && diceRoll != null) diceRoll.SetInteractable(false);
+        // 다른 사람 차례가 되면 내 제한시간은 끝난다. (내 차례를 다시 표시하는 경우, 예: 화면 동기화는 진행 중인 제한시간을 끊지 않는다)
+        if (playerId != LocalPlayerId) StopSelectionTimer();
     }
 
     // 요청에 실패하거나 결과가 오지 않을 때, 구르고 있는 주사위를 멈추고 창을 닫습니다.
@@ -898,6 +932,7 @@ public class UIManager : MonoBehaviour
         if (gameResult == null || state == null) return;
 
         // 더 이상 굴릴 주사위도, 진행 중인 차례도 없다
+        StopSelectionTimer();
         if (diceRoll != null) { diceRoll.SetInteractable(false); diceRoll.Close(); }
         if (diceResult != null) diceResult.Close();
         if (currentTurn != null) currentTurn.Close();
@@ -1116,6 +1151,7 @@ public class UIManager : MonoBehaviour
     /// </summary>
     public void CloseAllPopups(bool immediate = false)
     {
+        StopSelectionTimer();
         ExitSellMode();
         // 결과 창을 닫았는데 남은 시간이 지나 씬이 넘어가지 않게 한다
         if (resultCountdown != null) { StopCoroutine(resultCountdown); resultCountdown = null; }
@@ -1140,12 +1176,8 @@ public class UIManager : MonoBehaviour
     /// </summary>
     public void CloseSelectionPopups(bool immediate = false)
     {
-        bool boardSelecting = chooseDestinationMode || sellMode;
-
-        chooseDestinationMode = false;
-        travelTileIndex = -1;
-        ExitSellMode();
-        if (boardSelecting && BoardManager.Instance != null) BoardManager.Instance.ChangeToInspectMode();
+        StopSelectionTimer();
+        EndBoardSelection();
 
         UIView[] popups = { purchase, takeover, sell, destinationSelect };
         foreach (var popup in popups)
@@ -1155,6 +1187,92 @@ public class UIManager : MonoBehaviour
             else popup.Close();
         }
     }
+
+    // 여행지·매각 선택을 끝내고 보드를 둘러보기 모드로 되돌린다. 선택 중이 아니었다면 아무 일도 하지 않는다.
+    private void EndBoardSelection()
+    {
+        bool boardSelecting = chooseDestinationMode || sellMode;
+
+        chooseDestinationMode = false;
+        travelTileIndex = -1;
+        ExitSellMode();
+        if (boardSelecting && BoardManager.Instance != null) BoardManager.Instance.ChangeToInspectMode();
+    }
+
+    #region 선택 제한시간
+
+    private UIView timerWindow;        // 제한시간이 세어지고 있는 창. 없으면 null
+    private TurnTimerView timerChip;   // 그 창 안에 들어 있는 시간 표시 칩. 없으면 null
+    private SelectionKind timerKind;
+    private float timerRemaining, timerTotal;
+    private int timerEpoch;            // 제한시간을 새로 시작할 때마다 늘려서, 지난 시간 종료 처리가 새로 열린 창을 닫지 않게 한다
+
+    // 잠수 중이면(GameManager.isAfk) 짧은 제한시간, 아니면 평소 제한시간
+    private float CurrentSelectSeconds => Game != null && Game.isAfk ? afkSelectSeconds : selectSeconds;
+
+    private void HookSelectionTimer(UIView window, SelectionKind kind)
+    {
+        if (window != null) window.Opened += () => BeginSelectionTimer(window, kind);
+    }
+
+    private void BeginSelectionTimer(UIView window, SelectionKind kind)
+    {
+        timerEpoch++;
+        timerWindow = window;
+        timerKind = kind;
+        timerTotal = timerRemaining = CurrentSelectSeconds;
+        timerChip = window.GetComponentInChildren<TurnTimerView>(true);
+        if (timerChip != null) timerChip.Begin(timerTotal);
+    }
+
+    /// <summary>세고 있던 제한시간을 시간 종료 처리 없이 멈추고 표시를 숨긴다.</summary>
+    private void StopSelectionTimer()
+    {
+        timerWindow = null;
+        if (timerChip != null) timerChip.Hide();
+        timerChip = null;
+    }
+
+    private void Update()
+    {
+        if (timerWindow == null) return;
+
+        // 창이 닫혔거나(선택을 마침), 주사위 버튼을 이미 눌렀으면 시간을 더 세지 않는다
+        bool stillWaiting = timerWindow.IsOpen && (timerKind != SelectionKind.RollDice || diceRoll == null || diceRoll.CanRoll);
+        if (!stillWaiting) { StopSelectionTimer(); return; }
+
+        timerRemaining -= Time.unscaledDeltaTime;
+        if (timerRemaining > 0f)
+        {
+            if (timerChip != null) timerChip.SetRemaining(timerRemaining, timerTotal);
+            return;
+        }
+        OnSelectionTimeout();
+    }
+
+    // 제한시간 종료: 모든 선택 버튼을 잠그고, 잠시 뒤 창을 닫은 다음 알린다. (주사위 굴리기 UI는 닫지 않고 잠가만 둔다)
+    private void OnSelectionTimeout()
+    {
+        UIView window = timerWindow;
+        SelectionKind kind = timerKind;
+        StopSelectionTimer();
+        int epoch = timerEpoch; // 그 사이 새 제한시간이 시작되면 값이 달라진다
+
+        window.SetInputLocked(true);
+        if (kind == SelectionKind.RollDice && diceRoll != null) diceRoll.LockRoll();
+        EndBoardSelection(); // 보드에서 칸을 고르는 중이었다면 더 이상 고를 수 없게 한다
+
+        DOVirtual.DelayedCall(timeoutCloseDelay, () =>
+        {
+            // 그 사이에 다른 선택이 시작됐다면 그 창을 닫지 않는다
+            if (epoch != timerEpoch) return;
+            // 주사위 굴리기 UI는 화면에 계속 두고 비활성화만 한다. (다음 내 차례에 ShowRollDicePopup이 다시 켠다)
+            if (kind != SelectionKind.RollDice) window.Close();
+            SelectionTimedOut?.Invoke(kind);
+        }, ignoreTimeScale: true);
+    }
+
+    #endregion
 
     #region 조회 도우미
 

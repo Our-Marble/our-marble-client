@@ -40,11 +40,26 @@ public abstract class UIView : MonoBehaviour
     protected RectTransform Panel => panel;
     protected CanvasGroup PanelGroup => panelGroup;
 
+    /// <summary>창이 열린 직후(켜지고 열림 연출이 시작될 때) 호출된다.</summary>
+    public event Action Opened;
+
     public virtual void Open()
     {
         closing = false;
         gameObject.SetActive(true);
+        SetInputLocked(false); // 입력을 잠가 둔 채 닫혔어도 다시 열 때는 풀린다
         PlayOpen();
+        Opened?.Invoke();
+    }
+
+    /// <summary>
+    /// 창 안의 모든 버튼·토글을 한꺼번에 눌리지 않게 잠그거나 푼다. 각 버튼의 interactable 값은 바꾸지 않는다.
+    /// (제한 시간이 끝났을 때처럼, 창을 닫기 전에 더 이상 아무것도 고를 수 없게 할 때 쓴다. 창을 다시 열면 풀린다.)
+    /// </summary>
+    public void SetInputLocked(bool locked)
+    {
+        var group = locked ? UIFx.EnsureGroup(gameObject) : GetComponent<CanvasGroup>();
+        if (group != null) group.interactable = !locked;
     }
 
     /// <summary>닫힘 연출을 재생한 뒤 끈다. 연출이 없는 뷰는 바로 끈다.</summary>
