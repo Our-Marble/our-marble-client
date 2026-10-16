@@ -3,37 +3,47 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Threading;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class GameManager : Singleton<GameManager>
 {
     public GameState gameState;
 
+    [SerializeField]private string gameSceneName = "BoardLayout 2";
+
     private System.Random random; // 선턴 정하기나 랜덤 주사위 값을 계산할 때 사용합니다.
 
     private const int IslandTurns = 3; // 무인도 영업정지 턴 수
 
-    [SerializeField] private long salaryAmount = 100000;   // TODO: 월급 금액 확정 필요
-    [SerializeField] private long taxAmount = 100000;      // 세무조사 벌금 
-    [SerializeField] private long startMoney = 500000;     // 초기 자금 (테스트할 때 인스펙터에서 늘려서 사용)
-    [SerializeField, Min(1)] private int maxRound = 30;     // 최대 라운드 (모든 플레이어가 한 번씩 하면 1라운드). 넘으면 게임 종료
+    private long salaryAmount = 100000;   // TODO: 월급 금액 확정 필요
+    private long taxAmount = 100000;      // 세무조사 벌금 
+    private long startMoney = 500000;     // 초기 자금 (테스트할 때 인스펙터에서 늘려서 사용)
+    private int maxRound = 30;     // 최대 라운드 (모든 플레이어가 한 번씩 하면 1라운드). 넘으면 게임 종료
 
     private bool isMoving;
 
     // 플레이어 색상 관련 필드
-    private Color[] playerColors = new Color[] { Color.red, Color.green, Color.blue, Color.yellow };
+    private Color[] playerColors = new Color[] { Color.red, Color.blue, Color.green, Color.yellow };
     private Dictionary<long, Color> playerColorMap;
     public Color GetPlayerColor(long playerId) => playerColorMap[playerId];
 
     public bool isAfk = false;
     private bool sendAndWaiting = false;
-
-    void Start()
+    
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
-        GameNetwork.Instance.SendGameStateRequest();
+        if (scene.name == gameSceneName)
+        {
+            Debug.Log("GameManager 초기화 작업 수행");
+            gameState = null;
+            GameNetwork.Instance.SendGameStateRequest();
+        }
     }
 
     private void OnEnable()
     {
+        SceneManager.sceneLoaded += OnSceneLoaded;
+        
         GameNetwork.Instance.OnBuilt += HandleBuilt;
         GameNetwork.Instance.OnCardDrawn += HandleCardDrawn;
         GameNetwork.Instance.OnDestinationChosen += HandleDestinationChosen;
@@ -47,6 +57,8 @@ public class GameManager : Singleton<GameManager>
 
     private void OnDisable()
     {
+        SceneManager.sceneLoaded -= OnSceneLoaded;
+        
         GameNetwork.Instance.OnBuilt -= HandleBuilt;
         GameNetwork.Instance.OnCardDrawn -= HandleCardDrawn;
         GameNetwork.Instance.OnDestinationChosen -= HandleDestinationChosen;
@@ -117,11 +129,9 @@ public class GameManager : Singleton<GameManager>
     // 턴 순서(playerOrder)가 처음으로 돌아오면 1 증가합니다. 파산한 플레이어는 GetNextPlayerId가 건너뛰므로 남은 플레이어 기준으로 셉니다.
     private int GetNextRound(long nextPlayerId)
     {
-        if (gameState.RoundNumber == 0) return 1; // 게임의 첫 차례
-
         int prevIndex = gameState.PlayerOrder.IndexOf(gameState.CurrentPlayerId);
         int nextIndex = gameState.PlayerOrder.IndexOf(nextPlayerId);
-        return nextIndex <= prevIndex ? gameState.RoundNumber + 1 : gameState.RoundNumber;
+        return nextIndex < prevIndex ? gameState.RoundNumber + 1 : gameState.RoundNumber;
     }
 
     // 살아남은 플레이어의 최종 등수를 정합니다. (파산한 플레이어는 파산할 때 이미 등수가 정해짐)
@@ -1210,6 +1220,7 @@ public class GameManager : Singleton<GameManager>
 
     public void SyncGameState(GameState serverGameState)
     {
+        Debug.Log("after OnSync?.Invoke");
         // gameState 동기화. 덮어씀
         gameState = serverGameState;
 

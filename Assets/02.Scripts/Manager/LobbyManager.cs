@@ -174,12 +174,19 @@ public class LobbyManager : MonoBehaviour
         // 게임을 마치고 같은 방으로 돌아온 경우만 방을 유지한다
         if (!SceneFlow.IsReturningToRoom) CurrentRoom = null;
         inRoom = CurrentRoom != null;
-
+        
+        Debug.Log($"inRoom = {inRoom}");
+        
         Bind();
         WireEvents();
         RefreshProfile();
         ShowProfile(false);
-        SetConnection(ConnectionState.Disconnected, false);
+        
+        if(inRoom)
+            SetConnectionTrue();
+        else
+            SetConnection(ConnectionState.Disconnected, false);
+        
         SyncAll();
     }
 

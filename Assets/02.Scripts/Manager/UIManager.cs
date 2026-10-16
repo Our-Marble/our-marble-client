@@ -147,6 +147,10 @@ public class UIManager : MonoBehaviour
             // 코인 연출 중인 사람은 연출이 도착하는 순간 돈 표시를 직접 갱신하므로 건너뛴다 (같은 변화가 두 번 뜨지 않게)
             if (transferPlayers.Contains(player.PlayerId)) continue;
 
+            // 현재 초상화시스템이 미구현되어있기 때문에 view.SetProfile함수 안쓰고 임시로 생성한 SetName함수 씁니다. TODO: 초상화시스템, 색상시스템 도입하고나서 SetProfile쓰도록 고치기
+            view.SetName(player.Nickname);
+            Debug.Log($"UIManager - RefreshUIFromGameState - view.SetName({player.Nickname});");
+            
             long delta = player.Money - view.CashTarget;
             view.SetMoney(player.Money, TotalAssetOf(player.PlayerId, player.Money));
             if (delta != 0) view.ShowMoneyChange(TakeMoneyReason(player.PlayerId, delta), delta);

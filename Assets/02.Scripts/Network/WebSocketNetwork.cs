@@ -11,6 +11,8 @@ public class WebSocketNetwork : Singleton<WebSocketNetwork>
 {
     private string serverUrl = "ws://localhost:8080/ws";
     
+    protected override bool PersistAcrossScenes => true;
+    
     private WebSocket websocket;
     public long LocalPlayerId { get; private set; }
     public string LocalNickname { get; private set; }
