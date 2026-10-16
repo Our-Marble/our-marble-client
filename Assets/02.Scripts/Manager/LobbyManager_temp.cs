@@ -429,6 +429,8 @@ public class LobbyManager_temp : MonoBehaviour
             SetConnection((ConnectionState)(((int)connection + 1) % 3), true);
 #endif
 
+        UpdateRefreshButton();
+
         if (!Input.GetKeyDown(KeyCode.Escape) || entering) return;
         if (settingsView.IsOpen) return; // 설정 창은 창 아래의 닫기 버튼으로만 닫는다
         else if (roomSetup != null && roomSetup.IsOpen) return; // 방 안에서는 X 버튼으로만 나간다
@@ -1051,8 +1053,44 @@ public class LobbyManager_temp : MonoBehaviour
     /// <summary>방 목록을 서버에서 다시 받아 온다. 응답을 기다리는 동안 로딩 화면을 띄운다. (목업: 잠깐 기다린 뒤 지금 목록을 다시 그린다)</summary>
     private void RefreshRooms()
     {
-        if (refreshing || entering || connection != ConnectionState.Connected) return;
+        if (refreshing || entering || connection != ConnectionState.Connected || Time.unscaledTime < refreshReadyAt) return;
+        refreshReadyAt = Time.unscaledTime + RefreshCooldown;
         StartCoroutine(RefreshRoutine());
+        UpdateRefreshButton();
+    }
+
+    // 새로고침 쿨타임: 기다리는 동안 버튼을 누를 수 없게 하고 남은 초를 보여 준다. 끝나면 평소 모습으로 돌아온다.
+    private const float RefreshCooldown = 10f;
+    private float refreshReadyAt;
+    private int shownCooldown = -1; // 버튼에 지금 보이는 남은 초 (0이면 평소 글자)
+    private TMP_Text refreshLabel;
+
+    private void UpdateRefreshButton()
+    {
+        if (refreshButton == null) return;
+        if (refreshLabel == null)
+        {
+            refreshLabel = refreshButton.GetComponentInChildren<TMP_Text>();
+            if (refreshLabel != null)
+            {
+                // "새로고침 (10초)"가 버튼 안에 한 줄로 들어가도록 글자가 길어지면 줄여서 보인다
+                refreshLabel.enableAutoSizing = true;
+                refreshLabel.fontSizeMax = refreshLabel.fontSize;
+                refreshLabel.fontSizeMin = 14;
+                refreshLabel.textWrappingMode = TextWrappingModes.NoWrap;
+            }
+        }
+
+        int remaining = Mathf.Max(0, Mathf.CeilToInt(refreshReadyAt - Time.unscaledTime));
+        if (remaining == shownCooldown) return;
+        shownCooldown = remaining;
+
+        refreshButton.interactable = remaining == 0;
+        if (refreshLabel == null) return;
+        refreshLabel.text = remaining > 0 ? $"새로고침 ({remaining}초)" : "새로고침";
+        var color = refreshLabel.color;
+        color.a = remaining > 0 ? 0.55f : 1f;
+        refreshLabel.color = color;
     }
 
     private IEnumerator RefreshRoutine()

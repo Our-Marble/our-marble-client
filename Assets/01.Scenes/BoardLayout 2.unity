@@ -694,20 +694,7 @@ MonoBehaviour:
   taxAmount: 100000
   startMoney: 1000000
   maxRound: 10
-  forceDice1: -1
-  forceDice2: -1
-  autoPlayAllPlayers: 0
-  botActionDelay: 1
-  playerSetups:
-  - playerId: 123
-    isBot: 0
-    personality: 0
-  - playerId: 456
-    isBot: 1
-    personality: 0
-  - playerId: 789
-    isBot: 1
-    personality: 0
+  isAfk: 0
 --- !u!4 &337382219
 Transform:
   m_ObjectHideFlags: 0
@@ -1435,7 +1422,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &674266576
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3292,6 +3279,9 @@ MonoBehaviour:
   cardDeck: {fileID: 11400000, guid: 28d3ca2c6729ed246a6df82e701ba38a, type: 2}
   otherCardShowSeconds: 2
   resultSeconds: 15
+  selectSeconds: 15
+  afkSelectSeconds: 3
+  timeoutCloseDelay: 0.3
 --- !u!4 &1470332513
 Transform:
   m_ObjectHideFlags: 0

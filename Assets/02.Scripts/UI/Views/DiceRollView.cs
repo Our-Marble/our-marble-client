@@ -134,6 +134,19 @@ public class DiceRollView : UIView
         if (rollButton != null) rollButton.interactable = interactable;
     }
 
+    /// <summary>굴리기 버튼을 지금 누를 수 있는지</summary>
+    public bool CanRoll => rollButton != null && rollButton.IsInteractable();
+
+    /// <summary>
+    /// 굴리기를 더 이상 못 하게 막는다. (제한 시간이 끝났을 때)
+    /// 버튼을 누르고 있던 중이어도, 손을 뗐을 때 주사위가 굴러가지 않는다. 다시 Show하면 풀린다.
+    /// </summary>
+    public void LockRoll()
+    {
+        SetInteractable(false);
+        onRoll = null;
+    }
+
     /// <summary>화면에 표시 중인 무인도 남은 턴. 0이면 표시가 꺼져 있다.</summary>
     public int IslandTurnsRemaining { get; private set; }
 
