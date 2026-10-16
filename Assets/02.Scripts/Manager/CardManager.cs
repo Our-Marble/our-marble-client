@@ -7,6 +7,9 @@ using UnityEngine;
 // - GameManager를 참조하지 않음 (GameManager → CardManager 단방향)
 public class CardManager : Singleton<CardManager>
 {
+    // 게임 씬 전용 매니저입니다. 씬 오브젝트(말, 타일, 보드)를 참조하므로 게임 씬이 로드될 때마다 새로 만들어지게 합니다.
+    protected override bool PersistAcrossScenes => false;
+
     [SerializeField] private CardDeckData deckData; // 카드 종류 및 카드 데이터
 
     // 덱에 등록된 CardId 목록. GameManager가 랜덤 CardId를 결정할 때 사용

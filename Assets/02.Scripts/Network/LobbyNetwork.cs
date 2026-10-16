@@ -7,6 +7,8 @@ using UnityEngine.SceneManagement;
 
 public class LobbyNetwork : Singleton<LobbyNetwork>
 {
+    protected override bool PersistAcrossScenes => true;
+    
     private Queue<LobbyServerMessage> messageQueue = new Queue<LobbyServerMessage>();
 
     [SerializeField] private string lobbySceneName = "UI_LobbyScene";
