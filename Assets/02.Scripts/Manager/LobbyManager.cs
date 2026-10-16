@@ -41,6 +41,8 @@ public class LobbyManager : MonoBehaviour
     [Header("서버")]
     [Tooltip("요청을 보낸 뒤 이 시간(초) 안에 응답이 없으면 로딩을 닫고 알린다.")]
     [SerializeField] private float requestTimeout = 10f;
+    [Tooltip("방 목록 새로고침 버튼을 누른 뒤 다시 누를 수 있기까지 기다리는 시간(초).")]
+    [SerializeField] private float refreshCooldown = 10f;
 
     private static LobbyNetwork Net => LobbyNetwork.Instance;
 
@@ -57,6 +59,11 @@ public class LobbyManager : MonoBehaviour
     private Pending pending;
     private Coroutine timeoutRoutine;
     private bool refreshToast; // 사용자가 새로고침을 눌러 받은 목록이면 토스트를 띄운다
+
+    // 새로고침 쿨타임: 이 시각이 지나야 다시 누를 수 있다. 기다리는 동안 버튼에 남은 시간을 보여 준다
+    private float refreshReadyAt;
+    private int shownCooldown = -1; // 버튼에 지금 보이는 남은 초 (0이면 평소 글자)
+    private TMP_Text refreshLabel;
     private bool Busy => pending != Pending.None;
     private bool CanRequest => !Busy && connection == ConnectionState.Connected;
 
@@ -342,7 +349,16 @@ public class LobbyManager : MonoBehaviour
         // 상단바
         settingsButton.onClick.AddListener(settingsView.Open);
         exitButton.onClick.AddListener(ExitToLogin);
-        refreshButton.onClick.AddListener(() => RequestRoomList(true));
+        refreshButton.onClick.AddListener(OnRefreshClicked);
+        refreshLabel = refreshButton.GetComponentInChildren<TMP_Text>();
+        if (refreshLabel != null)
+        {
+            // "새로고침 (10초)"가 버튼 안에 한 줄로 들어가도록 글자가 길어지면 줄여서 보인다
+            refreshLabel.enableAutoSizing = true;
+            refreshLabel.fontSizeMax = refreshLabel.fontSize;
+            refreshLabel.fontSizeMin = 14;
+            refreshLabel.textWrappingMode = TextWrappingModes.NoWrap;
+        }
 
         // 필터
         joinableOnlyToggle.onValueChanged.AddListener(isOn =>
@@ -379,6 +395,8 @@ public class LobbyManager : MonoBehaviour
         // 서버 메시지는 매 프레임 처리한다 (Escape 처리보다 먼저)
         if (Net != null) Net.TryDequeueMessage();
 
+        UpdateRefreshButton();
+
         if (!Input.GetKeyDown(KeyCode.Escape) || Busy) return;
         if (settingsView.IsOpen) return; // 설정 창은 닫기 버튼으로만 닫는다
         if (roomSetup != null && roomSetup.IsOpen) return; // 방 안에서는 X 버튼으로만 나간다
@@ -389,6 +407,31 @@ public class LobbyManager : MonoBehaviour
 
     // ───────────── 서버 요청 ─────────────
     // TODO: LobbyNetwork의 실제 메서드 이름/인자에 맞춘다
+
+    // 새로고침 버튼. 서버 요청이 실제로 나가는 경우에만 쿨타임을 시작한다 (요청 중이거나 연결이 없으면 아무 일도 없다)
+    private void OnRefreshClicked()
+    {
+        if (!CanRequest || Time.unscaledTime < refreshReadyAt) return;
+        refreshReadyAt = Time.unscaledTime + refreshCooldown;
+        RequestRoomList(true);
+        UpdateRefreshButton();
+    }
+
+    // 쿨타임 동안 버튼을 누를 수 없게 하고 남은 초를 보여 준다. 끝나면 평소 모습으로 돌아온다. (초가 바뀔 때만 글자를 바꾼다)
+    private void UpdateRefreshButton()
+    {
+        if (refreshButton == null) return;
+        int remaining = Mathf.Max(0, Mathf.CeilToInt(refreshReadyAt - Time.unscaledTime));
+        if (remaining == shownCooldown) return;
+        shownCooldown = remaining;
+
+        refreshButton.interactable = remaining == 0;
+        if (refreshLabel == null) return;
+        refreshLabel.text = remaining > 0 ? $"새로고침 ({remaining}초)" : "새로고침";
+        var color = refreshLabel.color;
+        color.a = remaining > 0 ? 0.55f : 1f;
+        refreshLabel.color = color;
+    }
 
     private void RequestRoomList(bool userTriggered)
     {
