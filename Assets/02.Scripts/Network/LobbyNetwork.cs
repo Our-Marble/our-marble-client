@@ -141,6 +141,14 @@ public class LobbyNetwork : Singleton<LobbyNetwork>
                 OnLobbyError?.Invoke(code, message);
                 break;
             }
+            case LobbyMessageType.CHAT_BROADCAST:
+            {
+                ChatBroadcast chatBroadcast =
+                    JsonConvert.DeserializeObject<ChatBroadcast>(json);
+
+                OnChatBroadcast?.Invoke(chatBroadcast.playerId, chatBroadcast.content);
+                break;
+            }
             default:
             {
                 Debug.LogError($"식별할 수 없는 type입니다.: {type}");
@@ -162,6 +170,7 @@ public class LobbyNetwork : Singleton<LobbyNetwork>
     public event Action<RoomSnapshot> OnRoomUpdated;
     public event Action<string> OnGameStarted;
     public event Action<string, string> OnLobbyError;
+    public event Action<long, string> OnChatBroadcast; // 보낸 사람 playerId, 내용
    
     public void SendCreateRoomRequest()
     {
@@ -221,6 +230,18 @@ public class LobbyNetwork : Singleton<LobbyNetwork>
         WebSocketNetwork.Instance.SendMessage(json);
     }
     
+    public void SendChatRequest(string content)
+    {
+        ChatSendRequest message = new ChatSendRequest
+        {
+            type = "CHAT_SEND",
+            content = content
+        };
+
+        string json = JsonConvert.SerializeObject(message);
+        WebSocketNetwork.Instance.SendMessage(json);
+    }
+
     public void SendRoomListRequest()
     {
         RoomListRequest message = new RoomListRequest

@@ -6,7 +6,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 로비 씬의 방 설정 화면. 방에 들어오면 열리고, 방장이 시작하면 게임 씬으로 넘어간다.
+/// 로비 씬의 대기방 화면. 방에 들어오면 열리고, 방장이 시작하면 게임 씬으로 넘어간다.
 /// 왼쪽은 플레이어(2×2로 놓인 자리 4개와 그 아래 팀 선택), 오른쪽은 방장이 정하는 게임 설정이다.
 /// 자리는 최대 인원과 상관없이 항상 4개를 보여 주고, 최대 인원 밖의 빈 자리는 흐리게 "닫힘"으로 보인다.
 ///
@@ -67,7 +67,7 @@ public class RoomSetupView : UIView
     private static readonly int[] MaxRoundChoices = { 10, 15, 20, 30, 40 };
     private static readonly long[] SalaryChoices = { 50000, 100000, 150000, 200000, 300000 };
 
-    private const string UnappliedHint = "변경한 설정을 적용해야 게임을 시작할 수 있어요";
+    private const string UnappliedHint = "변경한 설정을 적용할까요?";
     private const float LockedSlotAlpha = 0.45f; // 최대 인원 밖의 빈 자리를 흐리게 보이는 정도
 
     [Serializable]
@@ -83,6 +83,9 @@ public class RoomSetupView : UIView
         public Image teamBadge;
         public TMP_Text teamText;
         public TMP_Text nicknameText;
+        public RectTransform bubble;   // 초상화 위 말풍선
+        public TMP_Text bubbleText;
+        [NonSerialized] public Sequence bubbleTween;
     }
 
     [SerializeField] private Image mapImage;
@@ -105,7 +108,7 @@ public class RoomSetupView : UIView
     [SerializeField] private Button closeButton;
     [SerializeField] private Button applyButton;
     [SerializeField] private Button cancelButton;
-    [SerializeField] private TMP_Text hintText;
+    [SerializeField] private TMP_Text unappliedHintText;    // 적용하지 않은 변경이 있을 때 취소/적용 버튼 위에 뜨는 안내
     [SerializeField] private TMP_Text subtitleText;
     [SerializeField] private Button moneyPrevButton;
     [SerializeField] private Button moneyNextButton;
@@ -119,6 +122,17 @@ public class RoomSetupView : UIView
     [SerializeField] private Button botPrevButton;
     [SerializeField] private Button botNextButton;
     [SerializeField] private TMP_Text botValueText;
+    [SerializeField] private GameObject settingsPanel;      // 게임 설정 탭의 내용 (맵, 모드, 최대 인원, 게임 설정)
+    [SerializeField] private Toggle settingsTab;
+    [SerializeField] private Toggle chatTab;
+    [SerializeField] private GameObject chatTabDot;         // 게임 설정 탭을 보는 중에 새 채팅이 오면 켜진다
+    [SerializeField] private GameObject chatPanel;
+    [SerializeField] private ScrollRect chatScroll;
+    [SerializeField] private RectTransform chatContent;
+    [SerializeField] private RectTransform chatLineTemplate; // 채팅 한 줄의 견본 (꺼 둔다). Bubble/Name, Bubble/Body를 가진다
+    [SerializeField] private GameObject chatEmptyText;      // 메시지가 없을 때 보이는 안내
+    [SerializeField] private TMP_InputField chatInput;
+    [SerializeField] private Button chatSendButton;
 
     /// <summary>방장이 "설정 적용"을 누르면 호출. 초안 전체가 넘어온다. 받는 쪽이 방 정보를 맞춘 뒤 SetSettings로 적용된 값을 돌려준다.</summary>
     public event Action<Settings> SettingsApplied;
@@ -135,22 +149,20 @@ public class RoomSetupView : UIView
     private Settings draft;                  // 방장이 바꾸는 중인 설정 (적용 전)
     private string[] mapNames = Array.Empty<string>();
     private Sprite[] mapPreviews = Array.Empty<Sprite>();
-    private string defaultHint;              // 프리팹에 적힌 안내 문구 (적용 전 경고를 거두면 되돌린다)
-    private Color defaultHintColor;
-    private bool hintCached;
 
     public override void Bind()
     {
         const string w = "RoomSetupPopup/Window/";
-        mapImage = Find<Image>(w + "MapSection/MapPreview/MapImage");
-        mapNameText = Find<TMP_Text>(w + "MapSection/MapSelector/MapNameText");
-        prevMapButton = Find<Button>(w + "MapSection/MapSelector/PrevMapButton");
-        nextMapButton = Find<Button>(w + "MapSection/MapSelector/NextMapButton");
-        soloToggle = Find<Toggle>(w + "ModeSection/ModeToggle/SoloToggle");
-        teamToggle = Find<Toggle>(w + "ModeSection/ModeToggle/TeamToggle");
+        const string sp = w + "SettingsPanel/";
+        mapImage = Find<Image>(sp + "MapSection/MapPreview/MapImage");
+        mapNameText = Find<TMP_Text>(sp + "MapSection/MapSelector/MapNameText");
+        prevMapButton = Find<Button>(sp + "MapSection/MapSelector/PrevMapButton");
+        nextMapButton = Find<Button>(sp + "MapSection/MapSelector/NextMapButton");
+        soloToggle = Find<Toggle>(sp + "ModeSection/ModeToggle/SoloToggle");
+        teamToggle = Find<Toggle>(sp + "ModeSection/ModeToggle/TeamToggle");
         if (maxPlayersToggles == null || maxPlayersToggles.Length != 3) maxPlayersToggles = new Toggle[3]; // 이미 저장된 프리팹에는 배열이 없다
         for (int i = 0; i < maxPlayersToggles.Length; i++)
-            maxPlayersToggles[i] = Find<Toggle>($"{w}MaxPlayersSection/MaxPlayersToggle/Max{i + 2}Toggle");
+            maxPlayersToggles[i] = Find<Toggle>($"{sp}MaxPlayersSection/MaxPlayersToggle/Max{i + 2}Toggle");
         playerCountText = Find<TMP_Text>(w + "PlayerCountText");
         for (int i = 0; i < 4; i++)
         {
@@ -167,6 +179,8 @@ public class RoomSetupView : UIView
                 teamBadge = Find<Image>(s + "TeamBadge"),
                 teamText = Find<TMP_Text>(s + "TeamBadge/Text"),
                 nicknameText = Find<TMP_Text>(s + "NicknameText"),
+                bubble = Find<RectTransform>(s + "Portrait/ChatBubble"),
+                bubbleText = Find<TMP_Text>(s + "Portrait/ChatBubble/Text"),
             };
         }
         teamSection = FindObject(w + "TeamSection");
@@ -180,10 +194,22 @@ public class RoomSetupView : UIView
         closeButton = Find<Button>(w + "CloseButton");
         applyButton = Find<Button>(w + "ApplyButton");
         cancelButton = Find<Button>(w + "CancelButton");
-        hintText = Find<TMP_Text>(w + "HintText");
+        unappliedHintText = Find<TMP_Text>(w + "UnappliedHintText");
         subtitleText = Find<TMP_Text>(w + "SubtitleText");
 
-        const string g = w + "GameSettingsSection/Card/";
+        settingsPanel = FindObject(w + "SettingsPanel");
+        settingsTab = Find<Toggle>(w + "TabBar/SettingsTab");
+        chatTab = Find<Toggle>(w + "TabBar/ChatTab");
+        chatTabDot = FindObject(w + "TabBar/ChatTab/Dot");
+        chatPanel = FindObject(w + "ChatPanel");
+        chatScroll = Find<ScrollRect>(w + "ChatPanel/Scroll");
+        chatContent = Find<RectTransform>(w + "ChatPanel/Scroll/Viewport/Content");
+        chatLineTemplate = Find<RectTransform>(w + "ChatPanel/Scroll/Viewport/Content/LineTemplate");
+        chatEmptyText = FindObject(w + "ChatPanel/Scroll/EmptyText");
+        chatInput = Find<TMP_InputField>(w + "ChatPanel/InputRow/Input");
+        chatSendButton = Find<Button>(w + "ChatPanel/InputRow/SendButton");
+
+        const string g = sp + "GameSettingsSection/Card/";
         moneyPrevButton = Find<Button>(g + "MoneyRow/Selector/PrevButton");
         moneyNextButton = Find<Button>(g + "MoneyRow/Selector/NextButton");
         moneyValueText = Find<TMP_Text>(g + "MoneyRow/Selector/ValueText");
@@ -223,7 +249,20 @@ public class RoomSetupView : UIView
         // 팀 버튼은 Show를 거치지 않고 열어도 동작해야 해서 여기서 연결한다
         SetOnClick(redTeamButton, () => ChangeLocalTeam(Team.Red, onRedTeamChanged));
         SetOnClick(blueTeamButton, () => ChangeLocalTeam(Team.Blue, onBlueTeamChanged));
+        InitChat();
         RefreshAll();
+    }
+
+    private void OnEnable()
+    {
+        ChatService.MessageReceived += OnChatMessage;
+        RebuildChatLog(); // 닫혀 있던 동안 온 메시지까지 다시 그린다
+    }
+
+    private void OnDisable()
+    {
+        ChatService.MessageReceived -= OnChatMessage;
+        foreach (var r in slots) HideBubble(r);
     }
 
     private Action onRedTeamChanged;
@@ -537,9 +576,9 @@ public class RoomSetupView : UIView
 
         // 적용 버튼과 시작 버튼
         bool dirty = !SameSettings(applied, draft);
-        SetActive(applyButton != null ? applyButton.gameObject : null, isHost);
+        SetActive(applyButton != null ? applyButton.gameObject : null, isHost && !chatTabOpen);
         if (applyButton != null) applyButton.interactable = isHost && dirty;
-        SetActive(cancelButton != null ? cancelButton.gameObject : null, isHost);
+        SetActive(cancelButton != null ? cancelButton.gameObject : null, isHost && !chatTabOpen);
         if (cancelButton != null) cancelButton.interactable = isHost && dirty;
         SetActive(startButton != null ? startButton.gameObject : null, isHost);
         SetActive(readyButton != null ? readyButton.gameObject : null, !isHost);
@@ -557,19 +596,12 @@ public class RoomSetupView : UIView
         if (next != null) next.interactable = isHost && index < count - 1;
     }
 
-    // 적용하지 않은 변경이 있으면 시작할 수 없다는 안내를 보여 준다. 없으면 프리팹의 기본 안내로 되돌린다.
+    // 적용하지 않은 변경이 있으면 취소/적용 버튼 위에 시작할 수 없다는 안내를 보여 준다. (왼쪽 아래의 기본 안내는 그대로 둔다)
     private void RefreshHint(bool dirty)
     {
-        if (hintText == null) return;
-        if (!hintCached)
-        {
-            defaultHint = hintText.text;
-            defaultHintColor = hintText.color;
-            hintCached = true;
-        }
-        bool warn = isHost && dirty;
-        hintText.text = warn ? UnappliedHint : defaultHint;
-        hintText.color = warn ? UIPalette.WarmText : defaultHintColor;
+        if (unappliedHintText == null) return;
+        unappliedHintText.text = UnappliedHint;
+        unappliedHintText.gameObject.SetActive(isHost && dirty && !chatTabOpen);
     }
 
     // ───────────── 자리 ─────────────
@@ -721,6 +753,179 @@ public class RoomSetupView : UIView
         {
             var c = label.color; c.a = alpha; label.color = c;
         }
+    }
+
+    // ───────────── 탭 (게임 설정 / 채팅) ─────────────
+
+    private bool chatTabOpen;
+
+    private void InitChat()
+    {
+        if (chatLineTemplate != null) chatLineTemplate.gameObject.SetActive(false);
+        if (settingsTab != null) settingsTab.onValueChanged.AddListener(on => { if (on) SetTab(false); });
+        if (chatTab != null) chatTab.onValueChanged.AddListener(on => { if (on) SetTab(true); });
+        SetOnClick(chatSendButton, SubmitChat);
+        if (chatInput != null)
+        {
+            chatInput.characterLimit = ChatService.MaxLength;
+            chatInput.onSubmit.AddListener(_ => SubmitChat());
+        }
+
+        // 말풍선은 이웃 자리 위에도 보여야 하므로 따로 정렬하는 캔버스를 단다
+        var rootCanvas = GetComponentInParent<Canvas>();
+        foreach (var r in slots)
+        {
+            if (r == null || r.bubble == null) continue;
+            var canvas = r.bubble.GetComponent<Canvas>();
+            if (canvas == null) canvas = r.bubble.gameObject.AddComponent<Canvas>();
+            canvas.overrideSorting = true;
+            canvas.sortingOrder = rootCanvas != null ? rootCanvas.sortingOrder + 1 : 1;
+            if (r.bubble.GetComponent<CanvasGroup>() == null) r.bubble.gameObject.AddComponent<CanvasGroup>();
+            HideBubble(r);
+        }
+        SetTab(false);
+    }
+
+    /// <summary>
+    /// 오른쪽 영역을 게임 설정 또는 채팅으로 바꾼다. 채팅을 열면 새 채팅 표시가 사라진다.
+    /// 게임 설정 탭의 값(초안)은 탭을 오가도 그대로 남는다.
+    /// </summary>
+    public void SetTab(bool chat)
+    {
+        chatTabOpen = chat;
+        SetActive(settingsPanel, !chat);
+        SetActive(chatPanel, chat);
+        if (settingsTab != null) settingsTab.SetIsOnWithoutNotify(!chat);
+        if (chatTab != null) chatTab.SetIsOnWithoutNotify(chat);
+        StyleTab(settingsTab, !chat);
+        StyleTab(chatTab, chat);
+        if (chat)
+        {
+            SetActive(chatTabDot, false);
+            ScrollChatToEnd();
+        }
+        RefreshAll();
+    }
+
+    private static void StyleTab(Toggle tab, bool on)
+    {
+        if (tab == null) return;
+        var label = tab.GetComponentInChildren<TMP_Text>();
+        if (label != null) label.color = on ? UIPalette.Ink : UIPalette.InkSub; // 선택된 쪽의 흰 알약은 토글이 보여 준다
+    }
+
+    // ───────────── 채팅 ─────────────
+
+    private void SubmitChat()
+    {
+        if (chatInput == null) return;
+        string text = chatInput.text;
+        chatInput.text = string.Empty;
+        chatInput.ActivateInputField(); // 엔터로 보낸 뒤에도 계속 입력할 수 있게 한다
+        if (string.IsNullOrWhiteSpace(text)) return;
+
+        var me = slotData[localSlot];
+        ChatService.Send(me.IsEmpty || string.IsNullOrEmpty(me.Name) ? "나" : me.Name, me.ColorIndex, text);
+    }
+
+    private void OnChatMessage(ChatMessage message)
+    {
+        AddChatLine(message);
+        ShowBubble(message);
+        if (!chatTabOpen && !message.IsLocal) SetActive(chatTabDot, true);
+    }
+
+    private void RebuildChatLog()
+    {
+        if (chatContent == null || chatLineTemplate == null) return;
+        for (int i = chatContent.childCount - 1; i >= 0; i--)
+        {
+            var child = chatContent.GetChild(i);
+            if (child != chatLineTemplate) Destroy(child.gameObject);
+        }
+        foreach (var message in ChatService.History) AddChatLine(message, false);
+        SetActive(chatEmptyText, ChatService.History.Count == 0);
+        ScrollChatToEnd();
+    }
+
+    private const float ChatBubbleMaxWidth = 520f;
+    private const float ChatBubblePaddingX = 40f;
+    private static readonly Color ChatOtherBg = new Color32(238, 241, 247, 255);
+
+    // 내 메시지는 오른쪽에 민트색, 다른 사람 메시지는 왼쪽에 회색 말풍선으로 쌓는다. 말풍선 위에 플레이어 색 점, 닉네임, 보낸 시각(00시00분)이 붙는다.
+    private void AddChatLine(ChatMessage message, bool scroll = true)
+    {
+        if (chatContent == null || chatLineTemplate == null) return;
+        var row = Instantiate(chatLineTemplate, chatContent);
+        row.gameObject.SetActive(true);
+        row.GetComponent<HorizontalLayoutGroup>().childAlignment = message.IsLocal ? TextAnchor.UpperRight : TextAnchor.UpperLeft;
+
+        var bubble = row.Find("Bubble");
+        bubble.GetComponent<Image>().color = message.IsLocal ? UIPalette.ReadyBg : ChatOtherBg;
+        var nameText = bubble.Find("Name").GetComponent<TMP_Text>();
+        var bodyText = bubble.Find("Body").GetComponent<TMP_Text>();
+        nameText.text = $"<color={UIPalette.Hex(UIPalette.PlayerColor(message.ColorIndex))}>●</color> {Escape(message.Sender)}  <size=80%>{message.Time:HH}시{message.Time:mm}분</size>";
+        bodyText.text = message.Text;
+        bodyText.richText = false;
+
+        // 글 길이에 맞춰 말풍선 너비를 정한다 (길면 최대 너비에서 줄바꿈)
+        float width = bodyText.GetPreferredValues(message.Text, ChatBubbleMaxWidth, 0f).x;
+        width = Mathf.Max(width, nameText.GetPreferredValues(nameText.text).x);
+        bubble.GetComponent<LayoutElement>().preferredWidth = Mathf.Ceil(Mathf.Min(width, ChatBubbleMaxWidth)) + ChatBubblePaddingX;
+
+        SetActive(chatEmptyText, false);
+        if (scroll) ScrollChatToEnd();
+    }
+
+    // 사용자가 쓴 글의 '<'가 서식으로 읽히지 않게 한다 (뒤에 보이지 않는 글자를 붙인다)
+    private static string Escape(string text) => text?.Replace("<", "<​");
+
+    private void ScrollChatToEnd()
+    {
+        if (chatScroll == null || !isActiveAndEnabled) return;
+        Canvas.ForceUpdateCanvases();
+        chatScroll.verticalNormalizedPosition = 0f;
+    }
+
+    // ───────────── 말풍선 ─────────────
+
+    private const float BubbleMaxTextWidth = 190f;
+    private const float BubbleHoldSeconds = 4f;
+    private static readonly Vector2 BubblePadding = new Vector2(28f, 20f);
+
+    // 보낸 사람의 닉네임과 같은 자리의 초상화 위에 말풍선을 띄운다. 봇 자리는 말하지 않는다.
+    private void ShowBubble(ChatMessage message)
+    {
+        for (int i = 0; i < slots.Length; i++)
+        {
+            var data = slotData[i];
+            var r = slots[i];
+            if (data.IsEmpty || data.IsBot || data.Name != message.Sender || r == null || r.bubble == null || r.bubbleText == null) continue;
+
+            // 켜진 뒤에 글을 넣고 크기를 잰다. 꺼진 채로 재면 처음 한 번은 글 크기가 틀리게 나온다
+            var group = r.bubble.GetComponent<CanvasGroup>();
+            r.bubbleTween?.Kill();
+            r.bubble.gameObject.SetActive(true);
+            r.bubbleText.text = message.Text;
+            r.bubbleText.ForceMeshUpdate();
+            var textSize = r.bubbleText.GetPreferredValues(message.Text, BubbleMaxTextWidth, 0f);
+            r.bubble.sizeDelta = new Vector2(Mathf.Min(textSize.x, BubbleMaxTextWidth), textSize.y) + BubblePadding;
+            group.alpha = 1f;
+            r.bubble.localScale = Vector3.one * 0.6f;
+            r.bubbleTween = DOTween.Sequence().SetUpdate(true).SetLink(r.bubble.gameObject)
+                .Append(r.bubble.DOScale(1f, 0.22f).SetEase(Ease.OutBack))
+                .AppendInterval(BubbleHoldSeconds)
+                .Append(group.DOFade(0f, 0.3f))
+                .OnComplete(() => r.bubble.gameObject.SetActive(false));
+            return;
+        }
+    }
+
+    private static void HideBubble(SlotRefs r)
+    {
+        if (r == null || r.bubble == null) return;
+        r.bubbleTween?.Kill();
+        r.bubble.gameObject.SetActive(false);
     }
 
     // ───────────── 팀 선택 ─────────────

@@ -206,6 +206,8 @@ public class LobbyManager : MonoBehaviour
         Net.OnRoomUpdated += HandleRoomUpdated;
         Net.OnGameStarted += HandleGameStarted;
         Net.OnLobbyError += HandleLobbyError;
+        Net.OnChatBroadcast += HandleChatBroadcast;
+        ChatService.SendRequested = SendChat;
         
         Net.OnConnected += HandleConnected;
     }
@@ -219,6 +221,8 @@ public class LobbyManager : MonoBehaviour
         Net.OnRoomUpdated -= HandleRoomUpdated;
         Net.OnGameStarted -= HandleGameStarted;
         Net.OnLobbyError -= HandleLobbyError;
+        Net.OnChatBroadcast -= HandleChatBroadcast;
+        if (ChatService.SendRequested == (System.Action<ChatMessage>)SendChat) ChatService.SendRequested = null;
         
         Net.OnConnected -= HandleConnected;
     }
@@ -591,6 +595,7 @@ public class LobbyManager : MonoBehaviour
         EndRequest();
         inRoom = false;
         CurrentRoom = null;
+        ChatService.Clear(); // 나간 방의 채팅은 지운다
         if (roomSetup != null && roomSetup.IsOpen) roomSetup.Close();
         if (!requested) ShowToast("방에서 나왔어요");
         RequestRoomList(false);
@@ -612,6 +617,26 @@ public class LobbyManager : MonoBehaviour
             EndRequest();
             ShowToast("게임 화면을 불러오지 못했어요");
         }
+    }
+
+    // 채팅: 보낸 글은 서버를 거쳐 CHAT_BROADCAST로 (나를 포함해) 방 모두에게 돌아온다. 그때 화면에 보인다.
+    private void SendChat(ChatMessage message)
+    {
+        if (CurrentRoom == null) return;
+        Net.SendChatRequest(message.Text);
+    }
+
+    private void HandleChatBroadcast(long playerId, string content)
+    {
+        var players = CurrentRoom?.Players;
+        int index = players != null ? players.FindIndex(p => p.playerId == playerId) : -1;
+        ChatService.Receive(new ChatMessage
+        {
+            Sender = index >= 0 ? players[index].nickname : "알 수 없음",
+            ColorIndex = Mathf.Max(0, index), // 색은 자리 순서로 정한다 (ApplyRoomSnapshot과 같다)
+            Text = content,
+            IsLocal = playerId == MyPlayerId,
+        });
     }
 
     public void HandleLobbyError(string code, string message)
