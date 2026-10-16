@@ -976,6 +976,7 @@ public class LobbyManager_temp : MonoBehaviour
     {
         if (mockHostStart != null) { StopCoroutine(mockHostStart); mockHostStart = null; }
         CurrentRoom = null;
+        ChatService.Clear(); // 나간 방의 채팅은 지운다
         roomSetup.Close();
         SyncAll();
     }

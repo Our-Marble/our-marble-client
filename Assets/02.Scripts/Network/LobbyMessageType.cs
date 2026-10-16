@@ -17,5 +17,7 @@ public enum LobbyMessageType
     
     LOBBY_ERROR,
     
-    PLAYER_RECORD
+    PLAYER_RECORD,
+    
+    CHAT_BROADCAST
 }
