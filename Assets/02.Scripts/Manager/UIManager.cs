@@ -53,9 +53,9 @@ public class UIManager : MonoBehaviour
     [SerializeField] private float resultSeconds = 15f;
     [Header("선택 제한시간")]
     [Tooltip("주사위 굴리기와 각종 선택창의 제한시간(초). 평소(잠수 아님)")]
-    [SerializeField] private float selectSeconds = 15f;
+    [SerializeField] private float selectSeconds = 30f;
     [Tooltip("잠수 중인 플레이어(GameManager.isAfk)의 제한시간(초)")]
-    [SerializeField] private float afkSelectSeconds = 3f;
+    [SerializeField] private float afkSelectSeconds = 5f;
     [Tooltip("시간이 끝난 뒤 버튼을 잠그고 창을 닫기까지 기다리는 시간(초)")]
     [SerializeField] private float timeoutCloseDelay = 0.3f;
     private int maxRound = 30; // 상단바에 '라운드 N / 최대'로 보여줄 최대 라운드. 값은 GameManager가 SetMaxRound로 알려주고, 그 전까지는 이 기본값을 쓴다.
