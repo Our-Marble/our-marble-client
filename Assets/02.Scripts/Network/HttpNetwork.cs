@@ -10,8 +10,11 @@ public class HttpNetwork : Singleton<HttpNetwork>
     
     public string JwtToken { get; private set; } // 전역으로 접근할 수 있도록 관리
 
-    private const string BaseUrl = "http://localhost:8080"; // 서버 주소
-
+    // private const string BaseUrl = "http://localhost:8080"; // 로컬 서버 주소
+    private string BaseUrl => "http://" + EC2PublicAdress + ":8080";
+    
+    public string EC2PublicAdress = "3.34.143.141";
+    
     private static string ReadErrorMessage(UnityWebRequest webRequest, string fallbackMessage)
     {
         byte[] responseBytes = webRequest.downloadHandler?.data;

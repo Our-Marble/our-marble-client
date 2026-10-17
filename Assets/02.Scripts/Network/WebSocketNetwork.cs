@@ -9,7 +9,8 @@ using UnityEngine;
 
 public class WebSocketNetwork : Singleton<WebSocketNetwork>
 {
-    private string serverUrl = "ws://localhost:8080/ws";
+    // private string serverUrl = "ws://localhost:8080/ws"; // 로컬 서버 주소
+    private string serverUrl = "ws://" + HttpNetwork.Instance.EC2PublicAdress + ":8080/ws";
     
     protected override bool PersistAcrossScenes => true;
     
