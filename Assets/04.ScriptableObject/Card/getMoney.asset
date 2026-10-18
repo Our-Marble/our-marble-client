@@ -17,7 +17,7 @@ MonoBehaviour:
   description: "\uB3C8\uC744 \uBC1B\uC544\uB77C"
   icon: {fileID: 0}
   effectType: 0
-  amount: 200
+  amount: 100000
   targetTileId: 0
   steps: 0
   penaltyToFestivalPool: 0
