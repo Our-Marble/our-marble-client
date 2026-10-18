@@ -388,6 +388,7 @@ MonoBehaviour:
   - {fileID: 1279938394}
   hopDuration: 0.2
   slideDuration: 0.6
+  glideStepDuration: 0.07
   slotOffsets:
   - {x: -0.25, y: 0.25, z: 0}
   - {x: 0.25, y: 0.25, z: 0}
@@ -690,10 +691,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 069721c10cced2f45b61d7ecb207eb02, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GameManager
-  salaryAmount: 20000
-  taxAmount: 100000
-  startMoney: 1000000
-  maxRound: 10
+  gameSceneName: BoardLayout 2
   isAfk: 0
 --- !u!4 &337382219
 Transform:
@@ -2009,9 +2007,14 @@ MonoBehaviour:
   - {fileID: 417582401}
   - {fileID: 148148698}
   - {fileID: 2101722630}
-  defaultColor: {r: 0.44001427, g: 0.9056604, b: 0.7870102, a: 1}
+  defaultColor: {r: 0.9071808, g: 0.9150943, b: 0.867613, a: 1}
   defaultTextColor: {r: 0.21698111, g: 0.0775333, b: 0, a: 1}
-  cornerColor: {r: 1, g: 0.87574923, b: 0.2783019, a: 1}
+  cornerColor: {r: 0.8492123, g: 0.6745283, b: 1, a: 1}
+  goldenKeyColor: {r: 1, g: 0.5490196, b: 0, a: 1}
+  islandColor: {r: 0.3504361, g: 0.48703212, b: 0.5943396, a: 1}
+  worldTravelColor: {r: 0.2216981, g: 0.7245497, b: 1, a: 1}
+  taxColor: {r: 1, g: 0.4292453, b: 0.4292453, a: 1}
+  charityColor: {r: 1, g: 0.2971698, b: 0.44858304, a: 1}
   selectedIndexes: 
 --- !u!4 &839385235
 Transform:

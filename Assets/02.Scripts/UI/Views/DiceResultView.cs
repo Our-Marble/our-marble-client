@@ -109,9 +109,9 @@ public class DiceResultView : UIView
 
     /// <summary>
     /// 두 주사위 값(1~6)을 굴림 연출과 함께 보여준다. onRevealed는 합계·더블 표시까지 끝난 뒤 호출.
-    /// 그 뒤 autoHideSeconds(기본 1.5초)가 지나면 창이 스스로 닫힌다.
+    /// 그 뒤 autoHideSeconds(기본 1.5초)가 지나 창이 닫히면 onCompleted를 호출한다.
     /// </summary>
-    public void Show(int dice1, int dice2, Action onRevealed = null)
+    public void Show(int dice1, int dice2, Action onRevealed = null, Action onCompleted = null)
     {
         sequence?.Kill();
         bool wasRolling = rolling; // 이미 굴러가는 중이면 결과가 오는 즉시 멈추는 연출로 이어간다
@@ -177,7 +177,15 @@ public class DiceResultView : UIView
         if (autoHideSeconds > 0f)
         {
             sequence.AppendInterval(autoHideSeconds);
-            sequence.AppendCallback(Close);
+            sequence.AppendCallback(() =>
+            {
+                Close();
+                onCompleted?.Invoke();
+            });
+        }
+        else
+        {
+            sequence.AppendCallback(() => onCompleted?.Invoke());
         }
     }
 

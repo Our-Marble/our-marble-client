@@ -5,6 +5,9 @@ using UnityEngine;
 
 public class PlayerManager : Singleton<PlayerManager>
 {
+    private const int PawnSortingBaseOrder = 100;
+    private const int MovingPawnSortingOrder = 104;
+
     // 게임 씬 전용 매니저입니다. 씬 오브젝트(말, 타일, 보드)를 참조하므로 게임 씬이 로드될 때마다 새로 만들어지게 합니다.
     protected override bool PersistAcrossScenes => false;
 
@@ -35,6 +38,22 @@ public class PlayerManager : Singleton<PlayerManager>
     protected override void OnAwake()
     {
         
+    }
+
+    private void OnEnable()
+    {
+        GameManager.OnPlayerArrived += HandlePlayerArrived;
+        GameManager.OnPropertyPurchasedSuccessfully += PlayCheer;
+        GameManager.OnBuildingBuiltSuccessfully += PlayCheer;
+        GameManager.OnIslandEscapeFailed += PlaySad;
+    }
+
+    private void OnDisable()
+    {
+        GameManager.OnPlayerArrived -= HandlePlayerArrived;
+        GameManager.OnPropertyPurchasedSuccessfully -= PlayCheer;
+        GameManager.OnBuildingBuiltSuccessfully -= PlayCheer;
+        GameManager.OnIslandEscapeFailed -= PlaySad;
     }
 
     /// <summary>게임 시작 시 GameManager가 호출. playerId와 말을 매핑하고 시작 칸(0)에 배치합니다.</summary>
@@ -74,13 +93,20 @@ public class PlayerManager : Singleton<PlayerManager>
             pawnsByPlayerId[playerId] = pawn;
             slotByPlayerId[playerId] = slot;
             pawn.Move(0, GetPawnPosition(playerId, 0));
-            
-            // pawn 색상 초기화
-            Color playerColor = GameManager.Instance.GetPlayerColor(playerId);
-            pawn.SetSpriteColor(playerColor);
+            pawn.SetCharacter(slot);
+            pawn.SetTurnFocus(false, false);
         }
-        
-        
+
+        RefreshPawnSorting();
+
+        if (GameManager.Instance.gameState != null)
+            SetCurrentTurn(GameManager.Instance.gameState.CurrentPlayerId, false);
+    }
+
+    public void SetCurrentTurn(long playerId, bool animate = true)
+    {
+        foreach (KeyValuePair<long, PlayerPawn> pair in pawnsByPlayerId)
+            if (pair.Value != null) pair.Value.SetTurnFocus(pair.Key == playerId, animate);
     }
 
     public bool TryGetPawn(long playerId, out PlayerPawn pawn)
@@ -90,6 +116,49 @@ public class PlayerManager : Singleton<PlayerManager>
 
         Debug.LogError($"[PlayerManager] PlayerPawn not found: {playerId}", this);
         return false;
+    }
+
+    public void PlayCheer(long playerId)
+    {
+        if (TryGetPawn(playerId, out PlayerPawn pawn))
+            pawn.PlayCheer();
+    }
+
+    public void PlaySad(long playerId)
+    {
+        if (TryGetPawn(playerId, out PlayerPawn pawn))
+            pawn.PlaySad();
+    }
+
+    private void HandlePlayerArrived(long playerId, int tileIndex)
+    {
+        TileData tile = BoardManager.Instance.GetTileData(tileIndex);
+        if (tile == null) return;
+
+        switch (tile.Type)
+        {
+            case TileType.ISLAND:
+                PlaySad(playerId);
+                break;
+
+            case TileType.CHARITY:
+                if (GameManager.Instance.gameState.WelfareFund > 0)
+                    PlayCheer(playerId);
+                break;
+
+            case TileType.WORLD_TRAVEL:
+                PlayCheer(playerId);
+                break;
+
+            case TileType.PROPERTY:
+                PropertyState property = GameManager.Instance.GetPropertyState(tile.PropertyId);
+                if (property?.OwnerId != null && property.OwnerId.Value != playerId)
+                {
+                    PlaySad(playerId);
+                    PlayCheer(property.OwnerId.Value);
+                }
+                break;
+        }
     }
 
     // ────────────────────────── 이동 ──────────────────────────
@@ -115,11 +184,12 @@ public class PlayerManager : Singleton<PlayerManager>
             // 이동할 칸이 없으면 위치만 맞추고 바로 완료
             StopMove(playerId);
             pawn.Move(from, GetPawnPosition(playerId, from));
+            RefreshPawnSorting();
             onCompleted?.Invoke();
             return;
         }
 
-        StartMove(playerId, MoveByStepsRoutine(playerId, pawn, from, steps, tileCount, onTileReached, onCompleted));
+        StartMove(playerId, pawn, MoveByStepsRoutine(playerId, pawn, from, steps, tileCount, onTileReached, onCompleted));
     }
 
     /// <summary>이전 버전 호환용입니다. 말이 가진 위치를 기준으로 걷기 때문에 GameState와 어긋날 수 있습니다.</summary>
@@ -152,11 +222,12 @@ public class PlayerManager : Singleton<PlayerManager>
         {
             StopMove(playerId);
             pawn.Move(from, GetPawnPosition(playerId, from));
+            RefreshPawnSorting();
             onCompleted?.Invoke();
             return;
         }
 
-        StartMove(playerId, MoveAlongTilesRoutine(playerId, pawn, from, steps, tileCount, onTileReached, onCompleted));
+        StartMove(playerId, pawn, MoveAlongTilesRoutine(playerId, pawn, from, steps, tileCount, onTileReached, onCompleted));
     }
 
     /// <summary>목적지로 직접 이동 (자유여행, 무인도 이동 등)</summary>
@@ -169,7 +240,7 @@ public class PlayerManager : Singleton<PlayerManager>
         }
 
         int target = Mod(tileIndex, boardController.TileCount);
-        StartMove(playerId, MoveToTileRoutine(playerId, pawn, target, onCompleted));
+        StartMove(playerId, pawn, MoveToTileRoutine(playerId, pawn, target, onCompleted));
     }
 
     /// <summary>연출 없이 즉시 배치합니다. (재접속, 서버 상태 동기화 등)</summary>
@@ -180,6 +251,7 @@ public class PlayerManager : Singleton<PlayerManager>
         StopMove(playerId);
         int target = Mod(tileIndex, boardController.TileCount);
         pawn.Move(target, GetPawnPosition(playerId, target));
+        RefreshPawnSorting();
     }
     
     /// <summary>파산 시 말 숨기기</summary>
@@ -189,6 +261,7 @@ public class PlayerManager : Singleton<PlayerManager>
 
         StopMove(playerId);
         pawn.gameObject.SetActive(false);
+        RefreshPawnSorting();
     }
 
     // ────────────────────────── 코루틴 ──────────────────────────
@@ -246,11 +319,12 @@ public class PlayerManager : Singleton<PlayerManager>
     // ────────────────────────── 내부 도우미 ──────────────────────────
 
     /// <summary>같은 말의 이동이 겹치지 않도록, 진행 중인 이동을 멈추고 새 이동을 시작합니다.</summary>
-    private void StartMove(long playerId, IEnumerator routine)
+    private void StartMove(long playerId, PlayerPawn pawn, IEnumerator routine)
     {
         if (StopMove(playerId))
             Debug.LogWarning($"[PlayerManager] {playerId}의 이전 이동이 끝나기 전에 새 이동이 들어와 중단했습니다.", this);
 
+        pawn.SetSortingOrder(MovingPawnSortingOrder);
         runningMoves[playerId] = StartCoroutine(routine);
     }
 
@@ -269,6 +343,7 @@ public class PlayerManager : Singleton<PlayerManager>
     private void FinishMove(long playerId)
     {
         runningMoves.Remove(playerId);
+        RefreshPawnSorting();
     }
 
     private void StopAllMoves()
@@ -287,6 +362,36 @@ public class PlayerManager : Singleton<PlayerManager>
             return center + slotOffsets[slot];
 
         return center;
+    }
+
+    private void RefreshPawnSorting()
+    {
+        List<long> sortedPlayerIds = new();
+
+        foreach (KeyValuePair<long, PlayerPawn> pair in pawnsByPlayerId)
+        {
+            if (pair.Value != null && pair.Value.gameObject.activeSelf && !runningMoves.ContainsKey(pair.Key))
+                sortedPlayerIds.Add(pair.Key);
+        }
+
+        sortedPlayerIds.Sort((leftPlayerId, rightPlayerId) =>
+        {
+            PlayerPawn leftPawn = pawnsByPlayerId[leftPlayerId];
+            PlayerPawn rightPawn = pawnsByPlayerId[rightPlayerId];
+            Vector3 leftPosition = GetPawnPosition(leftPlayerId, leftPawn.CurrentTileIndex);
+            Vector3 rightPosition = GetPawnPosition(rightPlayerId, rightPawn.CurrentTileIndex);
+
+            int yComparison = rightPosition.y.CompareTo(leftPosition.y);
+            if (yComparison != 0) return yComparison;
+
+            int xComparison = leftPosition.x.CompareTo(rightPosition.x);
+            if (xComparison != 0) return xComparison;
+
+            return slotByPlayerId[leftPlayerId].CompareTo(slotByPlayerId[rightPlayerId]);
+        });
+
+        for (int i = 0; i < sortedPlayerIds.Count; i++)
+            pawnsByPlayerId[sortedPlayerIds[i]].SetSortingOrder(PawnSortingBaseOrder + i);
     }
 
     private static int Mod(int value, int count)
