@@ -966,7 +966,7 @@ public class GameManager : Singleton<GameManager>
     public void Build(long playerId, int propertyId, bool isAccept = true)
     {
         sendAndWaiting = true;
-        GameNetwork.Instance.SendBuildRequest(propertyId, true);
+        GameNetwork.Instance.SendBuildRequest(propertyId, isAccept);
     }
 
     /// <summary>
