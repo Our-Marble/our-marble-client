@@ -5,6 +5,16 @@ using UnityEngine;
 // - 특수칸 연출 재생
 public class SpecialTileManager : Singleton<SpecialTileManager>
 {
+    private void OnEnable() => GameManager.OnPlayerArrived += HandlePlayerArrived;
+    private void OnDisable() => GameManager.OnPlayerArrived -= HandlePlayerArrived;
+
+    private void HandlePlayerArrived(long playerId, int tileIndex)
+    {
+        TileData tile = BoardManager.Instance.GetTileData(tileIndex);
+        if (tile != null && tile.Type == TileType.ISLAND)
+            PlayIslandArrived(playerId);
+    }
+
     #region 연출
     // TODO: 연출 완료 후 다음 흐름 진행이 필요해지면 처리 방식 결정 (콜백 전달 또는 코루틴)
     public void PlayTaxPaid(long playerId, long amount)

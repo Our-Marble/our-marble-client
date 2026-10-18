@@ -7,6 +7,11 @@ using UnityEngine.SceneManagement;
 
 public class GameManager : Singleton<GameManager>
 {
+    public static event Action<long, int> OnPlayerArrived;
+    public static event Action<long> OnPropertyPurchasedSuccessfully;
+    public static event Action<long> OnBuildingBuiltSuccessfully;
+    public static event Action<long> OnIslandEscapeFailed;
+
     // 게임 씬 전용 매니저입니다. 씬을 넘어 살아남으면 두 번째 게임에서 이미 파괴된 GameNetwork에 구독된 채로 남아
     // OnSync(SyncGameState)가 호출되지 않으므로, 게임 씬이 로드될 때마다 새로 만들어지게 합니다.
     protected override bool PersistAcrossScenes => false;
@@ -31,7 +36,6 @@ public class GameManager : Singleton<GameManager>
     private bool isMoving;
 
     // 플레이어 색상 관련 필드
-    private Color[] playerColors = new Color[] { Color.red, Color.blue, Color.green, Color.yellow };
     private Dictionary<long, Color> playerColorMap;
     public Color GetPlayerColor(long playerId) => playerColorMap[playerId];
 
@@ -232,6 +236,7 @@ public class GameManager : Singleton<GameManager>
         Log($"===== {gameState.RoundNumber}/{maxRound}라운드 ({gameState.TurnNumber}번째 턴): {P(playerId)} 차례 (현금 {Won(playerState.Money)}, 위치 {TileName(playerState.Position)}) =====");
         if (UIManager.Instance != null)
             UIManager.Instance.ShowTurn(playerId);
+        PlayerManager.Instance.SetCurrentTurn(playerId);
 
         // 필드 변수를 갱신합니다.
         gameState.IsDouble = false;
@@ -320,12 +325,27 @@ public class GameManager : Singleton<GameManager>
     public void HandleDiceRolled(long playerId, int dice1, int dice2)
     {
         HandleRoutine();
-        
-        PlayerState player = GetPlayerState(playerId);
 
         Log($"[주사위] {P(playerId)}: {dice1}+{dice2}={dice1 + dice2}{(dice1 == dice2 ? " (더블!)" : "")}");
         if (UIManager.Instance != null)
-            UIManager.Instance.ShowDiceResult(dice1, dice2);
+        {
+            UIManager.Instance.ShowDiceResult(dice1, dice2,
+                () => ContinueAfterDiceResult(playerId, dice1, dice2));
+            return;
+        }
+
+        ContinueAfterDiceResult(playerId, dice1, dice2);
+    }
+
+    /// <summary>주사위 결과 UI가 완전히 닫힌 뒤 실제 판정과 말 이동을 시작합니다.</summary>
+    private void ContinueAfterDiceResult(long playerId, int dice1, int dice2)
+    {
+        PlayerState player = GetPlayerState(playerId);
+        if (player == null)
+        {
+            Debug.LogError($"[GameManager] 주사위 이동 실패: 플레이어 {playerId}를 찾을 수 없습니다.");
+            return;
+        }
 
         // 더블 처리
         if (dice1 == dice2)
@@ -348,6 +368,7 @@ public class GameManager : Singleton<GameManager>
             player.IslandTurnsRemaining -= 1;
 
             Log($"[무인도] {P(playerId)}: 탈출 실패 (남은 영업정지 {player.IslandTurnsRemaining}턴)");
+            OnIslandEscapeFailed?.Invoke(playerId);
             SpecialTileManager.Instance.PlayIslandEscapeFailed(playerId, player.IslandTurnsRemaining); // 탈출 실패 연출
             HandleTurnChanged(GetNextPlayerId()); // 강제로 턴을 넘깁니다.
             return;
@@ -468,6 +489,7 @@ public class GameManager : Singleton<GameManager>
     {
         PlayerState player = GetPlayerState(playerId);
         TileData arrivalTile = BoardManager.Instance.GetTileData(toPosition);
+        OnPlayerArrived?.Invoke(playerId, toPosition);
 
         Log($"[도착] {P(playerId)} → {TileName(toPosition)} (현금 {Won(player.Money)})");
 
@@ -481,7 +503,6 @@ public class GameManager : Singleton<GameManager>
             case TileType.ISLAND: // 무인도에 도착
                 player.IslandTurnsRemaining = IslandTurns;
                 Log("  무인도: 턴이 넘어갑니다.");
-                SpecialTileManager.Instance.PlayIslandArrived(playerId); // 무인도 도착 연출
                 HandleTurnChanged(GetNextPlayerId()); // 강제로 턴을 넘깁니다.
                 break;
 
@@ -913,6 +934,7 @@ public class GameManager : Singleton<GameManager>
         Log($"[구매] {P(playerId)}: {CityName(propertyId)} 구매 (-{Won(amount)}, 남은 현금 {Won(player.Money)})");
 
         // 자산 구매 연출을 재생합니다.
+        OnPropertyPurchasedSuccessfully?.Invoke(playerId);
         if (UIManager.Instance != null)
             UIManager.Instance.PlayMoneyChange(playerId, -amount, "땅 구매");
 
@@ -977,6 +999,7 @@ public class GameManager : Singleton<GameManager>
         playerState.Money -= amount; //건설비 차감
         SetBuildingLevel(propertyState, propertyState.BuildingLevel + 1); // 건설 레벨 증가
         // 건설 연출을 재생합니다.
+        OnBuildingBuiltSuccessfully?.Invoke(playerId);
         if (UIManager.Instance != null)
             UIManager.Instance.PlayMoneyChange(playerId, -amount, "건설");
 
@@ -1287,7 +1310,7 @@ public class GameManager : Singleton<GameManager>
         for (int i = 0; i < gameState.PlayerStates.Count; i++)
         {
             PlayerState playerState = gameState.PlayerStates[i];
-            playerColorMap.Add(playerState.PlayerId, playerColors[i]);
+            playerColorMap.Add(playerState.PlayerId, UIPalette.PlayerColor(i));
         }
 
         // 이 화면을 조작하는 사람 플레이어를 지정하고, 플레이어 정보 카드를 GameState에 맞춰 채웁니다. UI의 값들을 GameState에 맞게 갱신합니다. 

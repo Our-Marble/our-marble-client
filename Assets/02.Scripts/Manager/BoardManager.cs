@@ -18,6 +18,15 @@ public class BoardManager : Singleton<BoardManager>
     
     private Dictionary<int, TileData> tilesByIndex;
 
+    private void OnEnable() => GameManager.OnPlayerArrived += HandlePlayerArrived;
+    private void OnDisable() => GameManager.OnPlayerArrived -= HandlePlayerArrived;
+
+    private void HandlePlayerArrived(long playerId, int tileIndex)
+    {
+        if (boardController == null || tileIndex < 0 || tileIndex >= boardController.BoardTiles.Count) return;
+        boardController.BoardTiles[tileIndex]?.PlayAnimation();
+    }
+
 
 
 

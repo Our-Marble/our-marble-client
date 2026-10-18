@@ -593,12 +593,12 @@ public class UIManager : MonoBehaviour
     // 굴리기 버튼을 누른 뒤라면 이미 주사위가 구르는 중이므로, 결과를 받는 즉시 멈춥니다.
     // 눈이 흔들리다 멈추고 합계가 나오며, 같은 눈이면 '더블!'이 뜹니다. 1.5초 뒤 창이 스스로 닫힙니다.
     // 내가 무인도에 갇혀 있을 때 굴렸다면, 결과가 나온 뒤 더블이면 탈출하고 아니면 남은 턴이 1 줄어듭니다.
-    // onRevealed는 결과 표시가 끝난 뒤 호출됩니다. (말 이동을 이 뒤에 시작하면 연출과 순서가 맞습니다.)
-    public void ShowDiceResult(int dice1, int dice2, Action onRevealed = null)
+    // onCompleted는 결과를 충분히 보여주고 창까지 닫힌 뒤 호출됩니다.
+    public void ShowDiceResult(int dice1, int dice2, Action onCompleted = null)
     {
         if (diceResult == null)
         {
-            onRevealed?.Invoke();
+            onCompleted?.Invoke();
             return;
         }
 
@@ -606,8 +606,7 @@ public class UIManager : MonoBehaviour
         diceResult.Show(dice1, dice2, () =>
         {
             if (mine && diceRoll != null) diceRoll.ResolveIslandRoll(dice1 == dice2);
-            onRevealed?.Invoke();
-        });
+        }, onCompleted);
     }
 
     // 무인도에 갇혔을 때 탈출 방법을 고르는 창을 띄워주는 함수입니다.
