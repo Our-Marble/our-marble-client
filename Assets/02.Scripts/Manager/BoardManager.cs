@@ -4,6 +4,9 @@ using UnityEngine;
 
 public class BoardManager : Singleton<BoardManager>
 {
+    // 게임 씬 전용 매니저입니다. 씬 오브젝트(말, 타일, 보드)를 참조하므로 게임 씬이 로드될 때마다 새로 만들어지게 합니다.
+    protected override bool PersistAcrossScenes => false;
+
     [SerializeField] private BoardController boardController;
     [SerializeField] private BoardData boardData;
 
@@ -15,16 +18,36 @@ public class BoardManager : Singleton<BoardManager>
     
     private Dictionary<int, TileData> tilesByIndex;
 
-    
-    
-    
-    
 
 
 
 
 
 
+
+
+
+    public void RefreshBoard()
+    {
+        for (int i = 0; i < boardData.Tiles.Count; i++)
+        {
+            TileData tileData = tilesByIndex[i];
+
+            if (tileData.Type == TileType.PROPERTY)
+            {
+                int propertyId = tileData.PropertyId;
+                PropertyState propertyState = GameManager.Instance.GetPropertyState(propertyId);
+                long? ownerPlayerId = propertyState.OwnerId;
+
+                if (ownerPlayerId == null) continue;
+
+                BuildingLevel buildingLevel = propertyState.BuildingLevel;
+
+                UpdatePropertyTileColor(propertyId, ownerPlayerId);
+                UpdatePropertyBuildingVisual(propertyId, buildingLevel);
+            }
+        }
+    }
 
     public void UpdatePropertyTileColor(int propertyId, long? playerId)
     {

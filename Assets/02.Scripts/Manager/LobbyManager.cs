@@ -41,6 +41,8 @@ public class LobbyManager : MonoBehaviour
     [Header("서버")]
     [Tooltip("요청을 보낸 뒤 이 시간(초) 안에 응답이 없으면 로딩을 닫고 알린다.")]
     [SerializeField] private float requestTimeout = 10f;
+    [Tooltip("방 목록 새로고침 버튼을 누른 뒤 다시 누를 수 있기까지 기다리는 시간(초).")]
+    [SerializeField] private float refreshCooldown = 10f;
 
     private static LobbyNetwork Net => LobbyNetwork.Instance;
 
@@ -57,6 +59,11 @@ public class LobbyManager : MonoBehaviour
     private Pending pending;
     private Coroutine timeoutRoutine;
     private bool refreshToast; // 사용자가 새로고침을 눌러 받은 목록이면 토스트를 띄운다
+
+    // 새로고침 쿨타임: 이 시각이 지나야 다시 누를 수 있다. 기다리는 동안 버튼에 남은 시간을 보여 준다
+    private float refreshReadyAt;
+    private int shownCooldown = -1; // 버튼에 지금 보이는 남은 초 (0이면 평소 글자)
+    private TMP_Text refreshLabel;
     private bool Busy => pending != Pending.None;
     private bool CanRequest => !Busy && connection == ConnectionState.Connected;
 
@@ -75,9 +82,22 @@ public class LobbyManager : MonoBehaviour
     /// <summary>지금 들어가 있는 방의 최신 스냅샷. 로비를 거치지 않고 게임 씬만 실행하면 null.</summary>
     public static RoomSnapshot CurrentRoom { get; private set; }
 
+    /// <summary>
+    /// GAME_STARTED로 들어간 방의 id. 재접속으로 게임에 바로 들어가면 방 스냅샷(CurrentRoom)이 없으므로,
+    /// 게임이 끝나 돌아왔을 때 이 id로 "방 안에 있다"는 것을 알고 서버의 ROOM_UPDATED를 받아 대기방을 연다.
+    /// </summary>
+    private static string PlayingRoomId;
+
+    // 게임을 마치고 돌아왔는데 방 스냅샷이 없을 때(재접속 후 게임), 서버의 ROOM_UPDATED를 기다리는 최대 시간(초)
+    private const float RoomSnapshotWaitSeconds = 5f;
+
     // 에디터에서 도메인 리로드 없이 플레이를 다시 시작해도 이전 플레이의 방 정보가 남지 않게 한다
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    private static void ResetStatics() => CurrentRoom = null;
+    private static void ResetStatics()
+    {
+        CurrentRoom = null;
+        PlayingRoomId = null;
+    }
 
     // ───────────── UI 참조 ─────────────
 
@@ -165,29 +185,62 @@ public class LobbyManager : MonoBehaviour
         if (uiRoot == null) { Debug.LogError("[Lobby] 'UI' 루트를 찾을 수 없습니다.", this); enabled = false; return; }
 
         // 게임을 마치고 같은 방으로 돌아온 경우만 방을 유지한다
-        if (!SceneFlow.IsReturningToRoom) CurrentRoom = null;
-        inRoom = CurrentRoom != null;
-
+        if (!SceneFlow.IsReturningToRoom)
+        {
+            CurrentRoom = null;
+            PlayingRoomId = null;
+        }
+        // 재접속으로 게임에 들어갔다 돌아온 경우 CurrentRoom은 없지만 PlayingRoomId는 있다. 이때도 방 안으로 본다.
+        inRoom = CurrentRoom != null || PlayingRoomId != null;
+        
+        Debug.Log($"inRoom = {inRoom}");
+        
         Bind();
         WireEvents();
         RefreshProfile();
         ShowProfile(false);
-        SetConnection(ConnectionState.Disconnected, false);
+        
+        if(inRoom)
+            SetConnectionTrue();
+        else
+            SetConnection(ConnectionState.Disconnected, false);
+        
         SyncAll();
     }
 
     private void Start()
     {
         // 게임이 끝나 같은 방으로 돌아왔다면 방 설정을 다시 띄운다 (준비 해제 등은 서버가 스냅샷으로 알려 준다)
-        if (SceneFlow.ConsumeReopenRoomSetup() && CurrentRoom != null)
+        bool returning = SceneFlow.ConsumeReopenRoomSetup();
+        if (returning && CurrentRoom != null)
         {
             OpenRoomSetup(CurrentRoom);
             RequestRoomList(false); // 방 설정 뒤의 목록은 조용히 받아 둔다
+        }
+        else if (returning && inRoom)
+        {
+            // 재접속 후 게임을 마치고 돌아왔다: 방 스냅샷이 없으므로 서버가 보내는 ROOM_UPDATED로 대기방을 연다 (HandleRoomUpdated)
+            RequestRoomList(false);
+            StartCoroutine(WaitRoomSnapshotRoutine());
         }
         else
         {
             RequestRoomList(true);
         }
+    }
+
+    // ROOM_UPDATED가 끝내 오지 않으면(방이 사라졌거나 서버에서 내보낸 경우) 방 밖 상태로 되돌린다
+    private IEnumerator WaitRoomSnapshotRoutine()
+    {
+        yield return new WaitForSecondsRealtime(RoomSnapshotWaitSeconds);
+        if (CurrentRoom != null) yield break;
+
+        Debug.LogWarning($"[Lobby] 방({PlayingRoomId}) 정보를 받지 못해 로비 목록으로 돌아갑니다.");
+        inRoom = false;
+        PlayingRoomId = null;
+        ShowToast("방 정보를 불러오지 못했어요");
+        RequestRoomList(false);
+        SyncAll();
     }
     
     private void OnEnable()
@@ -199,6 +252,9 @@ public class LobbyManager : MonoBehaviour
         Net.OnRoomUpdated += HandleRoomUpdated;
         Net.OnGameStarted += HandleGameStarted;
         Net.OnLobbyError += HandleLobbyError;
+        Net.OnChatBroadcast += HandleChatBroadcast;
+        ChatService.SendRequested = SendChat;
+        Net.OnGameRecord += HandleGameRecord;
         
         Net.OnConnected += HandleConnected;
     }
@@ -212,6 +268,9 @@ public class LobbyManager : MonoBehaviour
         Net.OnRoomUpdated -= HandleRoomUpdated;
         Net.OnGameStarted -= HandleGameStarted;
         Net.OnLobbyError -= HandleLobbyError;
+        Net.OnChatBroadcast -= HandleChatBroadcast;
+        if (ChatService.SendRequested == (System.Action<ChatMessage>)SendChat) ChatService.SendRequested = null;
+        Net.OnGameRecord -= HandleGameRecord;
         
         Net.OnConnected -= HandleConnected;
     }
@@ -342,7 +401,16 @@ public class LobbyManager : MonoBehaviour
         // 상단바
         settingsButton.onClick.AddListener(settingsView.Open);
         exitButton.onClick.AddListener(ExitToLogin);
-        refreshButton.onClick.AddListener(() => RequestRoomList(true));
+        refreshButton.onClick.AddListener(OnRefreshClicked);
+        refreshLabel = refreshButton.GetComponentInChildren<TMP_Text>();
+        if (refreshLabel != null)
+        {
+            // "새로고침 (10초)"가 버튼 안에 한 줄로 들어가도록 글자가 길어지면 줄여서 보인다
+            refreshLabel.enableAutoSizing = true;
+            refreshLabel.fontSizeMax = refreshLabel.fontSize;
+            refreshLabel.fontSizeMin = 14;
+            refreshLabel.textWrappingMode = TextWrappingModes.NoWrap;
+        }
 
         // 필터
         joinableOnlyToggle.onValueChanged.AddListener(isOn =>
@@ -379,6 +447,8 @@ public class LobbyManager : MonoBehaviour
         // 서버 메시지는 매 프레임 처리한다 (Escape 처리보다 먼저)
         if (Net != null) Net.TryDequeueMessage();
 
+        UpdateRefreshButton();
+
         if (!Input.GetKeyDown(KeyCode.Escape) || Busy) return;
         if (settingsView.IsOpen) return; // 설정 창은 닫기 버튼으로만 닫는다
         if (roomSetup != null && roomSetup.IsOpen) return; // 방 안에서는 X 버튼으로만 나간다
@@ -390,9 +460,33 @@ public class LobbyManager : MonoBehaviour
     // ───────────── 서버 요청 ─────────────
     // TODO: LobbyNetwork의 실제 메서드 이름/인자에 맞춘다
 
+    // 새로고침 버튼. 서버 요청이 실제로 나가는 경우에만 쿨타임을 시작한다 (요청 중이거나 연결이 없으면 아무 일도 없다)
+    private void OnRefreshClicked()
+    {
+        if (!CanRequest || Time.unscaledTime < refreshReadyAt) return;
+        refreshReadyAt = Time.unscaledTime + refreshCooldown;
+        RequestRoomList(true);
+        UpdateRefreshButton();
+    }
+
+    // 쿨타임 동안 버튼을 누를 수 없게 하고 남은 초를 보여 준다. 끝나면 평소 모습으로 돌아온다. (초가 바뀔 때만 글자를 바꾼다)
+    private void UpdateRefreshButton()
+    {
+        if (refreshButton == null) return;
+        int remaining = Mathf.Max(0, Mathf.CeilToInt(refreshReadyAt - Time.unscaledTime));
+        if (remaining == shownCooldown) return;
+        shownCooldown = remaining;
+
+        refreshButton.interactable = remaining == 0;
+        if (refreshLabel == null) return;
+        refreshLabel.text = remaining > 0 ? $"새로고침 ({remaining}초)" : "새로고침";
+        var color = refreshLabel.color;
+        color.a = remaining > 0 ? 0.55f : 1f;
+        refreshLabel.color = color;
+    }
+
     private void RequestRoomList(bool userTriggered)
     {
-        Debug.Log("RequestRoomList 는 잘 호출됨.");
         if (Net == null || connection != ConnectionState.Connected) return;
         if (userTriggered)
         {
@@ -524,8 +618,11 @@ public class LobbyManager : MonoBehaviour
         if (!inRoom && pending != Pending.Enter) return;
         // 방 안에 있는데 다른 방의 스냅샷이면 무시한다
         if (inRoom && CurrentRoom != null && CurrentRoom.roomId != snapshot.roomId) return;
+        // 재접속 후 게임에서 돌아와 스냅샷을 기다리는 중인데 다른 방의 스냅샷이면 무시한다
+        if (inRoom && CurrentRoom == null && PlayingRoomId != null && PlayingRoomId != snapshot.roomId) return;
 
         CurrentRoom = snapshot;
+        PlayingRoomId = null; // 이제 CurrentRoom이 방 정보를 가진다
 
         // 내가 보낸 설정 요청에 대한 응답이다: 로딩을 닫고, 방장의 초안도 서버가 적용한 값으로 맞춘다
         if (pending == Pending.Config)
@@ -549,6 +646,8 @@ public class LobbyManager : MonoBehaviour
         EndRequest();
         inRoom = false;
         CurrentRoom = null;
+        ChatService.Clear(); // 나간 방의 채팅은 지운다
+        PlayingRoomId = null;
         if (roomSetup != null && roomSetup.IsOpen) roomSetup.Close();
         if (!requested) ShowToast("방에서 나왔어요");
         RequestRoomList(false);
@@ -557,7 +656,10 @@ public class LobbyManager : MonoBehaviour
 
     public void HandleGameStarted(string roomId)
     {
-        if (CurrentRoom == null || CurrentRoom.roomId != roomId) return;
+        //if (CurrentRoom == null || CurrentRoom.roomId != roomId) return;
+
+        // 재접속으로 바로 게임에 들어가는 경우 CurrentRoom이 없으므로, 게임이 끝나 돌아올 방을 id로 기억해 둔다
+        PlayingRoomId = roomId;
 
         // 씬이 넘어갈 때까지 로딩을 띄워 둔다 (방장이 아닌 사람도)
         if (timeoutRoutine != null) { StopCoroutine(timeoutRoutine); timeoutRoutine = null; }
@@ -572,6 +674,26 @@ public class LobbyManager : MonoBehaviour
         }
     }
 
+    // 채팅: 보낸 글은 서버를 거쳐 CHAT_BROADCAST로 (나를 포함해) 방 모두에게 돌아온다. 그때 화면에 보인다.
+    private void SendChat(ChatMessage message)
+    {
+        if (CurrentRoom == null) return;
+        Net.SendChatRequest(message.Text);
+    }
+
+    private void HandleChatBroadcast(long playerId, string content)
+    {
+        var players = CurrentRoom?.Players;
+        int index = players != null ? players.FindIndex(p => p.playerId == playerId) : -1;
+        ChatService.Receive(new ChatMessage
+        {
+            Sender = index >= 0 ? players[index].nickname : "알 수 없음",
+            ColorIndex = Mathf.Max(0, index), // 색은 자리 순서로 정한다 (ApplyRoomSnapshot과 같다)
+            Text = content,
+            IsLocal = playerId == MyPlayerId,
+        });
+    }
+
     public void HandleLobbyError(string code, string message)
     {
         Debug.LogWarning($"[Lobby] 서버 오류 {code}: {message}");
@@ -581,6 +703,12 @@ public class LobbyManager : MonoBehaviour
 
         // 입장 실패면 방이 사라졌거나 찼을 수 있으니 목록을 다시 받는다
         if (wasEntering) RequestRoomList(false);
+    }
+    
+    public void HandleGameRecord(string nickname, int gamesPlayed, int gamesWon)
+    {
+        if (!string.IsNullOrEmpty(nickname)) RefreshNickname(nickname);
+        RefreshRecord(gamesPlayed, gamesWon);
     }
 
     // ───────────── 연결 상태 ─────────────
@@ -652,10 +780,18 @@ public class LobbyManager : MonoBehaviour
     private void ExitToLogin()
     {
         if (Busy) return;
-        if (exitConfirm != null) exitConfirm.Show(LoadLoginScene, "로그인 화면으로 돌아갈까요?");
-        else LoadLoginScene();
+        
+        if (exitConfirm != null)
+        {
+            exitConfirm.Show(LoadLoginScene, "로그인 화면으로 돌아갈까요?");
+            //WebSocketNetwork.Instance.closeWebSocketSession();
+        }
+        else
+        {
+            LoadLoginScene();
+        }
     }
-
+    
     private void LoadLoginScene()
     {
         if (Busy) return;
@@ -1102,11 +1238,23 @@ public class LobbyManager : MonoBehaviour
     {
         recordText.text = "-";
         marbleText.text = "-";
+        
+        string nickname = WebSocketNetwork.Instance.LocalNickname;
+        if (!string.IsNullOrEmpty(nickname)) RefreshNickname(nickname);
+    }
+    
+    private void RefreshRecord(int gamesPlayed, int gamesWon)
+    {
+        if (recordText == null) return;
+
+        // 한 판도 안 했으면 0으로 나누게 되므로 승률은 0%로 보여 준다
+        int winRate = gamesPlayed > 0 ? Mathf.RoundToInt(100f * gamesWon / gamesPlayed) : 0;
+        recordText.text = $"{gamesPlayed}전 {gamesWon}승 <size=80%><color=#8C90A8>({winRate}%)</color></size>";
     }
 
     private void RefreshNickname(string localNickname)
     {
-        Debug.Log($"로비화면 닉네임 업데이트 -> {WebSocketNetwork.Instance.LocalNickname}");
+        Debug.Log($"로비화면 닉네임 업데이트 -> {localNickname}");
         nicknameText.text = localNickname;
     }
 }

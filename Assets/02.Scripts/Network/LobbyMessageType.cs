@@ -15,5 +15,9 @@ public enum LobbyMessageType
     
     GAME_STARTED,
     
-    LOBBY_ERROR
+    LOBBY_ERROR,
+    
+    PLAYER_RECORD,
+    
+    CHAT_BROADCAST
 }

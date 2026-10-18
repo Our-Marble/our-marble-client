@@ -3,61 +3,88 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Threading;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class GameManager : Singleton<GameManager>
 {
+    // 게임 씬 전용 매니저입니다. 씬을 넘어 살아남으면 두 번째 게임에서 이미 파괴된 GameNetwork에 구독된 채로 남아
+    // OnSync(SyncGameState)가 호출되지 않으므로, 게임 씬이 로드될 때마다 새로 만들어지게 합니다.
+    protected override bool PersistAcrossScenes => false;
+
+    // OnEnable에서 구독한 GameNetwork. OnDisable에서 같은 인스턴스에서 구독을 해제하기 위해 보관합니다.
+    // (씬 언로드 중 GameNetwork.Instance를 다시 부르면 새 GameNetwork 오브젝트가 생겨 버립니다.)
+    private GameNetwork subscribedNetwork;
+
     public GameState gameState;
+
+    [SerializeField]private string gameSceneName = "BoardLayout 2";
 
     private System.Random random; // 선턴 정하기나 랜덤 주사위 값을 계산할 때 사용합니다.
 
     private const int IslandTurns = 3; // 무인도 영업정지 턴 수
 
-    [SerializeField] private long salaryAmount = 100000;   // TODO: 월급 금액 확정 필요
-    [SerializeField] private long taxAmount = 100000;      // 세무조사 벌금 
-    [SerializeField] private long startMoney = 500000;     // 초기 자금 (테스트할 때 인스펙터에서 늘려서 사용)
-    [SerializeField, Min(1)] private int maxRound = 30;     // 최대 라운드 (모든 플레이어가 한 번씩 하면 1라운드). 넘으면 게임 종료
+    private long salaryAmount = 100000;   // TODO: 월급 금액 확정 필요
+    private long taxAmount = 100000;      // 세무조사 벌금 
+    private long startMoney = 500000;     // 초기 자금 (테스트할 때 인스펙터에서 늘려서 사용)
+    private int maxRound = 30;     // 최대 라운드 (모든 플레이어가 한 번씩 하면 1라운드). 넘으면 게임 종료
 
     private bool isMoving;
 
     // 플레이어 색상 관련 필드
+    private Color[] playerColors = new Color[] { Color.red, Color.blue, Color.green, Color.yellow };
     private Dictionary<long, Color> playerColorMap;
     public Color GetPlayerColor(long playerId) => playerColorMap[playerId];
 
-
-
-    void Start()
+    public bool isAfk = false;
+    private bool sendAndWaiting = false;
+    
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
-        GameNetwork.Instance.SendGameStateRequest();
+        if (scene.name == gameSceneName)
+        {
+            Debug.Log("GameManager 초기화 작업 수행");
+            gameState = null;
+            GameNetwork.Instance.SendGameStateRequest();
+        }
     }
 
     private void OnEnable()
     {
-        GameNetwork.Instance.OnBuilt += HandleBuilt;
-        GameNetwork.Instance.OnCardDrawn += HandleCardDrawn;
-        GameNetwork.Instance.OnDestinationChosen += HandleDestinationChosen;
-        GameNetwork.Instance.OnDiceRolled += HandleDiceRolled;
-        GameNetwork.Instance.OnPropertiesSold += HandlePropertiesSold;
-        GameNetwork.Instance.OnPropertyAcquired += HandlePropertyAcquired;
-        GameNetwork.Instance.OnPropertyPurchased += HandlePropertyPurchased;
+        SceneManager.sceneLoaded += OnSceneLoaded;
 
-        GameNetwork.Instance.OnSync += SyncGameState;
+        subscribedNetwork = GameNetwork.Instance;
+        subscribedNetwork.OnBuilt += HandleBuilt;
+        subscribedNetwork.OnCardDrawn += HandleCardDrawn;
+        subscribedNetwork.OnDestinationChosen += HandleDestinationChosen;
+        subscribedNetwork.OnDiceRolled += HandleDiceRolled;
+        subscribedNetwork.OnPropertiesSold += HandlePropertiesSold;
+        subscribedNetwork.OnPropertyAcquired += HandlePropertyAcquired;
+        subscribedNetwork.OnPropertyPurchased += HandlePropertyPurchased;
+
+        subscribedNetwork.OnSync += SyncGameState;
     }
 
     private void OnDisable()
     {
-        GameNetwork.Instance.OnBuilt -= HandleBuilt;
-        GameNetwork.Instance.OnCardDrawn -= HandleCardDrawn;
-        GameNetwork.Instance.OnDestinationChosen -= HandleDestinationChosen;
-        GameNetwork.Instance.OnDiceRolled -= HandleDiceRolled;
-        GameNetwork.Instance.OnPropertiesSold -= HandlePropertiesSold;
-        GameNetwork.Instance.OnPropertyAcquired -= HandlePropertyAcquired;
-        GameNetwork.Instance.OnPropertyPurchased -= HandlePropertyPurchased;
+        SceneManager.sceneLoaded -= OnSceneLoaded;
 
-        GameNetwork.Instance.OnSync -= SyncGameState;
+        if (subscribedNetwork == null) return; // 이미 파괴됐으면 해제할 구독도 없습니다.
+        subscribedNetwork.OnBuilt -= HandleBuilt;
+        subscribedNetwork.OnCardDrawn -= HandleCardDrawn;
+        subscribedNetwork.OnDestinationChosen -= HandleDestinationChosen;
+        subscribedNetwork.OnDiceRolled -= HandleDiceRolled;
+        subscribedNetwork.OnPropertiesSold -= HandlePropertiesSold;
+        subscribedNetwork.OnPropertyAcquired -= HandlePropertyAcquired;
+        subscribedNetwork.OnPropertyPurchased -= HandlePropertyPurchased;
+
+        subscribedNetwork.OnSync -= SyncGameState;
+        subscribedNetwork = null;
     }
 
     private void Update()
     {
+        // WaitingType이 null이면 직전 메시지를 처리하는 중(카드 연출, 말 이동 등)이므로 다음 메시지를 꺼내지 않습니다.
+        // 처리 흐름이 다음 Prompt 함수(HandleRollDicePrompt, DrawCard, HandlePurchasePropertyPrompt ...)에 도달해야 다시 값이 채워집니다.
         if (gameState == null || gameState.WaitingType == null) return;
 
         GameMessageType waitingType = gameState.WaitingType.Value;
@@ -115,11 +142,9 @@ public class GameManager : Singleton<GameManager>
     // 턴 순서(playerOrder)가 처음으로 돌아오면 1 증가합니다. 파산한 플레이어는 GetNextPlayerId가 건너뛰므로 남은 플레이어 기준으로 셉니다.
     private int GetNextRound(long nextPlayerId)
     {
-        if (gameState.RoundNumber == 0) return 1; // 게임의 첫 차례
-
         int prevIndex = gameState.PlayerOrder.IndexOf(gameState.CurrentPlayerId);
         int nextIndex = gameState.PlayerOrder.IndexOf(nextPlayerId);
-        return nextIndex <= prevIndex ? gameState.RoundNumber + 1 : gameState.RoundNumber;
+        return nextIndex < prevIndex ? gameState.RoundNumber + 1 : gameState.RoundNumber;
     }
 
     // 살아남은 플레이어의 최종 등수를 정합니다. (파산한 플레이어는 파산할 때 이미 등수가 정해짐)
@@ -163,25 +188,20 @@ public class GameManager : Singleton<GameManager>
 
         // 게임 결과 창을 띄웁니다. (총자산 순으로 순위 표시)
         if (UIManager.Instance != null)
-            UIManager.Instance.ShowGameResultPopup();
+            UIManager.Instance.ShowGameResultPopup(ReturnToRoom);
+    }
+
+    private void ReturnToRoom()
+    {
+        if (SceneFlow.ReturnToRoom()) return;
     }
 
     // ────────────────────────── 게임 진행 ──────────────────────────
 
     void StartGame()
     {
-        PlayerManager.Instance.Initialize(gameState.PlayerStates.ConvertAll(state => state.PlayerId));
-
         Log($"게임 시작!");
-
-        // UI를 초기화합니다. (이 화면을 조작하는 사람 플레이어를 지정하고, 플레이어 정보 카드를 GameState에 맞춰 채웁니다.)
-        if (UIManager.Instance != null)
-        {
-            UIManager.Instance.SetLocalPlayer(WebSocketNetwork.Instance.LocalPlayerId);
-            UIManager.Instance.SetMaxRound(maxRound); // 최대 라운드는 GameManager가 관리하고 UI에 알려줍니다.
-            UIManager.Instance.InitPlayers();
-        }
-
+        
         // 첫 번째 순서부터 턴 시작
         HandleTurnChanged(gameState.PlayerOrder[0]);
     }
@@ -231,6 +251,10 @@ public class GameManager : Singleton<GameManager>
 
     public void HandleChooseDestinationPrompt()
     {
+        // 다른 Prompt 함수들처럼 HandleRoutine을 부르지 않습니다.
+        // HandleRoutine은 브로드캐스트를 받았을 때 쓰는 함수라서, 요청을 보내기 전인 여기서 부르면
+        // isAfk = !sendAndWaiting 이 true가 되어 잠수용 짧은 제한시간(afkSelectSeconds)으로 여행지 선택창이 금방 닫힙니다.
+
         // 자신의 차례인 경우에만 자유 여행할 타일을 선택하는 UI를 표시합니다.
         if (IsLocalPlayerTurn())
         {
@@ -243,18 +267,19 @@ public class GameManager : Singleton<GameManager>
         gameState.WaitingType = GameMessageType.DESTINATION_CHOSEN;
     }
 
-    public void ChooseDestination(int destinationPosition)
-    {
-        if (IsLocalPlayerTurn())
-            GameNetwork.Instance.SendChooseDestinationRequest(destinationPosition);
-        
-    }
-
     /// <summary>
     /// 화면에서 자유 이동할 위치를 누르면 이 함수가 호출됩니다.
     /// </summary>
+    public void ChooseDestination(int destinationPosition)
+    {
+        sendAndWaiting = true;
+        GameNetwork.Instance.SendChooseDestinationRequest(destinationPosition);
+    }
+    
     public void HandleDestinationChosen(long playerId, int destinationPosition)
     {
+        HandleRoutine();
+        
         var player = GetPlayerState(playerId);
 
         int fromPosition = player.Position;
@@ -263,7 +288,7 @@ public class GameManager : Singleton<GameManager>
 
         Log($"[세계여행] {P(playerId)}: {TileName(fromPosition)} → {TileName(toPosition)}");
 
-        HandlePlayerMoved(playerId, fromPosition, toPosition, shouldReceiveSalary);
+        MovePlayerToDestination(playerId, fromPosition, toPosition, shouldReceiveSalary);
     }
 
     public void HandleRollDicePrompt()
@@ -288,11 +313,14 @@ public class GameManager : Singleton<GameManager>
     /// </summary>
     public void RollDice()
     {
+        sendAndWaiting = true;
         GameNetwork.Instance.SendRollDiceRequest();
     }
 
     public void HandleDiceRolled(long playerId, int dice1, int dice2)
     {
+        HandleRoutine();
+        
         PlayerState player = GetPlayerState(playerId);
 
         Log($"[주사위] {P(playerId)}: {dice1}+{dice2}={dice1 + dice2}{(dice1 == dice2 ? " (더블!)" : "")}");
@@ -383,6 +411,44 @@ public class GameManager : Singleton<GameManager>
         isMoving = true;
         PlayerManager.Instance.MoveBySteps(
             playerId, fromPosition, steps,
+            onTileReached: tileIndex =>
+            {
+                if (shouldReceiveSalary && tileIndex == 0)
+                {
+                    // 월급 획득 연출
+                }
+            },
+            onCompleted: () =>
+            {
+                isMoving = false;
+                ProcessArrival(playerId, toPosition);
+            });
+    }
+
+    /// <summary>
+    /// 월급 수령이 가능한 지정 위치로 이동합니다. (세계여행, 황금열쇠 지정 위치 이동)
+    /// 무인도 강제 이동처럼 직선으로 가지 않고, 주사위 이동처럼 한 칸씩 뛰지도 않고, 타일을 따라 시계방향으로 빠르게 이동합니다.
+    /// 출발 지점을 지나면 월급을 받고, 이동이 끝나면 도착 처리를 합니다.
+    /// </summary>
+    private void MovePlayerToDestination(long playerId, int fromPosition, int toPosition, bool shouldReceiveSalary)
+    {
+        PlayerState player = GetPlayerState(playerId);
+        if (player == null) return;
+
+        // 1) GameState는 즉시 갱신
+        player.Position = toPosition;
+        if (shouldReceiveSalary)
+        {
+            long before = player.Money;
+            player.Money += salaryAmount;
+            EconomyManager.NotifyMoneyChanged(playerId, before, player.Money);
+            Log($"[월급] {P(playerId)}: 출발 지점을 지나 월급 {Won(salaryAmount)} 지급 (현금 {Won(player.Money)})");
+        }
+
+        // 2) 타일을 따라 이동하는 연출 → 끝나면 도착 처리
+        isMoving = true;
+        PlayerManager.Instance.MoveAlongTiles(
+            playerId, fromPosition, toPosition,
             onTileReached: tileIndex =>
             {
                 if (shouldReceiveSalary && tileIndex == 0)
@@ -729,8 +795,8 @@ public class GameManager : Singleton<GameManager>
 
         Log($"[카드:이동] {P(playerId)}: {TileName(toPosition)}(으)로 이동");
 
-        // 이동이 끝나면 HandlePlayerMoved가 알아서 ProcessArrival을 호출합니다.
-        HandlePlayerMoved(playerId, fromPosition, toPosition, shouldReceiveSalary);
+        // 이동이 끝나면 MovePlayerToDestination이 알아서 ProcessArrival을 호출합니다.
+        MovePlayerToDestination(playerId, fromPosition, toPosition, shouldReceiveSalary);
     }
 
     // CardEffect: MoveBy - N칸 이동한다 (음수면 뒤로, 뒤로 갈 때는 월급 없음)
@@ -811,6 +877,7 @@ public class GameManager : Singleton<GameManager>
     /// </summary>
     public void PurchaseProperty(long playerId, int propertyId, bool isAccept = true)
     {
+        sendAndWaiting = true;
         GameNetwork.Instance.SendPurchasePropertyRequest(propertyId, isAccept);
     }
 
@@ -824,6 +891,8 @@ public class GameManager : Singleton<GameManager>
 
     public void HandlePropertyPurchased(long playerId, int propertyId, bool isAccept)
     {
+        HandleRoutine();
+        
         if (!isAccept)
         {
             Log($"[구매 안 함] {P(playerId)}: {CityName(propertyId)}");
@@ -873,6 +942,7 @@ public class GameManager : Singleton<GameManager>
     /// </summary>
     public void Build(long playerId, int propertyId, bool isAccept = true)
     {
+        sendAndWaiting = true;
         GameNetwork.Instance.SendBuildRequest(propertyId, true);
     }
 
@@ -886,6 +956,8 @@ public class GameManager : Singleton<GameManager>
 
     public void HandleBuilt(long playerId, int propertyId, bool isAccept)
     {
+        HandleRoutine();
+        
         if (!isAccept)
         {
             Log($"[건설 안 함] {P(playerId)}: {CityName(propertyId)}");
@@ -934,6 +1006,7 @@ public class GameManager : Singleton<GameManager>
     /// </summary>
     public void AcquireProperty(long playerId, int propertyId, bool isAccept = true)
     {
+        sendAndWaiting = true;
         GameNetwork.Instance.SendAcquirePropertyRequest(propertyId, isAccept);
     }
 
@@ -947,6 +1020,8 @@ public class GameManager : Singleton<GameManager>
 
     public void HandlePropertyAcquired(long playerId, int propertyId, bool isAccept)
     {
+        HandleRoutine();
+        
         if (!isAccept)
         {
             Log($"[인수 안 함] {P(playerId)}: {CityName(propertyId)}");
@@ -996,11 +1071,14 @@ public class GameManager : Singleton<GameManager>
     /// </summary>
     public void SellProperties(long payerId, List<int> propertyIds)
     {
+        sendAndWaiting = true;
         GameNetwork.Instance.SendSellPropertiesRequest(propertyIds);
     }
 
     public void HandlePropertiesSold(long payerId, List<int> propertyIds)
     {
+        HandleRoutine();
+        
         var payer = GetPlayerState(payerId);
 
         int landedPropertyId = BoardManager.Instance.GetTileData(payer.Position).PropertyId;
@@ -1149,7 +1227,10 @@ public class GameManager : Singleton<GameManager>
     {
         // 자신의 차례인 경우에만 요청을 보냅니다.
         if (IsLocalPlayerTurn())
+        {
+            sendAndWaiting = true;
             GameNetwork.Instance.SendDrawCardRequest();
+        }
 
         // broadcast메시지 수신 대기 상태에 들어갑니다.
         gameState.WaitingType = GameMessageType.CARD_DRAWN;
@@ -1157,6 +1238,8 @@ public class GameManager : Singleton<GameManager>
 
     public void HandleCardDrawn(long playerId, int cardId)
     {
+        HandleRoutine();
+        
         // CardManager에서 CardId로 카드 데이터를 조회합니다.
         CardData card = CardManager.Instance.FindCard(cardId);
         if (card == null)
@@ -1190,22 +1273,40 @@ public class GameManager : Singleton<GameManager>
 
     public void SyncGameState(GameState serverGameState)
     {
+        Debug.Log("after OnSync?.Invoke");
         // gameState 동기화. 덮어씀
         gameState = serverGameState;
 
+        salaryAmount = gameState.Config.salaryAmount;
+        taxAmount = gameState.Config.taxAmount;
+        startMoney = gameState.Config.startMoney;
+        maxRound = gameState.Config.maxRound;
+    
         // player의 색상 지정. gameState.playerStates 의 순서대로 배정
         playerColorMap = new Dictionary<long, Color>();
         for (int i = 0; i < gameState.PlayerStates.Count; i++)
         {
             PlayerState playerState = gameState.PlayerStates[i];
-            playerColorMap.Add(playerState.PlayerId, UIPalette.PlayerColor(i));
+            playerColorMap.Add(playerState.PlayerId, playerColors[i]);
         }
 
-        // UI 리프레시 함수 호출
+        // 이 화면을 조작하는 사람 플레이어를 지정하고, 플레이어 정보 카드를 GameState에 맞춰 채웁니다. UI의 값들을 GameState에 맞게 갱신합니다. 
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.SetLocalPlayer(WebSocketNetwork.Instance.LocalPlayerId);
+            UIManager.Instance.SetMaxRound(maxRound); // 최대 라운드는 GameManager가 관리하고 UI에 알려줍니다.
+            UIManager.Instance.InitPlayers();
+            
+            // UI 리프레시 함수 호출
+            UIManager.Instance.RefreshUIFromGameState();
+        }
 
         // Board 리프레시 함수 호출
-
+        BoardManager.Instance.RefreshBoard();
+        
+        PlayerManager.Instance.Initialize(gameState.PlayerStates.ConvertAll(state => state.PlayerId));
         // PlayerPawn 리프레시 함수 호출
+        PlayerManager.Instance.RefreshPawns(gameState.PlayerStates);
 
         if (gameState.TurnNumber == 1)
         {
@@ -1214,7 +1315,80 @@ public class GameManager : Singleton<GameManager>
         }
         else
         {
-            Debug.Log("SyncGameState");
+            Debug.Log($"SyncGameState - 진행 중인 게임에 합류합니다. (서버 대기 phase: {gameState.WaitingType})");
+            RestorePromptFromSync();
+        }
+    }
+
+    /// <summary>
+    /// 재접속(GAME_STATE_SYNC) 후, 서버가 기다리고 있는 입력(phase)에 맞는 선택창을 다시 띄웁니다.
+    /// 각 Prompt 함수가 내 차례인지 확인하므로 남의 차례면 선택창 없이 대기 상태(WaitingType)만 맞춰집니다.
+    /// 서버의 마감시간은 알 수 없지만, 이미 지났다면 서버의 자동 진행 브로드캐스트를 받으면서 선택창이 닫힙니다.
+    /// </summary>
+    private void RestorePromptFromSync()
+    {
+        if (gameState.IsGameOver || gameState.WaitingType == null) return;
+
+        sendAndWaiting = false;
+        long playerId = gameState.CurrentPlayerId;
+        PlayerState player = GetPlayerState(playerId);
+        if (player == null) return;
+
+        // 이번 차례가 끝나기 전에 끊겼다면 'OO의 턴' 표시를 다시 띄웁니다.
+        if (UIManager.Instance != null)
+            UIManager.Instance.ShowTurn(playerId);
+
+        switch (gameState.WaitingType.Value)
+        {
+            case GameMessageType.DICE_ROLLED:
+                HandleRollDicePrompt();
+                return;
+
+            case GameMessageType.DESTINATION_CHOSEN:
+                HandleChooseDestinationPrompt();
+                return;
+
+            case GameMessageType.CARD_DRAWN:
+                DrawCard(); // 원래 흐름처럼 내 차례면 카드 뽑기 요청을 바로 보냅니다.
+                return;
+        }
+
+        // 나머지는 모두 도착한 땅에 대한 선택이므로, 현재 위치의 땅 정보로 매개변수를 다시 계산합니다.
+        TileData tile = BoardManager.Instance.GetTileData(player.Position);
+        PropertyState propertyState = tile != null && tile.Type == TileType.PROPERTY ? GetPropertyState(tile.PropertyId) : null;
+        if (propertyState == null)
+        {
+            Debug.LogError($"[GameManager] 재접속 선택창 복구 실패: {P(playerId)}의 위치 {player.Position}가 땅이 아닙니다. (phase {gameState.WaitingType})");
+            return;
+        }
+        int propertyId = propertyState.PropertyId;
+
+        switch (gameState.WaitingType.Value)
+        {
+            case GameMessageType.PROPERTY_PURCHASED:
+            {
+                bool canAfford = player.Money >= PropertyManager.Instance.GetLandPrice(propertyId);
+                HandlePurchasePropertyPrompt(playerId, propertyId, canAfford);
+                break;
+            }
+            case GameMessageType.BUILT:
+            {
+                PropertyData data = PropertyManager.Instance.GetData(propertyId);
+                BuildingLevel level = propertyState.BuildingLevel;
+                bool canBuild = data != null && data.CanBuild && level != BuildingLevel.Hotel
+                                && player.Money >= PropertyManager.Instance.GetBuildCost(propertyId, (BuildingLevel)(level + 1));
+                HandleBuildPrompt(playerId, propertyId, canBuild);
+                break;
+            }
+            case GameMessageType.PROPERTY_ACQUIRED:
+                // 통행료는 서버에서 이미 낸 상태로 동기화되었습니다.
+                HandleAcquirePropertyPrompt(playerId, propertyId, PropertyManager.Instance.GetAcquireValue(propertyState));
+                break;
+
+            case GameMessageType.PROPERTIES_SOLD:
+                if (propertyState.OwnerId == null) break;
+                HandleSellPropertiesPrompt(playerId, propertyState.OwnerId.Value, PropertyManager.Instance.GetToll(propertyState));
+                break;
         }
     }
 
@@ -1253,5 +1427,22 @@ public class GameManager : Singleton<GameManager>
             Debug.LogError($"GameState - PropertyState not found: {propertyId}");
 
         return propertyState;
+    }
+
+    private void HandleRoutine()
+    {
+        // 브로드캐스트 메시지를 하나 받았으면, 그 결과 처리(연출, 이동, 도착 처리)가 끝나 다음 Prompt에 도달할 때까지
+        // 큐에서 다음 메시지를 꺼내지 않도록 대기 상태를 비웁니다.
+        // (이게 없으면 카드 연출/말 이동 중에 다음 메시지가 먼저 처리되어 CurrentPlayerId가 미리 바뀌고,
+        //  상대방이 도착한 땅의 구매창이 로컬 플레이어에게 뜨는 문제가 생깁니다.)
+        if (gameState != null)
+            gameState.WaitingType = null;
+
+        if (!IsLocalPlayerTurn()) return;
+
+        UIManager.Instance.CloseSelectionPopups();
+        
+        isAfk = !sendAndWaiting;
+        sendAndWaiting = false;
     }
 }

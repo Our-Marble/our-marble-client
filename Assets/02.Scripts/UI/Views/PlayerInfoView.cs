@@ -80,6 +80,12 @@ public class PlayerInfoView : UIView
         if (nameText != null) nameText.text = playerName;
         SetPortrait(portraitImage, portrait, UIPalette.PlayerLightColor(playerColorIndex));
     }
+    
+    // 초상화 시스템 구현 전, 이름만이라도 갱신하기 위해 임시 구현한 함수
+    public void SetName(string playerName)
+    {
+        if (nameText != null) nameText.text = playerName;
+    }
 
     /// <summary>등수(1~4). 이전과 달라지면 배지가 뒤집히며 바뀐다(첫 설정은 바로 표시).</summary>
     public void SetRank(int rank, bool animate = true)

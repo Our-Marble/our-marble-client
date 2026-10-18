@@ -9,7 +9,9 @@ using UnityEngine;
 
 public class WebSocketNetwork : Singleton<WebSocketNetwork>
 {
-    private string serverUrl = "ws://localhost:8080/ws";
+    private string serverUrl => HttpNetwork.Instance.isLocal? "ws://localhost:8080/ws" : "ws://" + HttpNetwork.Instance.EC2PublicAdress + ":8080/ws";
+    
+    protected override bool PersistAcrossScenes => true;
     
     private WebSocket websocket;
     public long LocalPlayerId { get; private set; }
@@ -65,6 +67,8 @@ public class WebSocketNetwork : Singleton<WebSocketNetwork>
         websocket.OnClose += (closeCode) =>
         {
             Debug.Log($"WebSocket 연결 종료: {closeCode}");
+            
+            if (SceneFlow.ToLogin()) return;
         };
 
         websocket.OnMessage += (bytes) =>
@@ -135,7 +139,19 @@ public class WebSocketNetwork : Singleton<WebSocketNetwork>
     {
         if (websocket != null)
         {
-            await websocket.Close();
+            WebSocket oldWebSocket = websocket;
+            websocket = null;
+            await oldWebSocket.Close();
+        }
+    }
+
+    public async void closeWebSocketSession()
+    {
+        if (websocket != null)
+        {
+            WebSocket oldWebSocket = websocket;
+            websocket = null;
+            await oldWebSocket.Close();
         }
     }
 }
