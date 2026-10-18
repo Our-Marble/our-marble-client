@@ -3698,6 +3698,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e3679f920e4edb146b072d2f93837875, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HttpNetwork
+  EC2PublicAdress: our-marble-alb-207542667.ap-northeast-2.elb.amazonaws.com
+  isLocal: 0
 --- !u!1 &902134073
 GameObject:
   m_ObjectHideFlags: 0
