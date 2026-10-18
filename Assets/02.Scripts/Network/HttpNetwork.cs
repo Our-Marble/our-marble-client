@@ -9,10 +9,10 @@ public class HttpNetwork : Singleton<HttpNetwork>
     protected override bool PersistAcrossScenes => true;
     
     public string JwtToken { get; private set; } // 전역으로 접근할 수 있도록 관리
+
+    private string BaseUrl => isLocal ? "http://localhost:8080" : "http://" + EC2PublicAdress;
     
-    private string BaseUrl => isLocal? "http://localhost:8080" : "http://" + EC2PublicAdress + ":8080";
-    
-    public string EC2PublicAdress = "43.200.31.213";
+    public string EC2PublicAdress = "our-marble-alb-207542667.ap-northeast-2.elb.amazonaws.com";
     public bool isLocal = true;
     
     private static string ReadErrorMessage(UnityWebRequest webRequest, string fallbackMessage)
