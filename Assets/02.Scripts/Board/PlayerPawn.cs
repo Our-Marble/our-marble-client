@@ -22,6 +22,9 @@ public class PlayerPawn : MonoBehaviour
     private Coroutine focusRoutine;
 
     public int CurrentTileIndex => currentTileIndex;
+    public float SadAnimationDuration => spriteSet != null
+        ? spriteSet.GetDefaultDuration(PlayerPawnAnimation.Sad)
+        : 1.02f;
 
     private void Awake()
     {
