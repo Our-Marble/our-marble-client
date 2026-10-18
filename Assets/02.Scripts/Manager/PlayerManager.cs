@@ -34,6 +34,7 @@ public class PlayerManager : Singleton<PlayerManager>
     private readonly Dictionary<long, PlayerPawn> pawnsByPlayerId = new();
     private readonly Dictionary<long, int> slotByPlayerId = new();
     private readonly Dictionary<long, Coroutine> runningMoves = new(); // 말별 진행 중인 이동
+    private readonly HashSet<long> bankruptcySequences = new();
 
     protected override void OnAwake()
     {
@@ -46,6 +47,7 @@ public class PlayerManager : Singleton<PlayerManager>
         GameManager.OnPropertyPurchasedSuccessfully += PlayCheer;
         GameManager.OnBuildingBuiltSuccessfully += PlayCheer;
         GameManager.OnIslandEscapeFailed += PlaySad;
+        GameManager.OnPlayerBankrupt += PlayBankruptcySequence;
     }
 
     private void OnDisable()
@@ -54,6 +56,7 @@ public class PlayerManager : Singleton<PlayerManager>
         GameManager.OnPropertyPurchasedSuccessfully -= PlayCheer;
         GameManager.OnBuildingBuiltSuccessfully -= PlayCheer;
         GameManager.OnIslandEscapeFailed -= PlaySad;
+        GameManager.OnPlayerBankrupt -= PlayBankruptcySequence;
     }
 
     /// <summary>게임 시작 시 GameManager가 호출. playerId와 말을 매핑하고 시작 칸(0)에 배치합니다.</summary>
@@ -128,6 +131,27 @@ public class PlayerManager : Singleton<PlayerManager>
     {
         if (TryGetPawn(playerId, out PlayerPawn pawn))
             pawn.PlaySad();
+    }
+
+    private void PlayBankruptcySequence(long playerId)
+    {
+        if (!TryGetPawn(playerId, out PlayerPawn pawn)) return;
+
+        StopMove(playerId);
+        pawn.gameObject.SetActive(true);
+        pawn.PlaySad();
+        bankruptcySequences.Add(playerId);
+        StartCoroutine(HideAfterSad(playerId, pawn));
+    }
+
+    private IEnumerator HideAfterSad(long playerId, PlayerPawn pawn)
+    {
+        yield return new WaitForSecondsRealtime(pawn.SadAnimationDuration);
+        bankruptcySequences.Remove(playerId);
+
+        PlayerState state = GameManager.Instance.GetPlayerState(playerId);
+        if (state != null && state.IsBankrupt)
+            HidePawn(playerId);
     }
 
     private void HandlePlayerArrived(long playerId, int tileIndex)
@@ -401,14 +425,21 @@ public class PlayerManager : Singleton<PlayerManager>
 
     public void RefreshPawns(List<PlayerState> playerStates)
     {
-        int maxPlayers = playerStates.Count;
-
-        for (int i = 0; i < maxPlayers; i++)
+        for (int i = 0; i < playerStates.Count; i++)
         {
-            long playerId =  playerStates[i].PlayerId;
-            int tileIndex = playerStates[i].Position;
+            PlayerState state = playerStates[i];
+            long playerId = state.PlayerId;
 
-            SnapToTile(playerId, tileIndex);
+            if (state.IsBankrupt)
+            {
+                if (!bankruptcySequences.Contains(playerId))
+                    HidePawn(playerId);
+                continue;
+            }
+
+            if (!TryGetPawn(playerId, out PlayerPawn pawn)) continue;
+            pawn.gameObject.SetActive(true);
+            SnapToTile(playerId, state.Position);
         }
     }
 }

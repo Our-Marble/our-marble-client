@@ -11,6 +11,7 @@ public class GameManager : Singleton<GameManager>
     public static event Action<long> OnPropertyPurchasedSuccessfully;
     public static event Action<long> OnBuildingBuiltSuccessfully;
     public static event Action<long> OnIslandEscapeFailed;
+    public static event Action<long> OnPlayerBankrupt;
 
     // 게임 씬 전용 매니저입니다. 씬을 넘어 살아남으면 두 번째 게임에서 이미 파괴된 GameNetwork에 구독된 채로 남아
     // OnSync(SyncGameState)가 호출되지 않으므로, 게임 씬이 로드될 때마다 새로 만들어지게 합니다.
@@ -707,7 +708,7 @@ public class GameManager : Singleton<GameManager>
         // 파산 연출을 재생합니다. (GameState를 먼저 갱신한 뒤 부르므로 UI는 IsBankrupt를 그대로 읽으면 됨)
         if (UIManager.Instance != null)
             UIManager.Instance.PlayBankruptEffect(playerId);
-        PlayerManager.Instance.HidePawn(playerId);
+        OnPlayerBankrupt?.Invoke(playerId);
 
         // 남은 플레이어 수가 1이라면 게임 종료 함수를 호출합니다. (팀전의 경우 조건이 바뀔 수 있음.)
         // 파산 연출 뒤에 판정해서, 결과 창이 파산 연출보다 먼저 뜨지 않게 합니다.
