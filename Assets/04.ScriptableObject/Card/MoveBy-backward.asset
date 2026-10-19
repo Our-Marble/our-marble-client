@@ -10,7 +10,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 0ded43c9fb85c65468f822ecd36f3b34, type: 3}
-  m_Name: MoveBy
+  m_Name: MoveBy-backward
   m_EditorClassIdentifier: Assembly-CSharp::CardData
   id: 4
   cardName: "\uCE78 \uC774\uB3D9"

@@ -13,7 +13,7 @@ public class HttpNetwork : Singleton<HttpNetwork>
     private string BaseUrl => isLocal ? "http://localhost:8080" : "http://" + EC2PublicAdress;
     
     public string EC2PublicAdress = "our-marble-alb-207542667.ap-northeast-2.elb.amazonaws.com";
-    public bool isLocal = true;
+    public bool isLocal = false;
     
     private static string ReadErrorMessage(UnityWebRequest webRequest, string fallbackMessage)
     {

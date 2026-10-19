@@ -3282,8 +3282,8 @@ MonoBehaviour:
   cardDeck: {fileID: 11400000, guid: 28d3ca2c6729ed246a6df82e701ba38a, type: 2}
   otherCardShowSeconds: 2
   resultSeconds: 15
-  selectSeconds: 15
-  afkSelectSeconds: 3
+  selectSeconds: 30
+  afkSelectSeconds: 5
   timeoutCloseDelay: 0.3
 --- !u!4 &1470332513
 Transform:
