@@ -15,7 +15,7 @@ MonoBehaviour:
   id: 5
   cardName: "\uCE78 \uC774\uB3D9"
   description: "3\uCE78 \uC55E\uC73C\uB85C \uAC00\uB77C"
-  icon: {fileID: 0}
+  icon: {fileID: 21300000, guid: 93286fdf7ac22694aafeda87a2f9fb60, type: 3}
   effectType: 3
   amount: 0
   targetTileId: 0

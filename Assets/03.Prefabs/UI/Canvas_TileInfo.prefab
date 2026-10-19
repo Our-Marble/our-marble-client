@@ -11,6 +11,7 @@ GameObject:
   - component: {fileID: 4100242601288301802}
   - component: {fileID: 9119780069294200646}
   - component: {fileID: 934886664149732910}
+  - component: {fileID: 1544409470433996782}
   m_Layer: 5
   m_Name: TileImage
   m_TagString: Untagged
@@ -75,6 +76,20 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
+--- !u!114 &1544409470433996782
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 58578916517177866}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 86710e43de46f6f4bac7c8e50813a599, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.AspectRatioFitter
+  m_AspectMode: 4
+  m_AspectRatio: 2.4
 --- !u!1 &171654469903901014
 GameObject:
   m_ObjectHideFlags: 0
@@ -291,7 +306,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "\uC774\uC6A9\uB8CC"
+  m_text: "\uD1B5\uD589\uB8CC"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: cafdd8020a9b4584ab3202fc6b118037, type: 2}
   m_sharedMaterial: {fileID: -2759815069154269271, guid: cafdd8020a9b4584ab3202fc6b118037, type: 2}
@@ -3046,7 +3061,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "\uB2E8\uACC4\uBCC4 \uC774\uC6A9\uB8CC"
+  m_text: "\uB2E8\uACC4\uBCC4 \uD1B5\uD589\uB8CC"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: cafdd8020a9b4584ab3202fc6b118037, type: 2}
   m_sharedMaterial: {fileID: -2759815069154269271, guid: cafdd8020a9b4584ab3202fc6b118037, type: 2}
@@ -3524,6 +3539,7 @@ MonoBehaviour:
   panelGroup: {fileID: 8555088601306645216}
   dimGroup: {fileID: 0}
   tileImage: {fileID: 934886664149732910}
+  imagePlaceholder: {fileID: 4636151777742703057}
   ownerChip: {fileID: 3227637815743447090}
   ownerText: {fileID: 2660834304511389882}
   tileNameText: {fileID: 7682130380897712683}

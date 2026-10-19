@@ -123,6 +123,8 @@ public class UIDebugPanel : MonoBehaviour
         Header("주사위");
         if (GUILayout.Button("주사위 굴리기 창 열기 (버튼 → GameManager.RollDice)")) UI.ShowRollDicePopup();
 
+        DrawBankruptSection();
+
         DrawPropertySection();
 
         Header("게임 종료 · 이동");
@@ -239,6 +241,77 @@ public class UIDebugPanel : MonoBehaviour
             UI.RefreshPlayerCards();
             Log($"{NameOf(turnIndex)} 파산 해제 (표시만 되돌립니다)");
         }
+    }
+
+    // ───────────── 파산 로직 시험 ─────────────
+    // 파산하는 사람은 "나", 돈을 받는 사람은 다음 사람이다. 실제 GameManager의 파산 처리를 그대로 부른다.
+
+    private void DrawBankruptSection()
+    {
+        Header("파산 로직 시험");
+        for (int i = 0; i < Players.Count; i++)
+        {
+            PlayerState p = Players[i];
+            int lands = 0; long sellValue = 0;
+            foreach (PropertyState ps in State.PropertyStates)
+                if (ps.OwnerId == p.PlayerId) { lands++; sellValue += PropertyManager.Instance.GetSellValue(ps); }
+            GUILayout.Label($"{NameOf(i)}: 현금 {p.Money:N0} / 땅 {lands}개 (매각가 {sellValue:N0}) / {(p.IsBankrupt ? $"파산 {p.FinalRank}위" : "생존")}");
+        }
+        if (State.IsGameOver) GUILayout.Label("(게임 종료 상태)");
+
+        Row(("내 땅 3개 만들기", () => GiveLands(Players[LocalPlayer].PlayerId, 3)),
+            ("상대 땅 2개 만들기", () => GiveLands(Players[NextPlayer(LocalPlayer)].PlayerId, 2)));
+        Row(("내 현금 0", () => SetMyMoney(0)), ("내 현금 1,000", () => SetMyMoney(1000)));
+
+        RichLabel("<b>① 강제 파산</b> (통행료를 못 낼 때와 같은 처리: 재산을 상대에게 넘기고 다음 차례로)");
+        if (GUILayout.Button("강제 파산 실행 (HandleBankruptcy → 다음 차례)")) RunBankrupt();
+
+        if (GUILayout.Button("시험 상태 되돌리기 (파산·땅·게임 종료 초기화)")) ResetBankruptTest();
+    }
+
+    // 주인 없는 땅 중 처음 count개를 owner의 땅(1단계)으로 만든다
+    private void GiveLands(long owner, int count)
+    {
+        foreach (PropertyData data in PropertyManager.Instance.GetAllDataByMapId(1))
+        {
+            if (count <= 0) break;
+            if (!data.CanBuild) continue;
+            PropertyState state = State.PropertyStates.Find(p => p.PropertyId == data.Id);
+            if (state == null || state.OwnerId.HasValue) continue;
+            state.OwnerId = owner;
+            state.BuildingLevel = BuildingLevel.Villa;
+            count--;
+        }
+        UI.RefreshPlayerCards();
+        Log("땅을 나눠 줬습니다");
+    }
+
+    // payer(나)가 파산한다. 차례는 payer 것으로 맞춘 뒤 실제 처리 함수를 부른다.
+    private void RunBankrupt()
+    {
+        int payerIndex = LocalPlayer;
+        PlayerState payer = Players[payerIndex];
+        PlayerState receiver = Players[NextPlayer(payerIndex)];
+        if (payer.IsBankrupt || State.IsGameOver) { Log("이미 파산했거나 게임이 끝났습니다. '되돌리기'를 누르세요"); return; }
+        if (receiver.PlayerId == payer.PlayerId) { Log("받을 사람이 없습니다"); return; }
+
+        State.CurrentPlayerId = payer.PlayerId;
+        UI.CloseAllPopups();
+        Game.HandleBankruptcy(payer.PlayerId, receiver.PlayerId);
+        if (!State.IsGameOver) Game.HandleTurnChanged(Players[NextPlayer(payerIndex)].PlayerId);
+        Log($"{NameOf(payerIndex)} 강제 파산 → {NameOf(Players.FindIndex(p => p.PlayerId == receiver.PlayerId))}에게 재산 이전");
+    }
+
+    // 파산, 땅 주인, 게임 종료 상태를 처음으로 돌린다. (현금은 그대로)
+    private void ResetBankruptTest()
+    {
+        foreach (PlayerState p in Players) { p.IsBankrupt = false; p.FinalRank = 0; }
+        foreach (PropertyState ps in State.PropertyStates) { ps.OwnerId = null; ps.BuildingLevel = BuildingLevel.Land; }
+        State.IsGameOver = false;
+        UI.CloseAllPopups();
+        UI.RefreshPlayerCards(false);
+        UI.ShowTurn(State.CurrentPlayerId);
+        Log("시험 상태를 되돌렸습니다 (현금은 그대로)");
     }
 
     // ───────────── 땅 (PropertyManager 데이터 + GameState) ─────────────

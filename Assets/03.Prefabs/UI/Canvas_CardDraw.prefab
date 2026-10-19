@@ -868,6 +868,7 @@ MonoBehaviour:
   front: {fileID: 4109200592665206941}
   back: {fileID: 7007831886312618477}
   cardImage: {fileID: 4599886154750852832}
+  imagePlaceholder: {fileID: 2513988525743810704}
   typeTag: {fileID: 3155017488176773000}
   typeTagText: {fileID: 8088824193288426424}
   cardNameText: {fileID: 1391132296580532559}

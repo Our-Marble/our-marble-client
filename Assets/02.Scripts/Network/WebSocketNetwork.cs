@@ -15,6 +15,9 @@ public class WebSocketNetwork : Singleton<WebSocketNetwork>
     
     private WebSocket websocket;
     public long LocalPlayerId { get; private set; }
+
+    /// <summary>서버와 연결이 열려 있는지.</summary>
+    public bool IsOpen => websocket != null && websocket.State == WebSocketState.Open;
     public string LocalNickname { get; private set; }
     
     protected override void OnAwake()

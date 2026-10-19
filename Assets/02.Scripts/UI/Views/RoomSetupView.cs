@@ -7,25 +7,22 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 로비 씬의 대기방 화면. 방에 들어오면 열리고, 방장이 시작하면 게임 씬으로 넘어간다.
-/// 왼쪽은 플레이어(2×2로 놓인 자리 4개와 그 아래 팀 선택), 오른쪽은 방장이 정하는 게임 설정이다.
+/// 왼쪽은 플레이어(2×2로 놓인 자리 4개), 오른쪽은 방장이 정하는 게임 설정이다.
 /// 자리는 최대 인원과 상관없이 항상 4개를 보여 주고, 최대 인원 밖의 빈 자리는 흐리게 "닫힘"으로 보인다.
 ///
-/// 게임 설정(맵, 모드, 최대 인원, 시작 자금, 최대 라운드, 월급, 봇 수)은 바로 적용되지 않는다.
+/// 게임 설정(맵, 최대 인원, 시작 자금, 최대 라운드, 월급, 봇 수)은 바로 적용되지 않는다.
 /// 방장이 값을 바꾸면 이 화면의 "초안"만 바뀌고, "설정 적용" 버튼을 눌러야 SettingsApplied로 한꺼번에 알린다.
 /// 서버에 적용된 값(applied)은 SetSettings로 받는다. 자리와 인원 표시는 적용된 값 기준이고, 적용하지 않은 변경이 있으면 시작할 수 없다.
 /// 방장이 아닌 플레이어는 적용된 값을 보기만 하고(조작 화살표는 보이지 않는다) 준비하기를 누른다.
 /// 바꾼 설정을 적용하지 않고 되돌리려면 "변경 취소"를 누른다.
 ///
 /// 이 화면은 받은 값을 보여 주고 알리기만 하고, 방 정보(RoomInfo)를 갱신하는 일은 받는 쪽(LobbyManager)이 한다.
-/// 이벤트: SettingsApplied, ReadyToggled, LeaveRequested. 팀 선택과 시작은 Show의 콜백으로 알린다. Canvas_RoomSetup에 붙는다.
+/// 이벤트: SettingsApplied, ReadyToggled, LeaveRequested. 시작은 Show의 콜백으로 알린다. Canvas_RoomSetup에 붙는다.
 /// </summary>
 public class RoomSetupView : UIView
 {
     public override string PanelPath => "RoomSetupPopup/Window";
     public override string DimPath => "RoomSetupPopup/Dim";
-
-    // 기본값(0)이 "팀 없음"이 되도록 None을 0으로 둔다. 개인전에서만 None이고, 팀전에서는 항상 레드나 블루로 채워진다.
-    public enum Team { None = 0, Red = 1, Blue = 2 }
 
     /// <summary>슬롯 1칸 정보. IsEmpty면 빈 자리로 표시.</summary>
     public struct Slot
@@ -37,14 +34,12 @@ public class RoomSetupView : UIView
         public bool IsHost;
         public bool IsBot;   // 봇이면 준비 대신 "봇" 표시를 단다
         public bool IsReady;
-        public Team Team;
     }
 
     /// <summary>방장이 정하는 게임 설정 한 묶음. 적용 버튼을 누르면 이 묶음 전체가 한 번에 전달된다.</summary>
     public struct Settings
     {
         public string Map;      // 맵 이름 (SetMapChoices로 넘긴 목록 중 하나)
-        public bool IsTeam;     // 팀전 여부
         public int MaxPlayers;  // 최대 인원 (2~4)
         public long StartMoney; // 시작 자금
         public int MaxRound;    // 최대 라운드
@@ -52,14 +47,10 @@ public class RoomSetupView : UIView
         public int BotCount;    // 봇 수. 봇은 맨 뒤에 붙고 맨 뒤에서 빠진다
     }
 
-    private static readonly Color RedTeamBg = new Color32(255, 211, 216, 255);
-    private static readonly Color RedTeamText = new Color32(214, 90, 110, 255);
-    private static readonly Color BlueTeamBg = new Color32(214, 230, 255, 255);
-    private static readonly Color BlueTeamText = new Color32(74, 127, 209, 255);
     private static readonly Color EmptySlotBg = new Color32(250, 251, 254, 255);     // 빈 자리: 밝은 면 + 또렷한 테두리
     private static readonly Color EmptySlotStroke = new Color32(188, 196, 214, 255);
     private static readonly Color LockedSlotBg = new Color32(226, 229, 237, 255);    // 닫힌 자리: 채워진 회색 면, 테두리 없음
-    private static readonly Color BotBadgeBg = new Color32(228, 218, 248, 255);   // 봇 표시: 플레이어 색(분홍/파랑/초록/노랑)과 팀 색에 없는 보라
+    private static readonly Color BotBadgeBg = new Color32(228, 218, 248, 255);   // 봇 표시: 플레이어 색(분홍/파랑/초록/노랑)에 없는 보라
     private static readonly Color BotBadgeText = new Color32(116, 84, 186, 255);
 
     // 방장이 고를 수 있는 값. 화살표로 한 칸씩 넘긴다.
@@ -80,8 +71,6 @@ public class RoomSetupView : UIView
         public GameObject hostBadge;
         public Image readyBadge;
         public TMP_Text readyText;
-        public Image teamBadge;
-        public TMP_Text teamText;
         public TMP_Text nicknameText;
         public RectTransform bubble;   // 초상화 위 말풍선
         public TMP_Text bubbleText;
@@ -92,16 +81,9 @@ public class RoomSetupView : UIView
     [SerializeField] private TMP_Text mapNameText;
     [SerializeField] private Button prevMapButton;
     [SerializeField] private Button nextMapButton;
-    [SerializeField] private Toggle soloToggle;
-    [SerializeField] private Toggle teamToggle;
     [SerializeField] private Toggle[] maxPlayersToggles = new Toggle[3]; // 2명, 3명, 4명
     [SerializeField] private TMP_Text playerCountText;
     [SerializeField] private SlotRefs[] slots = new SlotRefs[4];
-    [SerializeField] private GameObject teamSection;
-    [SerializeField] private Button redTeamButton;
-    [SerializeField] private TMP_Text redTeamLabel;
-    [SerializeField] private Button blueTeamButton;
-    [SerializeField] private TMP_Text blueTeamLabel;
     [SerializeField] private Button startButton;
     [SerializeField] private Button readyButton;
     [SerializeField] private TMP_Text readyLabel;
@@ -144,10 +126,10 @@ public class RoomSetupView : UIView
     public event Action LeaveRequested;
 
     private bool isHost = true;
-    private bool isTeamMode;                 // 적용된 모드. 자리 색과 팀 배지, 팀 선택은 이 값을 따른다
     private Settings applied;                // 서버에 적용된 설정
     private Settings draft;                  // 방장이 바꾸는 중인 설정 (적용 전)
     private string[] mapNames = Array.Empty<string>();
+    private bool[] mapAvailable = Array.Empty<bool>(); // 고를 수 있는 맵. 비어 있으면 모두 고를 수 있다
     private Sprite[] mapPreviews = Array.Empty<Sprite>();
 
     public override void Bind()
@@ -158,8 +140,6 @@ public class RoomSetupView : UIView
         mapNameText = Find<TMP_Text>(sp + "MapSection/MapSelector/MapNameText");
         prevMapButton = Find<Button>(sp + "MapSection/MapSelector/PrevMapButton");
         nextMapButton = Find<Button>(sp + "MapSection/MapSelector/NextMapButton");
-        soloToggle = Find<Toggle>(sp + "ModeSection/ModeToggle/SoloToggle");
-        teamToggle = Find<Toggle>(sp + "ModeSection/ModeToggle/TeamToggle");
         if (maxPlayersToggles == null || maxPlayersToggles.Length != 3) maxPlayersToggles = new Toggle[3]; // 이미 저장된 프리팹에는 배열이 없다
         for (int i = 0; i < maxPlayersToggles.Length; i++)
             maxPlayersToggles[i] = Find<Toggle>($"{sp}MaxPlayersSection/MaxPlayersToggle/Max{i + 2}Toggle");
@@ -176,18 +156,11 @@ public class RoomSetupView : UIView
                 hostBadge = FindObject(s + "Portrait/HostBadge"),
                 readyBadge = Find<Image>(s + "Portrait/ReadyBadge"),
                 readyText = Find<TMP_Text>(s + "Portrait/ReadyBadge/Text"),
-                teamBadge = Find<Image>(s + "TeamBadge"),
-                teamText = Find<TMP_Text>(s + "TeamBadge/Text"),
                 nicknameText = Find<TMP_Text>(s + "NicknameText"),
                 bubble = Find<RectTransform>(s + "Portrait/ChatBubble"),
                 bubbleText = Find<TMP_Text>(s + "Portrait/ChatBubble/Text"),
             };
         }
-        teamSection = FindObject(w + "TeamSection");
-        redTeamButton = Find<Button>(w + "TeamSection/TeamButtons/RedTeamButton");
-        redTeamLabel = Find<TMP_Text>(w + "TeamSection/TeamButtons/RedTeamButton/Label");
-        blueTeamButton = Find<Button>(w + "TeamSection/TeamButtons/BlueTeamButton");
-        blueTeamLabel = Find<TMP_Text>(w + "TeamSection/TeamButtons/BlueTeamButton/Label");
         startButton = Find<Button>(w + "StartButton");
         readyButton = Find<Button>(w + "ReadyButton");
         readyLabel = Find<TMP_Text>(w + "ReadyButton/Label");
@@ -226,7 +199,6 @@ public class RoomSetupView : UIView
 
     private void Awake()
     {
-        if (teamToggle != null) teamToggle.onValueChanged.AddListener(OnTeamToggleChanged);
         SetOnClick(closeButton, () => LeaveRequested?.Invoke());
         SetOnClick(readyButton, OnReadyClicked);
         SetOnClick(applyButton, OnApplyClicked);
@@ -246,9 +218,6 @@ public class RoomSetupView : UIView
         SetOnClick(salaryNextButton, () => StepSalary(1));
         SetOnClick(botPrevButton, () => StepBots(-1));
         SetOnClick(botNextButton, () => StepBots(1));
-        // 팀 버튼은 Show를 거치지 않고 열어도 동작해야 해서 여기서 연결한다
-        SetOnClick(redTeamButton, () => ChangeLocalTeam(Team.Red, onRedTeamChanged));
-        SetOnClick(blueTeamButton, () => ChangeLocalTeam(Team.Blue, onBlueTeamChanged));
         InitChat();
         RefreshAll();
     }
@@ -265,28 +234,20 @@ public class RoomSetupView : UIView
         foreach (var r in slots) HideBubble(r);
     }
 
-    private Action onRedTeamChanged;
-    private Action onBlueTeamChanged;
-
-    /// <summary>제목 옆 줄에 방 이름, 방 코드, (있으면) 비밀번호를 보여 준다.</summary>
-    public void SetRoomInfo(string roomName, string roomCode, string password)
+    /// <summary>제목 옆 줄에 방 이름과 (있으면) 비밀번호를 보여 준다.</summary>
+    public void SetRoomInfo(string roomName, string password = null)
     {
         if (subtitleText == null) subtitleText = Find<TMP_Text>("RoomSetupPopup/Window/SubtitleText"); // 이미 만들어진 프리팹에는 연결돼 있지 않을 수 있다
         if (subtitleText == null) return;
-        string text = $"{roomName}  ·  방 코드 {roomCode}";
+        string text = roomName;
         if (!string.IsNullOrEmpty(password)) text += $"  ·  비밀번호 {password}";
         subtitleText.text = text;
     }
 
-    /// <summary>
-    /// onRedTeam / onBlueTeam: 팀 버튼을 눌러 이 화면의 플레이어(SetLocalPlayer) 팀이 실제로 바뀐 뒤 호출된다.
-    /// onStart: 방장이 "게임 시작"을 눌렀을 때.
-    /// </summary>
-    public void Show(Action onRedTeam, Action onBlueTeam, Action onStart)
+    /// <summary>onStart: 방장이 "게임 시작"을 눌렀을 때.</summary>
+    public void Show(Action onStart)
     {
         legacyMode = false;
-        onRedTeamChanged = onRedTeam;
-        onBlueTeamChanged = onBlueTeam;
         SetOnClick(startButton, onStart);
         Open();
     }
@@ -294,10 +255,7 @@ public class RoomSetupView : UIView
     // ───────────── 기존 호출 호환 (LobbyManager) ─────────────
     // 서버와 연결된 LobbyManager는 예전 방식(항목마다 따로 설정하는 SetMode, SetMap, SetMaxPlayers와 5개 인자 Show)으로 이 화면을 쓴다.
     // 그 코드를 고치지 않아도 되도록 예전 함수와 이벤트를 남겨 두고, 새 설정 묶음(applied, draft)으로 이어 준다.
-    // 새 코드는 SetMapChoices, SetSettings, SettingsApplied, 인자 3개 Show를 쓴다.
-
-    /// <summary>(호환) 방장이 "설정 적용"으로 모드를 바꾸면 호출. 서버가 받아들이면 SetMode로 새 값이 돌아온다.</summary>
-    public event Action<bool> ModeChanged;
+    // 새 코드는 SetMapChoices, SetSettings, SettingsApplied, 인자 1개 Show를 쓴다.
 
     /// <summary>(호환) 방장이 "설정 적용"으로 최대 인원을 바꾸면 호출. 서버가 받아들이면 SetMaxPlayers로 새 값이 돌아온다.</summary>
     public event Action<int> MaxPlayersChanged;
@@ -307,10 +265,10 @@ public class RoomSetupView : UIView
     private Action legacyNextMap;
 
     /// <summary>(호환) onPrevMap / onNextMap: 방장이 맵 화살표를 누르면 호출. 맵은 서버가 바꿔서 SetMap으로 돌려준다.</summary>
-    public void Show(Action onPrevMap, Action onNextMap, Action onRedTeam, Action onBlueTeam, Action onStart)
+    public void Show(Action onPrevMap, Action onNextMap, Action onStart)
     {
-        Show(onRedTeam, onBlueTeam, onStart);
-        legacyMode = true; // 인자 3개 Show가 끄므로 그 뒤에 켠다
+        Show(onStart);
+        legacyMode = true; // 인자 1개 Show가 끄므로 그 뒤에 켠다
         legacyPrevMap = onPrevMap;
         legacyNextMap = onNextMap;
         RefreshAll();
@@ -326,9 +284,6 @@ public class RoomSetupView : UIView
         }
         PatchApplied(s => { s.Map = mapName; return s; });
     }
-
-    /// <summary>(호환) 서버에 적용된 모드를 보여 준다.</summary>
-    public void SetMode(bool teamMode) => PatchApplied(s => { s.IsTeam = teamMode; return s; });
 
     /// <summary>(호환) 서버에 적용된 최대 인원을 보여 준다.</summary>
     public void SetMaxPlayers(int max) => PatchApplied(s => { s.MaxPlayers = max; return s; });
@@ -347,7 +302,7 @@ public class RoomSetupView : UIView
         SetSettings(next, true);
     }
 
-    // 예전 호출에서의 "설정 적용": 서버가 아는 항목(모드, 최대 인원)은 이벤트로 알리고,
+    // 예전 호출에서의 "설정 적용": 서버가 아는 항목(최대 인원)은 이벤트로 알리고,
     // 서버가 모르는 항목(시작 자금, 최대 라운드, 월급, 봇)은 화면에서만 적용된 것으로 한다. (안 그러면 시작 버튼이 계속 잠긴다)
     private void ApplyLegacy()
     {
@@ -357,12 +312,9 @@ public class RoomSetupView : UIView
         next.MaxRound = wanted.MaxRound;
         next.Salary = wanted.Salary;
         next.BotCount = wanted.BotCount;
-        bool modeChanged = wanted.IsTeam != applied.IsTeam;
         bool maxChanged = wanted.MaxPlayers != applied.MaxPlayers;
 
         SetSettings(next, true);
-        draft.IsTeam = applied.IsTeam; // 모드는 서버가 받아들여야 바뀐다. 안 받으면 원래대로 남는다
-        if (modeChanged) ModeChanged?.Invoke(wanted.IsTeam);
         if (maxChanged) MaxPlayersChanged?.Invoke(wanted.MaxPlayers);
         RefreshAll();
     }
@@ -370,10 +322,12 @@ public class RoomSetupView : UIView
     // ───────────── 게임 설정 (초안과 적용) ─────────────
 
     /// <summary>고를 수 있는 맵의 이름과 미리보기 그림. 이름과 그림은 같은 순서다. 그림이 null이면 이름만 보여 준다.</summary>
-    public void SetMapChoices(IList<string> names, IList<Sprite> previews)
+    public void SetMapChoices(IList<string> names, IList<Sprite> previews, IList<bool> available = null)
     {
         mapNames = new string[names.Count];
         names.CopyTo(mapNames, 0);
+        mapAvailable = new bool[mapNames.Length];
+        for (int i = 0; i < mapAvailable.Length; i++) mapAvailable[i] = available == null || (i < available.Count && available[i]);
         mapPreviews = new Sprite[mapNames.Length];
         for (int i = 0; i < mapNames.Length; i++) mapPreviews[i] = previews != null && i < previews.Count ? previews[i] : null;
         RefreshAll();
@@ -381,7 +335,7 @@ public class RoomSetupView : UIView
 
     /// <summary>
     /// 서버에 적용된 설정을 받는다. 목록에 없는 값은 가장 가까운 값으로 맞춘다.
-    /// 자리와 인원 표시, 팀 배지, 팀 선택은 이 값을 따른다.
+    /// 자리와 인원 표시는 이 값을 따른다.
     /// keepDraft가 false면 방장의 초안도 이 값으로 되돌린다. (처음 열 때, 적용이 끝났을 때)
     /// true면 방장이 바꾸던 항목은 그대로 두고, 바꾸지 않은 항목만 새 값을 따라간다. (방 안에서 다른 변화가 서버에서 올 때)
     /// </summary>
@@ -397,12 +351,9 @@ public class RoomSetupView : UIView
         var previous = applied;
         applied = settings;
         draft = keepDraft ? MergeDraft(previous, draft, settings) : settings;
-        isTeamMode = settings.IsTeam;
-        SetActive(teamSection, isTeamMode);
 
-        // 모드에 따라 자리 색과 팀 배지가 달라지므로 다시 그린다 (팀전: 팀 색, 개인전: 색 없음)
+        // 최대 인원이 바뀌면 닫힌 자리 표시가 달라지므로 자리를 다시 그린다
         for (int i = 0; i < slotData.Length; i++) SetSlot(i, slotData[i]);
-        RecountTeams();
         RefreshAll();
     }
 
@@ -420,7 +371,6 @@ public class RoomSetupView : UIView
     private static Settings MergeDraft(Settings previous, Settings draft, Settings next)
     {
         if (draft.Map == previous.Map) draft.Map = next.Map;
-        if (draft.IsTeam == previous.IsTeam) draft.IsTeam = next.IsTeam;
         if (draft.MaxPlayers == previous.MaxPlayers) draft.MaxPlayers = next.MaxPlayers;
         if (draft.StartMoney == previous.StartMoney) draft.StartMoney = next.StartMoney;
         if (draft.MaxRound == previous.MaxRound) draft.MaxRound = next.MaxRound;
@@ -440,16 +390,9 @@ public class RoomSetupView : UIView
     private void OnApplyClicked()
     {
         if (!isHost || SameSettings(applied, draft)) return;
-        // SettingsApplied를 받는 쪽이 있으면 설정 묶음 전체를 넘긴다. 없을 때만 예전 방식(모드, 최대 인원만 이벤트)으로 처리한다
+        // SettingsApplied를 받는 쪽이 있으면 설정 묶음 전체를 넘긴다. 없을 때만 예전 방식(최대 인원만 이벤트)으로 처리한다
         if (SettingsApplied == null && legacyMode) { ApplyLegacy(); return; }
         SettingsApplied?.Invoke(draft);
-    }
-
-    private void OnTeamToggleChanged(bool isOn)
-    {
-        if (draft.IsTeam == isOn) return;
-        draft.IsTeam = isOn; // 초안만 바꾼다. 자리의 팀 표시는 적용한 뒤에 바뀐다
-        RefreshAll();
     }
 
     private void OnMaxPlayersToggled(int value, bool isOn)
@@ -459,12 +402,27 @@ public class RoomSetupView : UIView
         RefreshAll();
     }
 
+    private bool IsMapAvailable(int index) => index >= 0 && index < mapAvailable.Length && mapAvailable[index];
+
+    private int AvailableMapCount()
+    {
+        int n = 0;
+        foreach (bool a in mapAvailable) if (a) n++;
+        return n;
+    }
+
     private void StepMap(int step)
     {
         if (legacyMode) { if (isHost) (step < 0 ? legacyPrevMap : legacyNextMap)?.Invoke(); return; } // 맵은 서버가 바꿔서 돌려준다
         if (!isHost || mapNames.Length == 0) return;
         int index = Mathf.Max(0, Array.IndexOf(mapNames, draft.Map));
-        draft.Map = mapNames[(index + step + mapNames.Length) % mapNames.Length];
+        for (int k = 1; k <= mapNames.Length; k++)
+        {
+            int next = ((index + step * k) % mapNames.Length + mapNames.Length) % mapNames.Length;
+            if (!IsMapAvailable(next)) continue; // 아직 없는 맵은 건너뛴다
+            draft.Map = mapNames[next];
+            break;
+        }
         RefreshAll();
     }
 
@@ -507,7 +465,7 @@ public class RoomSetupView : UIView
     }
 
     private static bool SameSettings(Settings a, Settings b) =>
-        a.Map == b.Map && a.IsTeam == b.IsTeam && a.MaxPlayers == b.MaxPlayers && a.StartMoney == b.StartMoney
+        a.Map == b.Map && a.MaxPlayers == b.MaxPlayers && a.StartMoney == b.StartMoney
         && a.MaxRound == b.MaxRound && a.Salary == b.Salary && a.BotCount == b.BotCount;
 
     // 사람 수와 봇 수를 센다 (적용된 자리 기준)
@@ -546,15 +504,13 @@ public class RoomSetupView : UIView
             mapImage.color = Color.white;
         }
         // 맵 화살표는 방장에게만 보인다. 참가자는 정해진 맵의 이름과 그림만 본다
-        bool canStepMap = isHost && (mapNames.Length > 1 || legacyMode);
+        bool canStepMap = isHost && (AvailableMapCount() > 1 || legacyMode); // 고를 수 있는 맵이 하나뿐이면 화살표를 잠근다
         SetActive(prevMapButton != null ? prevMapButton.gameObject : null, isHost);
         SetActive(nextMapButton != null ? nextMapButton.gameObject : null, isHost);
         if (prevMapButton != null) prevMapButton.interactable = canStepMap;
         if (nextMapButton != null) nextMapButton.interactable = canStepMap;
 
-        // 초안: 모드, 최대 인원
-        if (teamToggle != null) { teamToggle.SetIsOnWithoutNotify(draft.IsTeam); teamToggle.interactable = isHost; }
-        if (soloToggle != null) { soloToggle.SetIsOnWithoutNotify(!draft.IsTeam); soloToggle.interactable = isHost; }
+        // 초안: 최대 인원
         for (int i = 0; i < maxPlayersToggles.Length; i++)
         {
             var toggle = maxPlayersToggles[i];
@@ -584,7 +540,6 @@ public class RoomSetupView : UIView
         SetActive(readyButton != null ? readyButton.gameObject : null, !isHost);
         RefreshHint(dirty);
         if (startButton != null) startButton.interactable = CanStart() && !dirty;
-        UpdateTeamButtons();
     }
 
     // 값을 한 칸씩 넘기는 화살표 한 쌍: index가 처음이면 이전을, 마지막(count - 1)이면 다음을 끈다. 방장이 아니면 화살표를 숨긴다.
@@ -606,15 +561,14 @@ public class RoomSetupView : UIView
 
     // ───────────── 자리 ─────────────
 
-    /// <summary>자리 1칸을 그린다. 모드(개인전/팀전), 팀, 방장, 준비 상태에 따라 색과 배지가 달라진다.</summary>
+    /// <summary>자리 1칸을 그린다. 방장, 준비 상태에 따라 색과 배지가 달라진다.</summary>
     public void SetSlot(int index, Slot slot)
     {
         if (index < 0 || index >= slots.Length || slots[index] == null) return;
         slotData[index] = slot;
         var r = slots[index];
 
-        // 팀전이면 팀 색, 개인전이면 색 없이 담백하게. 빈 자리는 어느 쪽이든 회색이고,
-        // 최대 인원 밖의 빈 자리(잠긴 자리)는 더 흐리게 해서 쓸 수 없다는 것을 보여 준다.
+        // 빈 자리는 회색이고, 최대 인원 밖의 빈 자리(잠긴 자리)는 더 흐리게 해서 쓸 수 없다는 것을 보여 준다.
         bool locked = slot.IsEmpty && index >= applied.MaxPlayers;
         Color bgColor, strokeColor;
         if (slot.IsEmpty)
@@ -632,23 +586,18 @@ public class RoomSetupView : UIView
                 strokeColor = EmptySlotStroke;
             }
         }
-        else if (isTeamMode)
-        {
-            bgColor = slot.Team == Team.Blue ? BlueTeamBg : RedTeamBg;
-            strokeColor = slot.Team == Team.Blue ? UIPalette.Player[1] : UIPalette.Player[0];
-        }
         else
         {
-            // 개인전: 게임에서 쓰는 플레이어 색(자리 순서)을 옅게 깔아 누가 어떤 색인지 보이게 한다
+            // 게임에서 쓰는 플레이어 색(자리 순서)을 옅게 깔아 누가 어떤 색인지 보이게 한다
             bgColor = UIPalette.PlayerLightColor(slot.ColorIndex);
             strokeColor = UIPalette.PlayerColor(slot.ColorIndex);
         }
 
         if (r.background != null) r.background.color = bgColor;
         if (r.stroke != null) r.stroke.color = strokeColor;
-        // 초상화 테두리: 팀전은 팀 색, 개인전은 원래대로 플레이어 색을 유지한다
+        // 초상화 테두리는 플레이어 색
         if (r.portraitRing != null)
-            r.portraitRing.color = slot.IsEmpty ? bgColor : isTeamMode ? strokeColor : UIPalette.PlayerColor(slot.ColorIndex);
+            r.portraitRing.color = slot.IsEmpty ? bgColor : UIPalette.PlayerColor(slot.ColorIndex);
         SetPortrait(r.portraitImage, slot.IsEmpty ? null : slot.Portrait, Color.white);
         if (r.nicknameText != null)
         {
@@ -673,25 +622,7 @@ public class RoomSetupView : UIView
             r.readyText.color = slot.IsBot ? BotBadgeText : slot.IsReady ? UIPalette.ReadyText : UIPalette.InkSub;
         }
 
-        if (r.teamBadge != null)
-        {
-            r.teamBadge.gameObject.SetActive(isTeamMode && !slot.IsEmpty);
-            r.teamBadge.color = slot.Team == Team.Blue ? BlueTeamBg : RedTeamBg; // 팀은 레드 아니면 블루, "미선택"은 없다
-        }
-        if (r.teamText != null)
-        {
-            r.teamText.text = slot.Team == Team.Blue ? "블루팀" : "레드팀";
-            r.teamText.color = slot.Team == Team.Blue ? BlueTeamText : RedTeamText;
-        }
         RefreshAll();
-    }
-
-    /// <summary>팀 인원 표시. 팀을 고를 때 인원 제한은 없다. (시작할 때만 두 팀 인원이 같아야 한다)</summary>
-    public void SetTeamCounts(int red, int blue)
-    {
-        // 팀 버튼에는 팀 이름만 보인다. (인원 수는 보여 주지 않는다)
-        if (redTeamLabel != null) redTeamLabel.text = "레드팀";
-        if (blueTeamLabel != null) blueTeamLabel.text = "블루팀";
     }
 
     private bool localReady;
@@ -715,44 +646,19 @@ public class RoomSetupView : UIView
 
     /// <summary>
     /// 시작할 수 있는 자리 상태인지. 방장만 시작할 수 있고, 2명 이상이며, 방장 외 모든 플레이어가 준비를 마쳤어야 한다.
-    /// 팀전이면 두 팀 인원도 같아야 한다. (적용하지 않은 설정 변경이 없어야 하는 조건은 RefreshAll이 더한다)
+    /// (적용하지 않은 설정 변경이 없어야 하는 조건은 RefreshAll이 더한다)
     /// </summary>
     private bool CanStart()
     {
-        int total = 0, red = 0, blue = 0;
+        int total = 0;
         bool allReady = true;
         foreach (var slot in slotData)
         {
             if (slot.IsEmpty) continue;
             total++;
             if (!slot.IsHost && !slot.IsReady) allReady = false;
-            if (slot.Team == Team.Red) red++;
-            else if (slot.Team == Team.Blue) blue++;
         }
-        return isHost && total >= 2 && allReady && (!isTeamMode || red == blue);
-    }
-
-    // 내가 속한 팀 버튼은 또렷하게, 다른 팀 버튼은 흐리게 해서 어느 팀을 골랐는지 한눈에 보이게 한다
-    private void UpdateTeamButtons()
-    {
-        Team mine = slotData[localSlot].IsEmpty ? Team.None : slotData[localSlot].Team;
-        DimTeamButton(redTeamButton, mine != Team.Red);
-        DimTeamButton(blueTeamButton, mine != Team.Blue);
-    }
-
-    private static void DimTeamButton(Button button, bool dim)
-    {
-        if (button == null) return;
-        float alpha = dim ? 0.5f : 1f;
-        if (button.targetGraphic is Image image)
-        {
-            var c = image.color; c.a = alpha; image.color = c;
-        }
-        var label = button.GetComponentInChildren<TMP_Text>();
-        if (label != null)
-        {
-            var c = label.color; c.a = alpha; label.color = c;
-        }
+        return isHost && total >= 2 && allReady;
     }
 
     // ───────────── 탭 (게임 설정 / 채팅) ─────────────
@@ -781,6 +687,7 @@ public class RoomSetupView : UIView
             canvas.overrideSorting = true;
             canvas.sortingOrder = rootCanvas != null ? rootCanvas.sortingOrder + 1 : 1;
             if (r.bubble.GetComponent<CanvasGroup>() == null) r.bubble.gameObject.AddComponent<CanvasGroup>();
+            if (r.bubbleText != null) r.bubbleText.richText = false; // 다른 사람이 보낸 <size> 같은 태그가 말풍선을 망치지 않게
             HideBubble(r);
         }
         SetTab(false);
@@ -928,7 +835,7 @@ public class RoomSetupView : UIView
         r.bubble.gameObject.SetActive(false);
     }
 
-    // ───────────── 팀 선택 ─────────────
+    // ───────────── 자리 정보 ─────────────
 
     // 아직 SetSlot 하지 않은 자리는 빈 자리로 센다
     private readonly Slot[] slotData =
@@ -938,39 +845,6 @@ public class RoomSetupView : UIView
     };
     private int localSlot;
 
-    /// <summary>이 화면의 플레이어가 몇 번째 슬롯인지(0~3). 팀 버튼은 이 슬롯의 팀을 바꾼다.</summary>
+    /// <summary>이 화면의 플레이어가 몇 번째 슬롯인지(0~3). 채팅을 보낼 때 이 슬롯의 이름과 색을 쓴다.</summary>
     public void SetLocalPlayer(int slotIndex) => localSlot = Mathf.Clamp(slotIndex, 0, slotData.Length - 1);
-
-    /// <summary>현재 슬롯들의 팀으로 인원 수와 팀 버튼 상태를 다시 계산한다.</summary>
-    public void RecountTeams()
-    {
-        int red = 0, blue = 0;
-        foreach (var slot in slotData)
-        {
-            if (slot.IsEmpty) continue;
-            if (slot.Team == Team.Red) red++;
-            else if (slot.Team == Team.Blue) blue++;
-        }
-        SetTeamCounts(red, blue);
-    }
-
-    private void ChangeLocalTeam(Team team, Action onChanged)
-    {
-        if (!isTeamMode) return;
-        var slot = slotData[localSlot];
-        if (slot.IsEmpty || slot.Team == team) return;
-
-        slot.Team = team; // 팀을 고를 때 인원 제한은 없다. 인원이 같아야 하는 건 게임을 시작할 때뿐이다.
-        SetSlot(localSlot, slot);
-        RecountTeams();
-
-        // 바뀐 팀 배지가 톡 튄다
-        var badge = slots[localSlot] != null && slots[localSlot].teamBadge != null ? slots[localSlot].teamBadge.transform : null;
-        if (badge != null)
-        {
-            badge.DOKill(true);
-            badge.DOPunchScale(Vector3.one * 0.25f, 0.3f, 6, 0.6f).SetUpdate(true).SetLink(badge.gameObject);
-        }
-        onChanged?.Invoke();
-    }
 }

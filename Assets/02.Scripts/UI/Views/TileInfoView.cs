@@ -8,6 +8,9 @@ public class TileInfoView : UIView
     public override string PanelPath => "TileInfoPopup";
 
     [SerializeField] private Image tileImage;
+    [SerializeField] private GameObject imagePlaceholder; // "TILE IMAGE" 자리표시 글자. 땅 그림이 있으면 숨긴다
+    private Color placeholderColor;
+    private bool placeholderColorCached;
     [SerializeField] private GameObject ownerChip;
     [SerializeField] private TMP_Text ownerText;
     [SerializeField] private TMP_Text tileNameText;
@@ -28,6 +31,7 @@ public class TileInfoView : UIView
     {
         const string w = "TileInfoPopup/";
         tileImage = Find<Image>(w + "TilePortrait/TileImage");
+        imagePlaceholder = FindObject(w + "TilePortrait/PlaceholderText");
         ownerChip = FindObject(w + "TilePortrait/OwnerChip");
         ownerText = Find<TMP_Text>(w + "TilePortrait/OwnerChip/OwnerText");
         tileNameText = Find<TMP_Text>(w + "TileNameText");
@@ -89,7 +93,13 @@ public class TileInfoView : UIView
         if (special && specialTollText != null)
             specialTollText.text = tolls != null && tolls.Length > 0 ? UIPalette.Money(tolls[0]) : "-";
 
-        if (image != null && tileImage != null) { tileImage.sprite = image; tileImage.color = Color.white; }
+        if (tileImage != null)
+        {
+            if (!placeholderColorCached) { placeholderColor = tileImage.color; placeholderColorCached = true; }
+            tileImage.sprite = image;
+            tileImage.color = image != null ? Color.white : placeholderColor; // 그림이 없으면 이전 땅 그림이 남지 않게 자리표시로 되돌린다
+        }
+        SetActive(imagePlaceholder, image == null);
         if (tileNameText != null) tileNameText.text = tileName;
 
         bool owned = !string.IsNullOrEmpty(ownerName);

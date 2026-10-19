@@ -13,6 +13,9 @@ public class ExitConfirmView : UIView
     [SerializeField] private Button cancelButton;
     [SerializeField] private TMP_Text messageText;
 
+    private string defaultMessage, defaultConfirmLabel, defaultCancelLabel;
+    private bool defaultsCached;
+
     public override void Bind()
     {
         const string w = "ExitConfirmPopup/Window/";
@@ -23,11 +26,25 @@ public class ExitConfirmView : UIView
 
     /// <param name="onConfirm">나가기를 눌렀을 때. 창을 닫은 뒤 호출된다.</param>
     /// <param name="message">안내 문장. 비우면 프리팹에 적힌 문장을 쓴다.</param>
-    public void Show(Action onConfirm, string message = null)
+    /// <param name="confirmLabel">확인 버튼 글자. 비우면 프리팹에 적힌 글자(나가기)를 쓴다.</param>
+    /// <param name="cancelLabel">취소 버튼 글자. 비우면 프리팹에 적힌 글자를 쓴다.</param>
+    public void Show(Action onConfirm, string message = null, string confirmLabel = null, string cancelLabel = null)
     {
         // 이미 만들어진 프리팹에는 이 칸이 연결돼 있지 않을 수 있어 처음 쓸 때 찾는다
         if (messageText == null) messageText = Find<TMP_Text>("ExitConfirmPopup/Window/MessageText");
-        if (message != null && messageText != null) messageText.text = message;
+        var confirmText = confirmButton != null ? confirmButton.GetComponentInChildren<TMP_Text>(true) : null;
+        var cancelText = cancelButton != null ? cancelButton.GetComponentInChildren<TMP_Text>(true) : null;
+        if (!defaultsCached)
+        {
+            defaultMessage = messageText != null ? messageText.text : null;
+            defaultConfirmLabel = confirmText != null ? confirmText.text : null;
+            defaultCancelLabel = cancelText != null ? cancelText.text : null;
+            defaultsCached = true;
+        }
+        // 이 창은 여러 곳에서 같이 쓰므로, 부를 때마다 문구를 새로 정한다 (이전에 바꾼 문구가 남지 않게)
+        if (messageText != null) messageText.text = message ?? defaultMessage;
+        if (confirmText != null) confirmText.text = confirmLabel ?? defaultConfirmLabel;
+        if (cancelText != null) cancelText.text = cancelLabel ?? defaultCancelLabel;
         SetOnClick(confirmButton, () => { Close(); onConfirm?.Invoke(); });
         SetOnClick(cancelButton, Close);
         Open();

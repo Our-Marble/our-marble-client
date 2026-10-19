@@ -40,6 +40,9 @@ public class PurchasePopupView : UIView
     private const int OptionCount = 4; // 건물, 별 1~3개 (BuildingLevel 순서)
 
     [SerializeField] private Image tileImage;
+    [SerializeField] private GameObject imagePlaceholder; // "TILE IMAGE" 자리표시 글자. 땅 그림이 있으면 숨긴다
+    private Color placeholderColor;
+    private bool placeholderColorCached;
     [SerializeField] private TMP_Text tileNameText;
     [SerializeField] private GameObject stageTrackRoot;    // 별 단계 표시 (특수 칸에서는 숨김)
     [SerializeField] private GameObject optionsRoot;       // 건물/별 선택 카드 (특수 칸에서는 숨김)
@@ -65,6 +68,7 @@ public class PurchasePopupView : UIView
     {
         const string w = "PurchasePopup/Window/";
         tileImage = Find<Image>(w + "TilePortrait/TileImage");
+        imagePlaceholder = FindObject(w + "TilePortrait/PlaceholderText");
         tileNameText = Find<TMP_Text>(w + "TileNameText");
         ownerText = Find<TMP_Text>(w + "TilePortrait/OwnerChip/OwnerText");
         stageTrackRoot = FindObject(w + "StageTrack");
@@ -111,7 +115,13 @@ public class PurchasePopupView : UIView
             }
 
         if (cancelButton != null) cancelButton.interactable = true;
-        if (image != null && tileImage != null) { tileImage.sprite = image; tileImage.color = Color.white; }
+        if (tileImage != null)
+        {
+            if (!placeholderColorCached) { placeholderColor = tileImage.color; placeholderColorCached = true; }
+            tileImage.sprite = image;
+            tileImage.color = image != null ? Color.white : placeholderColor; // 그림이 없으면 이전 땅 그림이 남지 않게 자리표시로 되돌린다
+        }
+        SetActive(imagePlaceholder, image == null);
         if (tileNameText != null) tileNameText.text = tileName;
         // 특수 칸(별 건설 없음): 선택 카드와 별 단계 대신 "특수 칸" 배지와 효과 설명을 보여준다. 살 수 있는 것은 땅(건물)뿐이다
         bool special = specialDescription != null;

@@ -8,7 +8,6 @@ using UnityEngine.UI;
 public class TopBarView : UIView
 {
     [SerializeField] private TMP_Text roomNameText;
-    [SerializeField] private TMP_Text roomCodeText;
     [SerializeField] private TMP_Text playerCountText;
     [SerializeField] private TMP_Text turnText;
     [SerializeField] private Button settingsButton;
@@ -20,7 +19,6 @@ public class TopBarView : UIView
     public override void Bind()
     {
         roomNameText = Find<TMP_Text>("TopBar/RoomInfo/RoomNameText");
-        roomCodeText = Find<TMP_Text>("TopBar/RoomInfo/RoomCodeChip/RoomCodeText");
         playerCountText = Find<TMP_Text>("TopBar/RoomInfo/PlayerCountChip/PlayerCountText");
         passwordChip = FindObject("TopBar/RoomInfo/PasswordChip");
         passwordText = Find<TMP_Text>("TopBar/RoomInfo/PasswordChip/PasswordText");
@@ -30,11 +28,10 @@ public class TopBarView : UIView
         exitButton = Find<Button>("TopBar/Buttons/ExitButton");
     }
 
-    /// <summary>방 이름과 방 코드를 보여 준다.</summary>
-    public void SetRoom(string roomName, string roomCode)
+    /// <summary>방 이름을 보여 준다.</summary>
+    public void SetRoom(string roomName)
     {
         if (roomNameText != null) roomNameText.text = roomName;
-        if (roomCodeText != null) roomCodeText.text = $"방 코드  {roomCode}";
     }
 
     /// <summary>"현재 인원 / 최대 인원명"을 보여 준다.</summary>

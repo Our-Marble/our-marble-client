@@ -23,6 +23,7 @@ public static class SceneFlow
     public static bool ToLogin()
     {
         WebSocketNetwork.Instance.closeWebSocketSession();
+        LobbyNetwork.Instance.ClearQueue(); // 이 접속에서 쌓인 로비 메시지는 다음 접속에 넘기지 않는다
         return Load(LoginScenePath, false);
     }
 
