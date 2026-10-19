@@ -264,11 +264,7 @@ public class UIDebugPanel : MonoBehaviour
         Row(("내 현금 0", () => SetMyMoney(0)), ("내 현금 1,000", () => SetMyMoney(1000)));
 
         RichLabel("<b>① 강제 파산</b> (통행료를 못 낼 때와 같은 처리: 재산을 상대에게 넘기고 다음 차례로)");
-        if (GUILayout.Button("강제 파산 실행 (HandleBankruptcy → 다음 차례)")) RunBankrupt(voluntary: false);
-
-        RichLabel("<b>② 자발적 파산</b> (매각 창 '파산 신청' → 예 와 같은 처리)");
-        Row(("바로 실행 (DeclareBankruptcy)", () => RunBankrupt(voluntary: true)),
-            ("매각 창 열기 (필요 1,000만)", OpenSellForBankrupt));
+        if (GUILayout.Button("강제 파산 실행 (HandleBankruptcy → 다음 차례)")) RunBankrupt();
 
         if (GUILayout.Button("시험 상태 되돌리기 (파산·땅·게임 종료 초기화)")) ResetBankruptTest();
     }
@@ -291,7 +287,7 @@ public class UIDebugPanel : MonoBehaviour
     }
 
     // payer(나)가 파산한다. 차례는 payer 것으로 맞춘 뒤 실제 처리 함수를 부른다.
-    private void RunBankrupt(bool voluntary)
+    private void RunBankrupt()
     {
         int payerIndex = LocalPlayer;
         PlayerState payer = Players[payerIndex];
@@ -301,24 +297,9 @@ public class UIDebugPanel : MonoBehaviour
 
         State.CurrentPlayerId = payer.PlayerId;
         UI.CloseAllPopups();
-        if (voluntary)
-        {
-            UI.DeclareBankruptcy(payer.PlayerId, receiver.PlayerId);
-        }
-        else
-        {
-            Game.HandleBankruptcy(payer.PlayerId, receiver.PlayerId);
-            if (!State.IsGameOver) Game.HandleTurnChanged(Players[NextPlayer(payerIndex)].PlayerId);
-        }
-        Log($"{NameOf(payerIndex)} {(voluntary ? "자발적" : "강제")} 파산 → {NameOf(Players.FindIndex(p => p.PlayerId == receiver.PlayerId))}에게 재산 이전");
-    }
-
-    // 매각 창을 열어 '파산 신청' 버튼을 눌러 볼 수 있게 한다 (필요 금액이 현금보다 훨씬 크다)
-    private void OpenSellForBankrupt()
-    {
-        sellTiles.Clear();
-        State.CurrentPlayerId = Players[LocalPlayer].PlayerId;
-        UI.ShowSellPropertiesPopup(Players[LocalPlayer].PlayerId, Players[NextPlayer(LocalPlayer)].PlayerId, 10000000);
+        Game.HandleBankruptcy(payer.PlayerId, receiver.PlayerId);
+        if (!State.IsGameOver) Game.HandleTurnChanged(Players[NextPlayer(payerIndex)].PlayerId);
+        Log($"{NameOf(payerIndex)} 강제 파산 → {NameOf(Players.FindIndex(p => p.PlayerId == receiver.PlayerId))}에게 재산 이전");
     }
 
     // 파산, 땅 주인, 게임 종료 상태를 처음으로 돌린다. (현금은 그대로)

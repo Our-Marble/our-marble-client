@@ -74,9 +74,6 @@ public class UIManager : MonoBehaviour
     /// </summary>
     public event Action<SelectionKind> SelectionTimedOut;
 
-    /// <summary>매각 창의 '파산 신청' 버튼 (payerId, receiverId). 구독하는 쪽이 파산 요청을 처리한다.</summary>
-    public event Action<long, long> BankruptRequested;
-
     private void Awake()
     {
         if (Instance != null && Instance != this)
@@ -106,7 +103,6 @@ public class UIManager : MonoBehaviour
         HookSelectionTimer(sell, SelectionKind.Sell);
         HookSelectionTimer(destinationSelect, SelectionKind.Destination);
         HookSelectionTimer(islandEscape, SelectionKind.IslandEscape);
-        if (exitConfirm != null) exitConfirm.Closed += () => bankruptConfirmShown = false;
 
         // 상단바: 로비에서 넘어온 방 정보 표시, 설정은 설정 창 열기/닫기, 나가기는 확인 후 로비로 돌아간다
         if (topBar != null)
@@ -461,7 +457,7 @@ public class UIManager : MonoBehaviour
 
         PlayerState payer = GetPlayer(payerId);
 
-        sell.Show(requiredAmount, payer != null ? payer.Money : 0, ConfirmBankrupt, CompleteSell);
+        sell.Show(requiredAmount, payer != null ? payer.Money : 0, AutoSelectSell, CompleteSell);
         sell.SetCompleteInteractable(false); // 아무것도 고르지 않은 처음에는 꺼진 상태
     }
 
@@ -487,8 +483,7 @@ public class UIManager : MonoBehaviour
     #region 매각
 
     private bool sellMode;
-    private int sellSession;            // 매각을 시작하거나 끝낼 때마다 늘려서, 늦게 도착한 확인 창·시간 초과 처리가 이미 끝난 매각에 파산을 걸지 못하게 한다
-    private bool bankruptConfirmShown;  // "파산하시겠어요?" 확인 창이 떠 있는 중
+    private int sellSession;            // 매각을 시작하거나 끝낼 때마다 늘려서, 늦게 도착한 시간 초과 처리가 이미 끝난 매각에 자동 매각을 걸지 못하게 한다
     private long sellPayerId;
     private long sellReceiverId;
     private long sellRequired;
@@ -527,67 +522,40 @@ public class UIManager : MonoBehaviour
         sell.SetSelectedTotal(total); // 부족한 금액 갱신 + 현금 + 합계 >= 필요 금액이면 완료 버튼 켜짐
     }
 
-    // 매각 창의 제한시간이 끝났다: 땅을 팔지도 파산을 신청하지도 않았으니 파산으로 처리한다. (확인 창이 떠 있었다면 닫는다)
-    private void BankruptOnTimeout(int session)
+    private const SellSelectionMode AutoSellMode = SellSelectionMode.CheapestFirst; // 자동 선택 방식: 매각가가 싼 땅부터 부족분이 찰 때까지
+
+    // 자동 선택으로 고른 땅 번호들. 부족분(필요 금액 - 현금)을 채우는 땅을 PropertyManager의 자동 선택 규칙으로 고른다.
+    private List<int> AutoChosenProperties()
+    {
+        if (State == null || PropertyManager.Instance == null) return new List<int>();
+        PlayerState payer = GetPlayer(sellPayerId);
+        long shortage = sellRequired - (payer != null ? payer.Money : 0);
+        return PropertyManager.Instance.AutoChooseSellProperties(sellPayerId, shortage, State.PropertyStates, AutoSellMode);
+    }
+
+    // "자동 선택" 버튼: 부족한 금액을 채울 땅을 골라 보드에 선택 표시만 한다. 실제 매각은 "매각 완료"를 눌러야 한다.
+    private void AutoSelectSell()
+    {
+        if (!sellMode || BoardManager.Instance == null || BoardManager.Instance.BoardController == null) return;
+        BoardController board = BoardManager.Instance.BoardController;
+
+        foreach (int index in new List<int>(board.selectedIndexes)) board.OnBoardTileClicked(index); // 지금 고른 땅을 모두 해제
+        foreach (int propertyId in AutoChosenProperties())
+        {
+            PropertyData data = PropertyManager.Instance.GetData(propertyId);
+            if (data != null) board.OnBoardTileClicked(data.BoardIndex); // 하나씩 선택으로 켠다 (합계와 완료 버튼은 CheckTilesValidForSell이 갱신)
+        }
+    }
+
+    // 매각 창의 제한시간이 끝났다: 파산하지 않고, 자동 선택한 땅을 바로 판다.
+    private void SellOnTimeout(int session)
     {
         if (session != sellSession) return; // 그 사이 매각이 끝났거나(서버 메시지로 창이 닫힘 등) 새로 시작됐다
         sellSession++;
-        long payerId = sellPayerId, receiverId = sellReceiverId;
-        if (exitConfirm != null && exitConfirm.IsOpen) exitConfirm.Close();
+        long payerId = sellPayerId;
+        List<int> propertyIds = AutoChosenProperties();
         ExitSellMode();
-        BankruptRequested?.Invoke(payerId, receiverId);
-        DeclareBankruptcy(payerId, receiverId);
-    }
-
-    /// <summary>
-    /// 자발적 파산(파산 신청 "예", 매각 시간 초과). 통행료를 못 낼 때의 강제 파산과 같은 처리(GameManager.HandleBankruptcy)를 부르고,
-    /// 게임이 계속되면 다음 사람 차례로 넘긴다. 서버에는 아직 파산 신청 메시지가 없어서 이 클라이언트에서만 처리된다.
-    /// </summary>
-    public void DeclareBankruptcy(long payerId, long receiverId)
-    {
-        GameManager game = Game;
-        GameState state = State;
-        if (game == null || state == null || state.IsGameOver) return;
-        PlayerState payer = GetPlayer(payerId);
-        if (payer == null || payer.IsBankrupt) return; // 이미 파산했다면 다시 처리하지 않는다
-
-        game.HandleBankruptcy(payerId, receiverId);
-        if (!state.IsGameOver) game.HandleTurnChanged(NextAlivePlayerId(state.CurrentPlayerId));
-    }
-
-    // 현재 차례 다음 순서부터 한 바퀴 돌면서 파산하지 않은 첫 사람 (GameManager.GetNextPlayerId와 같은 규칙)
-    private long NextAlivePlayerId(long currentId)
-    {
-        List<long> order = State.PlayerOrder;
-        int index = order.IndexOf(currentId);
-        for (int i = 1; i <= order.Count; i++)
-        {
-            long candidateId = order[(index + i) % order.Count];
-            PlayerState candidate = GetPlayer(candidateId);
-            if (candidate != null && !candidate.IsBankrupt) return candidateId;
-        }
-        return currentId;
-    }
-
-    // "파산 신청" 버튼: 정말 파산할지 먼저 묻고, "예"를 누르면 파산 처리를 한다. "아니오"면 매각 창이 그대로 남는다.
-    private void ConfirmBankrupt()
-    {
-        int session = sellSession;
-        void Declare()
-        {
-            if (session != sellSession) return; // 확인 창이 떠 있는 동안 매각이 끝났다면(서버 메시지, 시간 초과 등) 파산시키지 않는다
-            sellSession++;
-            long payerId = sellPayerId, receiverId = sellReceiverId;
-            if (sell != null) sell.Close();
-            ExitSellMode();
-            BankruptRequested?.Invoke(payerId, receiverId);
-            DeclareBankruptcy(payerId, receiverId);
-        }
-
-        if (exitConfirm == null) { Declare(); return; }
-        bankruptConfirmShown = true;
-        exitConfirm.Show(Declare,
-            "파산하시겠어요?\n가진 땅과 현금이 모두 상대에게 넘어가고\n게임에서 탈락해요.", "예", "아니오");
+        if (Game != null && propertyIds.Count > 0) Game.SellProperties(payerId, propertyIds);
     }
 
     // "매각 완료" 버튼
@@ -1240,7 +1208,6 @@ public class UIManager : MonoBehaviour
         sellSession++;
         StopSelectionTimer();
         EndBoardSelection();
-        if (bankruptConfirmShown && exitConfirm != null && exitConfirm.IsOpen) exitConfirm.Close(); // 매각이 끝났으니 남은 파산 확인 창도 닫는다
 
         UIView[] popups = { purchase, takeover, sell, destinationSelect };
         foreach (var popup in popups)
@@ -1332,7 +1299,7 @@ public class UIManager : MonoBehaviour
             if (epoch != timerEpoch) return;
             // 주사위 굴리기 UI는 화면에 계속 두고 비활성화만 한다. (다음 내 차례에 ShowRollDicePopup이 다시 켠다)
             if (kind != SelectionKind.RollDice) window.Close();
-            if (kind == SelectionKind.Sell) BankruptOnTimeout(sellSessionAtTimeout); // 매각도 파산 신청도 하지 않고 시간이 끝나면 파산
+            if (kind == SelectionKind.Sell) SellOnTimeout(sellSessionAtTimeout); // 매각을 마치지 못하고 시간이 끝나면 자동 선택한 땅을 판다
             SelectionTimedOut?.Invoke(kind);
         }, ignoreTimeScale: true);
     }

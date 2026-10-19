@@ -13,7 +13,7 @@ public class SellPopupView : UIView
 
     [SerializeField] private TMP_Text shortfallText;
     [SerializeField] private TMP_Text cashText;
-    [SerializeField] private Button bankruptButton;
+    [SerializeField] private Button autoSelectButton;
     [SerializeField] private Button sellCompleteButton;
 
     private long requiredAmount;
@@ -24,18 +24,18 @@ public class SellPopupView : UIView
         const string w = "SellPopup/Window/";
         shortfallText = Find<TMP_Text>(w + "SummaryPanel/ShortfallRow/ValueText");
         cashText = Find<TMP_Text>(w + "SummaryPanel/CashRow/ValueText");
-        bankruptButton = Find<Button>(w + "BankruptButton");
+        autoSelectButton = Find<Button>(w + "AutoSelectButton");
         sellCompleteButton = Find<Button>(w + "SellCompleteButton");
     }
 
     /// <summary>requiredAmount: 내야 할 금액.</summary>
-    public void Show(long requiredAmount, long cash, Action onBankrupt, Action onSellComplete)
+    public void Show(long requiredAmount, long cash, Action onAutoSelect, Action onSellComplete)
     {
         this.requiredAmount = requiredAmount;
         this.cash = cash;
         CashRoll.Set(cash, animate: false);
 
-        SetOnClick(bankruptButton, onBankrupt);
+        SetOnClick(autoSelectButton, onAutoSelect);
         SetOnClick(sellCompleteButton, () => { Close(); onSellComplete?.Invoke(); });
 
         SetSelectedTotal(0, animate: false);

@@ -1083,7 +1083,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "\uD30C\uC0B0 \uC2E0\uCCAD"
+  m_text: "\uC790\uB3D9 \uC120\uD0DD"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: cafdd8020a9b4584ab3202fc6b118037, type: 2}
   m_sharedMaterial: {fileID: -2759815069154269271, guid: cafdd8020a9b4584ab3202fc6b118037, type: 2}
@@ -1571,8 +1571,9 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_text: "\uD1B5\uD589\uB8CC\uAC00 \uBD80\uC871\uD574\uC694. \uBCF4\uB4DC\uC5D0\uC11C
-    \uB9E4\uAC01\uD560 \uB545\uC744 \uC120\uD0DD\uD574 \uC8FC\uC138\uC694.\n\uC2DC\uAC04\uC774
-    \uB05D\uB098\uBA74 \uC790\uB3D9\uC73C\uB85C \uD30C\uC0B0 \uCC98\uB9AC\uB3FC\uC694."
+    \uB9E4\uAC01\uD560 \uB545\uC744 \uC120\uD0DD\uD558\uAC70\uB098\n\uC790\uB3D9
+    \uC120\uD0DD\uC744 \uB20C\uB7EC \uC8FC\uC138\uC694. \uC2DC\uAC04\uC774 \uB05D\uB098\uBA74
+    \uC790\uB3D9\uC73C\uB85C \uB9E4\uAC01\uB3FC\uC694."
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 310f6cd3139b81c4199fc0e175244fc5, type: 2}
   m_sharedMaterial: {fileID: -4144461782606068256, guid: 310f6cd3139b81c4199fc0e175244fc5, type: 2}
@@ -2175,7 +2176,7 @@ GameObject:
   - component: {fileID: 3180367878507325626}
   - component: {fileID: 5631026206279842001}
   m_Layer: 5
-  m_Name: BankruptButton
+  m_Name: AutoSelectButton
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -2418,5 +2419,5 @@ MonoBehaviour:
   dimGroup: {fileID: 0}
   shortfallText: {fileID: 6180922455069740285}
   cashText: {fileID: 748669484969545331}
-  bankruptButton: {fileID: 3180367878507325626}
+  autoSelectButton: {fileID: 3180367878507325626}
   sellCompleteButton: {fileID: 8098364002753521946}
