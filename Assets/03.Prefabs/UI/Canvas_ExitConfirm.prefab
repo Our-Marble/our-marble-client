@@ -120,6 +120,7 @@ MonoBehaviour:
   dimGroup: {fileID: 1525257914424653938}
   confirmButton: {fileID: 5848630700858291605}
   cancelButton: {fileID: 1124356921112246353}
+  messageText: {fileID: 8279423610869306568}
 --- !u!1 &1562182095677801963
 GameObject:
   m_ObjectHideFlags: 0

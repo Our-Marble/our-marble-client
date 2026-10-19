@@ -13,8 +13,6 @@ public class SellPopupView : UIView
 
     [SerializeField] private TMP_Text shortfallText;
     [SerializeField] private TMP_Text cashText;
-    [SerializeField] private Button autoSelectButton;
-    [SerializeField] private Button bankLoanButton;
     [SerializeField] private Button bankruptButton;
     [SerializeField] private Button sellCompleteButton;
 
@@ -26,23 +24,17 @@ public class SellPopupView : UIView
         const string w = "SellPopup/Window/";
         shortfallText = Find<TMP_Text>(w + "SummaryPanel/ShortfallRow/ValueText");
         cashText = Find<TMP_Text>(w + "SummaryPanel/CashRow/ValueText");
-        autoSelectButton = Find<Button>(w + "AutoSelectButton");
-        bankLoanButton = Find<Button>(w + "BankLoanButton");
         bankruptButton = Find<Button>(w + "BankruptButton");
         sellCompleteButton = Find<Button>(w + "SellCompleteButton");
     }
 
-    /// <summary>requiredAmount: 내야 할 금액. loanAvailable: 은행 대출(1회)을 아직 안 썼는지.</summary>
-    public void Show(long requiredAmount, long cash, bool loanAvailable,
-                     Action onAutoSelect, Action onBankLoan, Action onBankrupt, Action onSellComplete)
+    /// <summary>requiredAmount: 내야 할 금액.</summary>
+    public void Show(long requiredAmount, long cash, Action onBankrupt, Action onSellComplete)
     {
         this.requiredAmount = requiredAmount;
         this.cash = cash;
         CashRoll.Set(cash, animate: false);
-        if (bankLoanButton != null) bankLoanButton.interactable = loanAvailable;
 
-        SetOnClick(autoSelectButton, onAutoSelect);
-        SetOnClick(bankLoanButton, onBankLoan);
         SetOnClick(bankruptButton, onBankrupt);
         SetOnClick(sellCompleteButton, () => { Close(); onSellComplete?.Invoke(); });
 
@@ -64,7 +56,7 @@ public class SellPopupView : UIView
         if (sellCompleteButton != null) sellCompleteButton.interactable = interactable;
     }
 
-    /// <summary>대출 후 현금이 늘었을 때.</summary>
+    /// <summary>매각 중에 현금이 바뀌었을 때.</summary>
     public void SetCash(long newCash, long selectedTotal)
     {
         cash = newCash;
@@ -78,9 +70,4 @@ public class SellPopupView : UIView
     private RollingNumber ShortfallRoll => shortfallRoll ??= new RollingNumber(shortfallText, UIPalette.SignedMoney,
         v => { if (shortfallText != null) shortfallText.color = v < 0 ? UIPalette.Red : UIPalette.GainText; });
     private RollingNumber CashRoll => cashRoll ??= new RollingNumber(cashText, UIPalette.Money);
-
-    public void SetLoanAvailable(bool available)
-    {
-        if (bankLoanButton != null) bankLoanButton.interactable = available;
-    }
 }

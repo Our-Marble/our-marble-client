@@ -10,6 +10,9 @@ public class TakeoverPopupView : UIView
     public override string DimPath => "TakeoverPopup/Dim";
 
     [SerializeField] private Image tileImage;
+    [SerializeField] private GameObject imagePlaceholder; // "TILE IMAGE" 자리표시 글자. 땅 그림이 있으면 숨긴다
+    private Color placeholderColor;
+    private bool placeholderColorCached;
     [SerializeField] private TMP_Text ownerText;
     [SerializeField] private TMP_Text tileNameText;
     [SerializeField] private StageTrack stageTrack = new StageTrack();
@@ -25,6 +28,7 @@ public class TakeoverPopupView : UIView
     {
         const string w = "TakeoverPopup/Window/";
         tileImage = Find<Image>(w + "TilePortrait/TileImage");
+        imagePlaceholder = FindObject(w + "TilePortrait/PlaceholderText");
         ownerText = Find<TMP_Text>(w + "TilePortrait/OwnerChip/OwnerText");
         tileNameText = Find<TMP_Text>(w + "TileNameText");
         stageTrack.Bind(transform.Find(w + "StageTrack"));
@@ -67,7 +71,13 @@ public class TakeoverPopupView : UIView
             descText.rectTransform.sizeDelta = size;
         }
 
-        if (image != null && tileImage != null) { tileImage.sprite = image; tileImage.color = Color.white; }
+        if (tileImage != null)
+        {
+            if (!placeholderColorCached) { placeholderColor = tileImage.color; placeholderColorCached = true; }
+            tileImage.sprite = image;
+            tileImage.color = image != null ? Color.white : placeholderColor; // 그림이 없으면 이전 땅 그림이 남지 않게 자리표시로 되돌린다
+        }
+        SetActive(imagePlaceholder, image == null);
         if (tileNameText != null) tileNameText.text = tileName;
         if (ownerText != null)
             ownerText.text = $"<color={UIPalette.Hex(UIPalette.PlayerColor(ownerColorIndex))}>●</color> {ownerName} 님의 땅";

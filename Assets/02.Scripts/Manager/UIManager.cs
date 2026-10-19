@@ -74,10 +74,7 @@ public class UIManager : MonoBehaviour
     /// </summary>
     public event Action<SelectionKind> SelectionTimedOut;
 
-    /// <summary>매각 창의 '은행 대출' 버튼 (payerId, receiverId). 구독자가 없으면 버튼이 잠긴다.</summary>
-    public event Action<long, long> BankLoanRequested;
-
-    /// <summary>매각 창의 '파산 신청' 버튼 (payerId, receiverId).</summary>
+    /// <summary>매각 창의 '파산 신청' 버튼 (payerId, receiverId). 구독하는 쪽이 파산 요청을 처리한다.</summary>
     public event Action<long, long> BankruptRequested;
 
     private void Awake()
@@ -109,17 +106,19 @@ public class UIManager : MonoBehaviour
         HookSelectionTimer(sell, SelectionKind.Sell);
         HookSelectionTimer(destinationSelect, SelectionKind.Destination);
         HookSelectionTimer(islandEscape, SelectionKind.IslandEscape);
+        if (exitConfirm != null) exitConfirm.Closed += () => bankruptConfirmShown = false;
 
         // 상단바: 로비에서 넘어온 방 정보 표시, 설정은 설정 창 열기/닫기, 나가기는 확인 후 로비로 돌아간다
         if (topBar != null)
         {
-            var room = LobbyManager_temp.CurrentRoom;
+            var room = LobbyManager.CurrentRoom; // 서버에서 받은 방 정보 (로비를 거치지 않고 게임 씬만 실행하면 null)
             if (room != null)
             {
-                topBar.SetRoom(room.Name, room.Code);
-                topBar.SetPlayerCount(room.Players.Count, room.MaxPlayers);
+                var host = room.Players?.Find(p => p.playerId == room.hostId);
+                topBar.SetRoom(LobbyManager.RoomTitle(host?.nickname));
+                topBar.SetPlayerCount(room.Players != null ? room.Players.Count : 0, room.maxPlayers);
             }
-            topBar.SetPassword(room != null && room.HasPassword ? room.Password : null); // 비밀번호 방이면 인원수 옆에 표시
+            topBar.SetPassword(null); // 서버 방 정보에는 비밀번호가 없다
             topBar.SetCallbacks(settings != null ? settings.Open : (Action)null, RequestExit);
         }
     }
@@ -289,7 +288,7 @@ public class UIManager : MonoBehaviour
         bool special = data != null && !data.CanBuild;
         if (special)
         {
-            purchase.Show(TileName(id), null, options, player != null ? player.Money : 0,
+            purchase.Show(TileName(id), TileImageOf(id), options, player != null ? player.Money : 0,
                 level => { if (Game != null) Game.PurchaseProperty(playerId, id); },
                 () => { if (Game != null) Game.DeclinePropertyPurchase(playerId, id); },
                 OwnerLabel(GetProperty(id)), SpecialDescription(id));
@@ -312,7 +311,7 @@ public class UIManager : MonoBehaviour
             });
         }
 
-        purchase.Show(TileName(id), null, options, player != null ? player.Money : 0,
+        purchase.Show(TileName(id), TileImageOf(id), options, player != null ? player.Money : 0,
             level => { if (Game != null) Game.PurchaseProperty(playerId, id); },
             () => { if (Game != null) Game.DeclinePropertyPurchase(playerId, id); },
             OwnerLabel(GetProperty(id)));
@@ -349,7 +348,7 @@ public class UIManager : MonoBehaviour
                     ShowInfoWhenNone = true,
                 }
             };
-            purchase.Show(TileName(propertyId), null, specialOptions, player != null ? player.Money : 0,
+            purchase.Show(TileName(propertyId), TileImageOf(propertyId), specialOptions, player != null ? player.Money : 0,
                 level => { if (Game != null) Game.Build(playerId, propertyId); },
                 () => { if (Game != null) Game.DeclineBuild(playerId, propertyId); },
                 OwnerLabel(state), SpecialDescription(propertyId));
@@ -398,7 +397,7 @@ public class UIManager : MonoBehaviour
             options.Add(option);
         }
 
-        purchase.Show(TileName(propertyId), null, options, player != null ? player.Money : 0,
+        purchase.Show(TileName(propertyId), TileImageOf(propertyId), options, player != null ? player.Money : 0,
             level => { if (Game != null) Game.Build(playerId, propertyId); },
             () => { if (Game != null) Game.DeclineBuild(playerId, propertyId); },
             OwnerLabel(state));
@@ -434,7 +433,7 @@ public class UIManager : MonoBehaviour
         long price = PropertyManager.Instance.GetAcquireValue(state);
 
         // 특수 칸(별 건설 없음)은 별 단계 대신 "특수 칸" 배지와 땅 효과 설명으로 보여준다
-        takeover.Show(TileName(propertyId), null, state.BuildingLevel,
+        takeover.Show(TileName(propertyId), TileImageOf(propertyId), state.BuildingLevel,
             NameOf(ownerId), ColorIndexOf(ownerId), price, player != null ? player.Money : 0,
             () => { if (Game != null) Game.AcquireProperty(playerId, propertyId); },
             () => { if (Game != null) Game.DeclineAcquireProperty(playerId, propertyId); },
@@ -450,6 +449,7 @@ public class UIManager : MonoBehaviour
         if (sell == null) return;
 
         ExitSellMode();
+        sellSession++;
         sellMode = true;
         sellPayerId = payerId;
         sellReceiverId = receiverId;
@@ -460,11 +460,8 @@ public class UIManager : MonoBehaviour
         BoardManager.Instance.ChangeToSelectSellMode();
 
         PlayerState payer = GetPlayer(payerId);
-        bool loanAvailable = BankLoanRequested != null && !loanUsed.Contains(payerId);
 
-        // 자동 선택은 보드의 선택 표시를 바꿀 방법이 없어 연결하지 않는다
-        sell.Show(requiredAmount, payer != null ? payer.Money : 0, loanAvailable,
-            null, RequestBankLoan, RequestBankrupt, CompleteSell);
+        sell.Show(requiredAmount, payer != null ? payer.Money : 0, ConfirmBankrupt, CompleteSell);
         sell.SetCompleteInteractable(false); // 아무것도 고르지 않은 처음에는 꺼진 상태
     }
 
@@ -490,12 +487,13 @@ public class UIManager : MonoBehaviour
     #region 매각
 
     private bool sellMode;
+    private int sellSession;            // 매각을 시작하거나 끝낼 때마다 늘려서, 늦게 도착한 확인 창·시간 초과 처리가 이미 끝난 매각에 파산을 걸지 못하게 한다
+    private bool bankruptConfirmShown;  // "파산하시겠어요?" 확인 창이 떠 있는 중
     private long sellPayerId;
     private long sellReceiverId;
     private long sellRequired;
     private readonly List<int> selectedSellPropertyIds = new(); // CheckTilesValidForSell이 마지막으로 구한, 팔 땅 번호들
     private long sellSelectedTotal; // 마지막으로 구한 선택 합계 (표시용)
-    private readonly HashSet<long> loanUsed = new(); // 은행 대출은 1회
 
     /// <summary>
     /// 보드의 칸을 누를 때마다 BoardManager가 부르는 함수입니다. tileIndexes: 지금 고른 칸 번호들.
@@ -529,30 +527,73 @@ public class UIManager : MonoBehaviour
         sell.SetSelectedTotal(total); // 부족한 금액 갱신 + 현금 + 합계 >= 필요 금액이면 완료 버튼 켜짐
     }
 
-    private void RequestBankLoan()
+    // 매각 창의 제한시간이 끝났다: 땅을 팔지도 파산을 신청하지도 않았으니 파산으로 처리한다. (확인 창이 떠 있었다면 닫는다)
+    private void BankruptOnTimeout(int session)
     {
-        if (BankLoanRequested == null) return;
-        loanUsed.Add(sellPayerId);
-        if (sell != null) sell.SetLoanAvailable(false);
-        BankLoanRequested.Invoke(sellPayerId, sellReceiverId);
+        if (session != sellSession) return; // 그 사이 매각이 끝났거나(서버 메시지로 창이 닫힘 등) 새로 시작됐다
+        sellSession++;
+        long payerId = sellPayerId, receiverId = sellReceiverId;
+        if (exitConfirm != null && exitConfirm.IsOpen) exitConfirm.Close();
+        ExitSellMode();
+        BankruptRequested?.Invoke(payerId, receiverId);
+        DeclareBankruptcy(payerId, receiverId);
     }
 
-    private void RequestBankrupt()
+    /// <summary>
+    /// 자발적 파산(파산 신청 "예", 매각 시간 초과). 통행료를 못 낼 때의 강제 파산과 같은 처리(GameManager.HandleBankruptcy)를 부르고,
+    /// 게임이 계속되면 다음 사람 차례로 넘긴다. 서버에는 아직 파산 신청 메시지가 없어서 이 클라이언트에서만 처리된다.
+    /// </summary>
+    public void DeclareBankruptcy(long payerId, long receiverId)
     {
-        if (BankruptRequested == null)
+        GameManager game = Game;
+        GameState state = State;
+        if (game == null || state == null || state.IsGameOver) return;
+        PlayerState payer = GetPlayer(payerId);
+        if (payer == null || payer.IsBankrupt) return; // 이미 파산했다면 다시 처리하지 않는다
+
+        game.HandleBankruptcy(payerId, receiverId);
+        if (!state.IsGameOver) game.HandleTurnChanged(NextAlivePlayerId(state.CurrentPlayerId));
+    }
+
+    // 현재 차례 다음 순서부터 한 바퀴 돌면서 파산하지 않은 첫 사람 (GameManager.GetNextPlayerId와 같은 규칙)
+    private long NextAlivePlayerId(long currentId)
+    {
+        List<long> order = State.PlayerOrder;
+        int index = order.IndexOf(currentId);
+        for (int i = 1; i <= order.Count; i++)
         {
-            Debug.LogWarning("[UIManager] 파산 신청 처리가 아직 연결되지 않았습니다. BankruptRequested를 구독해주세요.");
-            return;
+            long candidateId = order[(index + i) % order.Count];
+            PlayerState candidate = GetPlayer(candidateId);
+            if (candidate != null && !candidate.IsBankrupt) return candidateId;
         }
-        long payerId = sellPayerId, receiverId = sellReceiverId;
-        if (sell != null) sell.Close();
-        ExitSellMode();
-        BankruptRequested.Invoke(payerId, receiverId);
+        return currentId;
+    }
+
+    // "파산 신청" 버튼: 정말 파산할지 먼저 묻고, "예"를 누르면 파산 처리를 한다. "아니오"면 매각 창이 그대로 남는다.
+    private void ConfirmBankrupt()
+    {
+        int session = sellSession;
+        void Declare()
+        {
+            if (session != sellSession) return; // 확인 창이 떠 있는 동안 매각이 끝났다면(서버 메시지, 시간 초과 등) 파산시키지 않는다
+            sellSession++;
+            long payerId = sellPayerId, receiverId = sellReceiverId;
+            if (sell != null) sell.Close();
+            ExitSellMode();
+            BankruptRequested?.Invoke(payerId, receiverId);
+            DeclareBankruptcy(payerId, receiverId);
+        }
+
+        if (exitConfirm == null) { Declare(); return; }
+        bankruptConfirmShown = true;
+        exitConfirm.Show(Declare,
+            "파산하시겠어요?\n가진 땅과 현금이 모두 상대에게 넘어가고\n게임에서 탈락해요.", "예", "아니오");
     }
 
     // "매각 완료" 버튼
     private void CompleteSell()
     {
+        sellSession++;
         long payerId = sellPayerId, receiverId = sellReceiverId, required = sellRequired;
         var propertyIds = new List<int>(selectedSellPropertyIds); // 칸 번호가 아니라 땅 번호
         ExitSellMode(); // 보드도 둘러보기 모드로 되돌린다
@@ -701,8 +742,8 @@ public class UIManager : MonoBehaviour
         if (topBar != null)
         {
             // 로비에서 들어온 방이면 그 방의 최대 인원으로, 아니면 카드 수(4)로 표시한다
-            var room = LobbyManager_temp.CurrentRoom;
-            topBar.SetPlayerCount(count, room != null ? room.MaxPlayers : playerInfos.Length);
+            var room = LobbyManager.CurrentRoom;
+            topBar.SetPlayerCount(count, room != null ? room.maxPlayers : playerInfos.Length);
             topBar.SetRound(DisplayRound(), maxRound);
         }
     }
@@ -806,11 +847,16 @@ public class UIManager : MonoBehaviour
         DOVirtual.DelayedCall(3f, Finish, ignoreTimeScale: true);
     }
 
+    private const float BankruptResultDelay = 2.5f; // 파산 연출(도장)이 보인 뒤 결과 창이 뜨기까지
+    private float lastBankruptEffectAt = -100f;     // 마지막으로 파산 연출을 재생한 시각
+    private bool skipResultDelay;                   // 이미 기다렸으니 결과 창을 바로 띄운다
+
     // 파산 연출을 재생합니다. GameManager.ProcessBankruptcy가 GameState를 갱신한 뒤 부릅니다.
     // shortfall은 못 낸 금액으로, 게임 결과 창에 마이너스 자산으로 표시됩니다. (모르면 생략)
     public void PlayBankruptEffect(long playerId, long shortfall = 0)
     {
         if (shortfall > 0) bankruptShortfall[playerId] = shortfall;
+        lastBankruptEffectAt = Time.unscaledTime;
 
         // GameState(IsBankrupt)가 이미 갱신된 뒤 호출되므로, 전체 갱신 한 번이면 됩니다.
         // 방금 파산한 플레이어의 카드만 파산 표시가 꺼짐 → 켜짐으로 바뀌면서 도장 연출이 재생됩니다.
@@ -897,7 +943,7 @@ public class UIManager : MonoBehaviour
 
         bool owned = state != null && state.OwnerId.HasValue;
         long ownerId = owned ? state.OwnerId.Value : 0;
-        tileInfo.Show(data.CityName, null, owned ? NameOf(ownerId) : null, ColorIndexOf(ownerId),
+        tileInfo.Show(data.CityName, TileImageOf(propertyId), owned ? NameOf(ownerId) : null, ColorIndexOf(ownerId),
             state != null ? state.BuildingLevel : BuildingLevel.Land, tolls,
             data.CanBuild ? null : SpecialDescription(propertyId));
     }
@@ -933,6 +979,17 @@ public class UIManager : MonoBehaviour
     {
         GameState state = State;
         if (gameResult == null || state == null) return;
+
+        // 게임이 끝났으니 결과 창이 뜰 때까지 서버 메시지를 더 처리하지 않는다 (말이 움직이는 등)
+        state.WaitingType = null;
+
+        // 파산 연출(도장)이 막 재생됐다면 그 연출이 보인 뒤에 결과 창을 띄운다
+        float wait = lastBankruptEffectAt + BankruptResultDelay - Time.unscaledTime;
+        if (!skipResultDelay && wait > 0f)
+        {
+            DOVirtual.DelayedCall(wait, () => { skipResultDelay = true; ShowGameResultPopup(onClose); skipResultDelay = false; }, ignoreTimeScale: true);
+            return;
+        }
 
         // 더 이상 굴릴 주사위도, 진행 중인 차례도 없다
         StopSelectionTimer();
@@ -998,7 +1055,7 @@ public class UIManager : MonoBehaviour
     {
         if (resultCountdown != null) { StopCoroutine(resultCountdown); resultCountdown = null; }
         if (gameResult != null) gameResult.SetCountdown(0);
-        if (LobbyManager_temp.CurrentRoom != null) SceneFlow.ReturnToRoom();
+        if (LobbyManager.HasRoom) SceneFlow.ReturnToRoom(); // 서버 방 정보가 있을 때(재접속으로 들어온 경우 포함)
     }
 
     #endregion
@@ -1154,6 +1211,7 @@ public class UIManager : MonoBehaviour
     /// </summary>
     public void CloseAllPopups(bool immediate = false)
     {
+        sellSession++;
         StopSelectionTimer();
         ExitSellMode();
         // 결과 창을 닫았는데 남은 시간이 지나 씬이 넘어가지 않게 한다
@@ -1179,8 +1237,10 @@ public class UIManager : MonoBehaviour
     /// </summary>
     public void CloseSelectionPopups(bool immediate = false)
     {
+        sellSession++;
         StopSelectionTimer();
         EndBoardSelection();
+        if (bankruptConfirmShown && exitConfirm != null && exitConfirm.IsOpen) exitConfirm.Close(); // 매각이 끝났으니 남은 파산 확인 창도 닫는다
 
         UIView[] popups = { purchase, takeover, sell, destinationSelect };
         foreach (var popup in popups)
@@ -1261,6 +1321,7 @@ public class UIManager : MonoBehaviour
         StopSelectionTimer();
         int epoch = timerEpoch; // 그 사이 새 제한시간이 시작되면 값이 달라진다
 
+        int sellSessionAtTimeout = sellSession; // 지연 호출이 돌 때 이 매각이 그대로인지 확인하기 위해
         window.SetInputLocked(true);
         if (kind == SelectionKind.RollDice && diceRoll != null) diceRoll.LockRoll();
         EndBoardSelection(); // 보드에서 칸을 고르는 중이었다면 더 이상 고를 수 없게 한다
@@ -1271,6 +1332,7 @@ public class UIManager : MonoBehaviour
             if (epoch != timerEpoch) return;
             // 주사위 굴리기 UI는 화면에 계속 두고 비활성화만 한다. (다음 내 차례에 ShowRollDicePopup이 다시 켠다)
             if (kind != SelectionKind.RollDice) window.Close();
+            if (kind == SelectionKind.Sell) BankruptOnTimeout(sellSessionAtTimeout); // 매각도 파산 신청도 하지 않고 시간이 끝나면 파산
             SelectionTimedOut?.Invoke(kind);
         }, ignoreTimeScale: true);
     }
@@ -1300,12 +1362,31 @@ public class UIManager : MonoBehaviour
     private string NameOf(long playerId)
     {
         if (profiles.TryGetValue(playerId, out Profile profile) && !string.IsNullOrEmpty(profile.Name)) return profile.Name;
+        PlayerState player = GetPlayer(playerId); // 지정하지 않았으면 게임 상태(서버에서 받은 닉네임)를 쓴다
+        if (player != null && !string.IsNullOrEmpty(player.Nickname)) return player.Nickname;
         int index = IndexOf(playerId);
         return index >= 0 ? $"플레이어 {index + 1}" : $"플레이어 {playerId}";
     }
 
+    // 지정한 초상화가 없으면: 내 것은 내가 고른 그림, 다른 사람은 자리 색의 기본 그림 (서버에는 아직 초상화 정보가 없다)
     private Sprite PortraitOf(long playerId)
-        => profiles.TryGetValue(playerId, out Profile profile) ? profile.Portrait : null;
+    {
+        if (profiles.TryGetValue(playerId, out Profile profile) && profile.Portrait != null) return profile.Portrait;
+        return playerId == LocalPlayerId ? PortraitLibrary.Selected : PortraitLibrary.Default(ColorIndexOf(playerId));
+    }
+
+    private readonly Dictionary<int, Sprite> tileImages = new Dictionary<int, Sprite>();
+
+    // 땅 그림: Resources/PropertyImages/property_땅번호. 없으면 null (창이 자리표시를 보여 준다)
+    private Sprite TileImageOf(int propertyId)
+    {
+        if (!tileImages.TryGetValue(propertyId, out Sprite sprite))
+        {
+            sprite = Resources.Load<Sprite>($"PropertyImages/property_{propertyId}");
+            tileImages[propertyId] = sprite;
+        }
+        return sprite;
+    }
 
     private static string TileName(int propertyId)
     {

@@ -582,6 +582,7 @@ MonoBehaviour:
   panelGroup: {fileID: 6742273387882930943}
   dimGroup: {fileID: 7452998338780170558}
   tileImage: {fileID: 5747799798858484244}
+  imagePlaceholder: {fileID: 5017314482800600640}
   ownerText: {fileID: 866838965776691808}
   tileNameText: {fileID: 1125202970949004537}
   stageTrack:
@@ -1012,6 +1013,7 @@ GameObject:
   - component: {fileID: 3798577800042344221}
   - component: {fileID: 4577667819112408955}
   - component: {fileID: 5747799798858484244}
+  - component: {fileID: 2920482011058120763}
   m_Layer: 5
   m_Name: TileImage
   m_TagString: Untagged
@@ -1076,6 +1078,20 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
+--- !u!114 &2920482011058120763
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2307837242121311032}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 86710e43de46f6f4bac7c8e50813a599, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.AspectRatioFitter
+  m_AspectMode: 4
+  m_AspectRatio: 2.4
 --- !u!1 &2806405063289170988
 GameObject:
   m_ObjectHideFlags: 0

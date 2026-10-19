@@ -518,8 +518,6 @@ MonoBehaviour:
   dimGroup: {fileID: 0}
   shortfallText: {fileID: 740255571}
   cashText: {fileID: 665851292}
-  autoSelectButton: {fileID: 1009027007}
-  bankLoanButton: {fileID: 144137873}
   bankruptButton: {fileID: 2094624044}
   sellCompleteButton: {fileID: 617402551}
 --- !u!224 &22263459
@@ -1258,6 +1256,7 @@ MonoBehaviour:
   - {fileID: 1279938394}
   hopDuration: 0.25
   slideDuration: 0.6
+  glideStepDuration: 0.07
   slotOffsets:
   - {x: -0.25, y: 0.25, z: 0}
   - {x: 0.25, y: 0.25, z: 0}
@@ -4461,12 +4460,13 @@ MonoBehaviour:
   panelGroup: {fileID: 0}
   dimGroup: {fileID: 0}
   roomNameText: {fileID: 1046720648}
-  roomCodeText: {fileID: 1562950171}
   playerCountText: {fileID: 471845321}
   turnText: {fileID: 1413409680}
-  roomSetupButton: {fileID: 2004488477}
   settingsButton: {fileID: 193956228}
   exitButton: {fileID: 210060144}
+  passwordChip: {fileID: 0}
+  passwordText: {fileID: 0}
+  turnInfo: {fileID: 0}
 --- !u!224 &151643409
 RectTransform:
   m_ObjectHideFlags: 0
@@ -4838,7 +4838,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "\uC774\uC6A9\uB8CC"
+  m_text: "\uD1B5\uD589\uB8CC"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 310f6cd3139b81c4199fc0e175244fc5, type: 2}
   m_sharedMaterial: {fileID: -4144461782606068256, guid: 310f6cd3139b81c4199fc0e175244fc5, type: 2}
@@ -7670,7 +7670,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "\uC774\uC6A9\uB8CC"
+  m_text: "\uD1B5\uD589\uB8CC"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 310f6cd3139b81c4199fc0e175244fc5, type: 2}
   m_sharedMaterial: {fileID: -4144461782606068256, guid: 310f6cd3139b81c4199fc0e175244fc5, type: 2}
@@ -8339,6 +8339,7 @@ MonoBehaviour:
   panelGroup: {fileID: 406975180}
   dimGroup: {fileID: 2096623662}
   tileImage: {fileID: 217846792}
+  imagePlaceholder: {fileID: 0}
   tileNameText: {fileID: 88636587}
   stageTrackRoot: {fileID: 1268649748}
   optionsRoot: {fileID: 1301435588}
@@ -9289,16 +9290,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 069721c10cced2f45b61d7ecb207eb02, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GameManager
-  salaryAmount: 20000
-  taxAmount: 100000
-  startMoney: 500000
-  autoPlayAllPlayers: 0
-  botActionDelay: 1
-  playerSetups:
-  - playerId: 123
-    isBot: 0
-  - playerId: 456
-    isBot: 1
+  gameSceneName: BoardLayout 2
+  isAfk: 0
 --- !u!4 &337382219
 Transform:
   m_ObjectHideFlags: 0
@@ -9521,7 +9514,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "\uC774\uC6A9\uB8CC"
+  m_text: "\uD1B5\uD589\uB8CC"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 310f6cd3139b81c4199fc0e175244fc5, type: 2}
   m_sharedMaterial: {fileID: -4144461782606068256, guid: 310f6cd3139b81c4199fc0e175244fc5, type: 2}
@@ -17062,6 +17055,7 @@ MonoBehaviour:
   panelGroup: {fileID: 1980287279}
   dimGroup: {fileID: 911459920}
   tileImage: {fileID: 1175028515}
+  imagePlaceholder: {fileID: 0}
   ownerText: {fileID: 765315185}
   tileNameText: {fileID: 2039546581}
   stageTrack:
@@ -17070,6 +17064,9 @@ MonoBehaviour:
     - {fileID: 280780240}
     - {fileID: 317958308}
     newStarGlow: {fileID: 0}
+  stageTrackRoot: {fileID: 0}
+  specialBadge: {fileID: 0}
+  descText: {fileID: 0}
   priceText: {fileID: 84213099}
   cashText: {fileID: 1944647794}
   cancelButton: {fileID: 1052828829}
@@ -19203,6 +19200,7 @@ MonoBehaviour:
   panelGroup: {fileID: 2062647522}
   dimGroup: {fileID: 0}
   tileImage: {fileID: 712360031}
+  imagePlaceholder: {fileID: 0}
   ownerChip: {fileID: 576115275}
   ownerText: {fileID: 1740626580}
   tileNameText: {fileID: 2001518998}
@@ -25401,6 +25399,12 @@ MonoBehaviour:
   defaultColor: {r: 0.44001427, g: 0.9056604, b: 0.7870102, a: 1}
   defaultTextColor: {r: 0.21698111, g: 0.0775333, b: 0, a: 1}
   cornerColor: {r: 1, g: 0.87574923, b: 0.2783019, a: 1}
+  goldenKeyColor: {r: 1, g: 0.8039216, b: 0.2509804, a: 1}
+  islandColor: {r: 0.5568628, g: 0.8039216, b: 1, a: 1}
+  worldTravelColor: {r: 0.74509805, g: 0.627451, b: 1, a: 1}
+  taxColor: {r: 1, g: 0.6039216, b: 0.6039216, a: 1}
+  charityColor: {r: 0.6039216, g: 1, b: 0.7372549, a: 1}
+  selectedIndexes: 
 --- !u!4 &839385235
 Transform:
   m_ObjectHideFlags: 0
@@ -37459,8 +37463,10 @@ MonoBehaviour:
   mapNameText: {fileID: 1596189135}
   prevMapButton: {fileID: 1587794720}
   nextMapButton: {fileID: 1893068340}
-  soloToggle: {fileID: 1770922264}
-  teamToggle: {fileID: 764528270}
+  maxPlayersToggles:
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
   playerCountText: {fileID: 73566152}
   slots:
   - background: {fileID: 564879205}
@@ -37470,9 +37476,9 @@ MonoBehaviour:
     hostBadge: {fileID: 2042579132}
     readyBadge: {fileID: 725179325}
     readyText: {fileID: 116186106}
-    teamBadge: {fileID: 134145823}
-    teamText: {fileID: 1490560757}
     nicknameText: {fileID: 1991174062}
+    bubble: {fileID: 0}
+    bubbleText: {fileID: 0}
   - background: {fileID: 1804366882}
     stroke: {fileID: 681631502}
     portraitImage: {fileID: 1772439876}
@@ -37480,9 +37486,9 @@ MonoBehaviour:
     hostBadge: {fileID: 1967802200}
     readyBadge: {fileID: 632871565}
     readyText: {fileID: 133399841}
-    teamBadge: {fileID: 876058476}
-    teamText: {fileID: 1281840504}
     nicknameText: {fileID: 1827402645}
+    bubble: {fileID: 0}
+    bubbleText: {fileID: 0}
   - background: {fileID: 183500292}
     stroke: {fileID: 1070858224}
     portraitImage: {fileID: 993117980}
@@ -37490,9 +37496,9 @@ MonoBehaviour:
     hostBadge: {fileID: 651297783}
     readyBadge: {fileID: 848840842}
     readyText: {fileID: 511670880}
-    teamBadge: {fileID: 117289430}
-    teamText: {fileID: 464891135}
     nicknameText: {fileID: 706101651}
+    bubble: {fileID: 0}
+    bubbleText: {fileID: 0}
   - background: {fileID: 1257820216}
     stroke: {fileID: 1343253361}
     portraitImage: {fileID: 1315607325}
@@ -37500,16 +37506,40 @@ MonoBehaviour:
     hostBadge: {fileID: 1898025020}
     readyBadge: {fileID: 914441469}
     readyText: {fileID: 356792176}
-    teamBadge: {fileID: 452031696}
-    teamText: {fileID: 879407016}
     nicknameText: {fileID: 1051913587}
-  teamSection: {fileID: 331635412}
-  redTeamButton: {fileID: 2058026533}
-  redTeamLabel: {fileID: 1824708588}
-  blueTeamButton: {fileID: 1766045071}
-  blueTeamLabel: {fileID: 610786551}
+    bubble: {fileID: 0}
+    bubbleText: {fileID: 0}
   startButton: {fileID: 463529524}
+  readyButton: {fileID: 0}
+  readyLabel: {fileID: 0}
   closeButton: {fileID: 2103701914}
+  applyButton: {fileID: 0}
+  cancelButton: {fileID: 0}
+  unappliedHintText: {fileID: 0}
+  subtitleText: {fileID: 0}
+  moneyPrevButton: {fileID: 0}
+  moneyNextButton: {fileID: 0}
+  moneyValueText: {fileID: 0}
+  roundPrevButton: {fileID: 0}
+  roundNextButton: {fileID: 0}
+  roundValueText: {fileID: 0}
+  salaryPrevButton: {fileID: 0}
+  salaryNextButton: {fileID: 0}
+  salaryValueText: {fileID: 0}
+  botPrevButton: {fileID: 0}
+  botNextButton: {fileID: 0}
+  botValueText: {fileID: 0}
+  settingsPanel: {fileID: 0}
+  settingsTab: {fileID: 0}
+  chatTab: {fileID: 0}
+  chatTabDot: {fileID: 0}
+  chatPanel: {fileID: 0}
+  chatScroll: {fileID: 0}
+  chatContent: {fileID: 0}
+  chatLineTemplate: {fileID: 0}
+  chatEmptyText: {fileID: 0}
+  chatInput: {fileID: 0}
+  chatSendButton: {fileID: 0}
 --- !u!224 &1200730790
 RectTransform:
   m_ObjectHideFlags: 0
@@ -41150,7 +41180,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "\uC774\uC6A9\uB8CC"
+  m_text: "\uD1B5\uD589\uB8CC"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: cafdd8020a9b4584ab3202fc6b118037, type: 2}
   m_sharedMaterial: {fileID: -2759815069154269271, guid: cafdd8020a9b4584ab3202fc6b118037, type: 2}
@@ -48514,6 +48544,7 @@ MonoBehaviour:
   front: {fileID: 1114386551}
   back: {fileID: 961705248}
   cardImage: {fileID: 1845012667}
+  imagePlaceholder: {fileID: 0}
   typeTag: {fileID: 887876068}
   typeTagText: {fileID: 296389750}
   cardNameText: {fileID: 546261272}
@@ -48754,7 +48785,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "\uB2E8\uACC4\uBCC4 \uC774\uC6A9\uB8CC"
+  m_text: "\uB2E8\uACC4\uBCC4 \uD1B5\uD589\uB8CC"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: cafdd8020a9b4584ab3202fc6b118037, type: 2}
   m_sharedMaterial: {fileID: -2759815069154269271, guid: cafdd8020a9b4584ab3202fc6b118037, type: 2}
@@ -63577,7 +63608,6 @@ MonoBehaviour:
   currentTurn: {fileID: 645166350}
   diceRoll: {fileID: 1885036730}
   diceResult: {fileID: 1611914578}
-  roomSetup: {fileID: 1200730789}
   purchase: {fileID: 314615841}
   takeover: {fileID: 592989073}
   sell: {fileID: 22263458}
@@ -63586,8 +63616,14 @@ MonoBehaviour:
   destinationSelect: {fileID: 1826900266}
   tileInfo: {fileID: 641707227}
   gameResult: {fileID: 624877000}
+  exitConfirm: {fileID: 0}
+  settings: {fileID: 0}
   cardDeck: {fileID: 11400000, guid: 28d3ca2c6729ed246a6df82e701ba38a, type: 2}
-  maxTurn: 30
+  otherCardShowSeconds: 2
+  resultSeconds: 15
+  selectSeconds: 30
+  afkSelectSeconds: 5
+  timeoutCloseDelay: 0.3
 --- !u!4 &1980586733
 Transform:
   m_ObjectHideFlags: 0
@@ -68703,7 +68739,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BoardManager
   boardController: {fileID: 839385234}
   boardData: {fileID: 11400000, guid: d05d5df88b4bc65488273ca45c54509a, type: 2}
-  selectedIndexes: 
 --- !u!4 &2127056688
 Transform:
   m_ObjectHideFlags: 0

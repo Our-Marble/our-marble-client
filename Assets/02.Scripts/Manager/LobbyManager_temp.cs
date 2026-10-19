@@ -769,7 +769,7 @@ public class LobbyManager_temp : MonoBehaviour
     {
         if (roomSetup == null) { Debug.LogError("[Lobby] Canvas_RoomSetup이 로비 씬에 없습니다."); return; }
 
-        roomSetup.SetRoomInfo(room.Name, room.Code, room.HasPassword ? room.Password : null);
+        roomSetup.SetRoomInfo(room.Name, room.HasPassword ? room.Password : null);
         roomSetup.SetMapChoices(Maps, mapSprites);
         roomSetup.SetLocalPlayer(room.LocalIndex);
         roomSetup.SetHost(room.IsHost);
@@ -784,18 +784,13 @@ public class LobbyManager_temp : MonoBehaviour
         roomSetup.LeaveRequested -= OnLeaveRequested;
         roomSetup.LeaveRequested += OnLeaveRequested;
 
-        // 내가 팀을 고르면 방 정보에도 기록한다
-        roomSetup.Show(
-            () => { room.Players[room.LocalIndex].Team = 1; ApplyRoomSetupSlots(room); },
-            () => { room.Players[room.LocalIndex].Team = 2; ApplyRoomSetupSlots(room); },
-            StartGameFromRoom);
+        roomSetup.Show(StartGameFromRoom);
     }
 
     // 방 정보(RoomInfo)를 방 설정 화면이 쓰는 설정 묶음으로 바꾼다
     private static RoomSetupView.Settings ToSettings(RoomInfo room) => new RoomSetupView.Settings
     {
         Map = room.Map,
-        IsTeam = room.IsTeam,
         MaxPlayers = room.MaxPlayers,
         StartMoney = room.StartMoney,
         MaxRound = room.MaxRound,
@@ -817,10 +812,8 @@ public class LobbyManager_temp : MonoBehaviour
                 IsHost = p.IsHost,
                 IsBot = p.IsBot,
                 IsReady = p.IsReady,
-                Team = (RoomSetupView.Team)p.Team,
             });
         }
-        roomSetup.RecountTeams();
     }
 
     // 팀전이면 자리 순서대로 레드, 블루, 레드, 블루로 나누고, 개인전이면 팀을 없앤다. (0 없음, 1 레드, 2 블루)
@@ -850,15 +843,12 @@ public class LobbyManager_temp : MonoBehaviour
         if (connection != ConnectionState.Connected) { ShowToast("서버와 연결이 끊겨 설정을 적용할 수 없어요"); yield break; }
 
         // 서버가 받아들인 것처럼 방 정보에 기록한다
-        bool modeChanged = room.IsTeam != settings.IsTeam;
         room.Map = settings.Map;
-        room.IsTeam = settings.IsTeam;
         room.MaxPlayers = settings.MaxPlayers;
         room.StartMoney = settings.StartMoney;
         room.MaxRound = settings.MaxRound;
         room.Salary = settings.Salary;
         AdjustBots(room, settings.BotCount);
-        if (modeChanged) AssignDefaultTeams(room.Players, room.IsTeam); // 모드가 바뀌면 팀을 처음부터 나눈다
 
         // 게임이 플레이어 목록 순서로 색을 정하므로, 색은 자리 순서(0, 1, 2, 3)로 맞춘다
         for (int i = 0; i < room.Players.Count; i++) room.Players[i].ColorIndex = i;

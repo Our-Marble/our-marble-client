@@ -35,6 +35,12 @@ public class LobbyNetwork : Singleton<LobbyNetwork>
         await WebSocketNetwork.Instance.SendMessage(message);
     }
 
+    /// <summary>쌓여 있는 서버 메시지를 모두 버린다. 로그아웃하거나 연결이 끊겼을 때, 지난 접속의 메시지가 다음 접속에 처리되지 않게 한다.</summary>
+    public void ClearQueue()
+    {
+        lock (messageQueue) { messageQueue.Clear(); }
+    }
+
     public void ReceiveLobbyMessage(LobbyMessageType parsedType, string json)
     {
         LobbyServerMessage serverMessage = new LobbyServerMessage

@@ -19,6 +19,7 @@ public class CardDrawView : UIView
     [SerializeField] private GameObject front;
     [SerializeField] private GameObject back;
     [SerializeField] private Image cardImage;
+    [SerializeField] private GameObject imagePlaceholder; // "CARD IMAGE" 자리표시 글자. 카드 그림이 있으면 숨긴다
     [SerializeField] private Image typeTag;
     [SerializeField] private TMP_Text typeTagText;
     [SerializeField] private TMP_Text cardNameText;
@@ -34,6 +35,7 @@ public class CardDrawView : UIView
         front = FindObject(c + "Front");
         back = FindObject(c + "Back");
         cardImage = Find<Image>(c + "Front/CardArt/CardImage");
+        imagePlaceholder = FindObject(c + "Front/CardArt/PlaceholderText");
         typeTag = Find<Image>(c + "Front/TypeTag");
         typeTagText = Find<TMP_Text>(c + "Front/TypeTag/Text");
         cardNameText = Find<TMP_Text>(c + "Front/CardNameText");
@@ -53,7 +55,13 @@ public class CardDrawView : UIView
 
         if (cardNameText != null) cardNameText.text = cardName;
         if (descriptionText != null) descriptionText.text = description;
-        if (image != null && cardImage != null) { cardImage.sprite = image; cardImage.color = Color.white; }
+        if (cardImage != null)
+        {
+            if (!placeholderColorCached) { placeholderColor = cardImage.color; placeholderColorCached = true; }
+            cardImage.sprite = image;
+            cardImage.color = image != null ? Color.white : placeholderColor; // 그림이 없으면 이전 카드 그림이 남지 않게 자리표시로 되돌린다
+        }
+        SetActive(imagePlaceholder, image == null);
 
         if (typeTag != null) typeTag.color = keepable ? KeepTagBg : InstantTagBg;
         if (typeTagText != null)
@@ -70,6 +78,8 @@ public class CardDrawView : UIView
     }
 
     private Tween autoCloseTween;
+    private Color placeholderColor;
+    private bool placeholderColorCached;
 
     /// <summary>seconds 뒤에 창을 닫고 onClosed를 호출한다.</summary>
     private void ScheduleAutoClose(float seconds, Action onClosed)

@@ -23,6 +23,33 @@ public class LobbyManager : MonoBehaviour
     // mapId → 맵 이름. 서버의 mapId와 같은 순서여야 한다
     private static readonly string[] Maps = { "클래식 월드", "도시 탐험", "해변 마을" };
 
+    // 지금 고를 수 있는 맵 (Maps와 같은 순서). 아직 만들지 않은 맵은 false로 두면 어느 화면에서도 선택되지 않는다.
+    private static readonly bool[] MapAvailable = { false, true, false };
+
+    private static int FirstAvailableMap()
+    {
+        for (int i = 0; i < MapAvailable.Length; i++) if (MapAvailable[i]) return i;
+        return 0;
+    }
+
+    // from에서 step(+1/-1) 방향으로 고를 수 있는 다음 맵. 고를 수 있는 맵이 하나뿐이면 그 맵.
+    private static int NextAvailableMap(int from, int step)
+    {
+        for (int k = 1; k <= Maps.Length; k++)
+        {
+            int i = ((from + step * k) % Maps.Length + Maps.Length) % Maps.Length;
+            if (MapAvailable[i]) return i;
+        }
+        return from;
+    }
+
+    private static int AvailableMapCount()
+    {
+        int n = 0;
+        foreach (bool a in MapAvailable) if (a) n++;
+        return n;
+    }
+
     private static readonly Color RowStroke = new Color32(220, 225, 236, 255);
     private static readonly Color SoloRowBg = new Color32(240, 250, 245, 255);
     private static readonly Color SoloRowStroke = new Color32(196, 232, 214, 255);
@@ -88,6 +115,9 @@ public class LobbyManager : MonoBehaviour
     /// </summary>
     private static string PlayingRoomId;
 
+    /// <summary>방 안에 있는지. 방 정보(CurrentRoom)를 받았거나, 재접속으로 게임에 바로 들어와 방 번호만 아는 경우도 true.</summary>
+    public static bool HasRoom => CurrentRoom != null || PlayingRoomId != null;
+
     // 게임을 마치고 돌아왔는데 방 스냅샷이 없을 때(재접속 후 게임), 서버의 ROOM_UPDATED를 기다리는 최대 시간(초)
     private const float RoomSnapshotWaitSeconds = 5f;
 
@@ -106,7 +136,7 @@ public class LobbyManager : MonoBehaviour
         public GameObject Go;
         public Button Row, Join;
         public GameObject Lock;
-        public Image Bg, Stroke, Thumb, ThumbStroke, ModeChip, StatusChip, JoinImage;
+        public Image Bg, Stroke, Thumb, ThumbStroke, StatusChip, JoinImage;
         public TMP_Text Number, Name, Info, StatusText, Count, JoinLabel;
         public Image[] Dots;
     }
@@ -136,10 +166,13 @@ public class LobbyManager : MonoBehaviour
     // 오른쪽 열
     private GameObject profileCard, playerListCard, detailCard;
     private TMP_Text nicknameText, recordText, marbleText;
-    private Button quickStartButton, createRoomButton, joinByCodeButton;
+    private Button profilePortraitButton;
+    private Image profilePortraitImage;
+    private PortraitPickerView portraitPicker;
+    private Button quickStartButton, createRoomButton;
     private GameObject detailLockChip;
     private TMP_Text detailTitle, detailStatusText, detailMap, detailCount;
-    private Image detailModeChip, detailStatusChip;
+    private Image detailStatusChip;
     private Button detailClose, detailJoin;
     private Image detailJoinImage;
     private TMP_Text detailJoinLabel;
@@ -153,12 +186,6 @@ public class LobbyManager : MonoBehaviour
     private Button prevMapButton, nextMapButton, createCancel, createConfirm, createClose;
     private Toggle[] maxToggles;
     private int mapIndex;
-
-    // 코드 입장 팝업
-    private PopupView joinPopup;
-    private TMP_InputField codeInput;
-    private Button joinCancel, joinConfirm, joinClose;
-    private Image joinConfirmImage;
 
     // 설정 팝업
     private SettingsView settingsView;
@@ -189,6 +216,7 @@ public class LobbyManager : MonoBehaviour
         {
             CurrentRoom = null;
             PlayingRoomId = null;
+            ChatService.Clear(); // 지난 방의 채팅이 다음 방에 남지 않게 한다
         }
         // 재접속으로 게임에 들어갔다 돌아온 경우 CurrentRoom은 없지만 PlayingRoomId는 있다. 이때도 방 안으로 본다.
         inRoom = CurrentRoom != null || PlayingRoomId != null;
@@ -200,8 +228,10 @@ public class LobbyManager : MonoBehaviour
         RefreshProfile();
         ShowProfile(false);
         
-        if(inRoom)
+        if (inRoom)
             SetConnectionTrue();
+        else if (WebSocketNetwork.Instance != null && WebSocketNetwork.Instance.IsOpen)
+            SetConnection(ConnectionState.Connected, false); // 게임에서 나가기로 돌아온 경우: 이미 연결돼 있고 CONNECTED가 다시 오지 않는다
         else
             SetConnection(ConnectionState.Disconnected, false);
         
@@ -257,6 +287,7 @@ public class LobbyManager : MonoBehaviour
         Net.OnGameRecord += HandleGameRecord;
         
         Net.OnConnected += HandleConnected;
+        PortraitLibrary.Changed += HandlePortraitChanged;
     }
 
     private void OnDisable()
@@ -273,6 +304,7 @@ public class LobbyManager : MonoBehaviour
         Net.OnGameRecord -= HandleGameRecord;
         
         Net.OnConnected -= HandleConnected;
+        PortraitLibrary.Changed -= HandlePortraitChanged;
     }
 
     private static T Get<T>(Transform root, string path) where T : Component
@@ -313,8 +345,6 @@ public class LobbyManager : MonoBehaviour
         if (roomSetupCanvas != null) roomSetup = roomSetupCanvas.GetComponent<RoomSetupView>();
 
         var list = lobby.Find("RoomListPanel");
-        // RoomSummary에 모드(개인전/팀전) 정보가 없어서 모드 필터는 숨긴다
-        Hide(list, "ModeFilter");
         joinableOnlyToggle = Get<Toggle>(list, "JoinableOnlyToggle");
         joinableOnlyLabel = Get<TMP_Text>(list, "JoinableOnlyToggle/Label");
         rowContent = (RectTransform)list.Find("RoomScroll/Viewport/Content");
@@ -335,11 +365,14 @@ public class LobbyManager : MonoBehaviour
         nicknameText = Get<TMP_Text>(side, "ProfileCard/NicknameText");
         recordText = Get<TMP_Text>(side, "ProfileCard/RecordCard/RecordText");
         marbleText = Get<TMP_Text>(side, "ProfileCard/MarbleChip/AmountText");
+        profilePortraitButton = Get<Button>(side, "ProfileCard/Portrait");
+        profilePortraitImage = Get<Image>(side, "ProfileCard/Portrait/PortraitMask/PortraitImage");
+        var pickerCanvas = uiRoot.Find("Canvas_PortraitPicker");
+        if (pickerCanvas != null) portraitPicker = pickerCanvas.GetComponent<PortraitPickerView>();
         // 접속자 목록은 서버가 아직 보내 주지 않아서 숨긴다
         playerListCard = side.Find("PlayerListCard").gameObject;
         quickStartButton = Get<Button>(side, "QuickStartButton");
         createRoomButton = Get<Button>(side, "CreateRoomButton");
-        joinByCodeButton = Get<Button>(side, "JoinByCodeButton");
 
         // 방 상세 카드
         detailCard = side.Find("RoomDetailCard").gameObject;
@@ -347,7 +380,6 @@ public class LobbyManager : MonoBehaviour
         detailTitle = Get<TMP_Text>(d, "TitleText");
         detailClose = Get<Button>(d, "CloseButton");
         detailLockChip = d.Find("ChipRow/LockChip").gameObject;
-        detailModeChip = Get<Image>(d, "ChipRow/ModeChip");
         detailStatusChip = Get<Image>(d, "ChipRow/StatusChip");
         detailStatusText = Get<TMP_Text>(d, "ChipRow/StatusChip/Text");
         detailMap = Get<TMP_Text>(d, "MapInfo/ValueText");
@@ -371,11 +403,10 @@ public class LobbyManager : MonoBehaviour
             };
         }
 
-        // 방 만들기 팝업: 서버로 보낼 수 있는 값은 맵과 최대 인원뿐이라 이름/모드/비밀번호 칸은 숨긴다
+        // 방 만들기 팝업: 서버로 보낼 수 있는 값은 맵과 최대 인원뿐이라 이름/비밀번호 칸은 숨긴다
         createPopup = uiRoot.Find("Canvas_CreateRoom").GetComponent<PopupView>();
         var cw = createPopup.Window;
         Hide(cw, "NameSection");
-        Hide(cw, "ModeSection");
         Hide(cw, "PasswordSection");
         mapNameText = Get<TMP_Text>(cw, "MapSection/MapNameText");
         mapPreviewImage = Get<Image>(cw, "MapSection/MapPreview/MapImage");
@@ -385,15 +416,6 @@ public class LobbyManager : MonoBehaviour
         createCancel = Get<Button>(cw, "CancelButton");
         createConfirm = Get<Button>(cw, "CreateButton");
         createClose = Get<Button>(cw, "CloseButton");
-
-        // 코드 입장 팝업
-        joinPopup = uiRoot.Find("Canvas_JoinRoom").GetComponent<PopupView>();
-        var jw = joinPopup.Window;
-        codeInput = Get<TMP_InputField>(jw, "CodeInput");
-        joinCancel = Get<Button>(jw, "CancelButton");
-        joinConfirm = Get<Button>(jw, "JoinButton");
-        joinConfirmImage = joinConfirm.GetComponent<Image>();
-        joinClose = Get<Button>(jw, "CloseButton");
     }
 
     private void WireEvents()
@@ -423,7 +445,7 @@ public class LobbyManager : MonoBehaviour
         // 오른쪽 열
         quickStartButton.onClick.AddListener(QuickStart);
         createRoomButton.onClick.AddListener(OpenCreatePopup);
-        joinByCodeButton.onClick.AddListener(OpenJoinPopup);
+        if (profilePortraitButton != null) profilePortraitButton.onClick.AddListener(OpenPortraitPicker);
         detailClose.onClick.AddListener(Deselect);
         detailJoin.onClick.AddListener(() => { if (selectedId != null) TryJoin(selectedId); });
 
@@ -433,13 +455,6 @@ public class LobbyManager : MonoBehaviour
         createCancel.onClick.AddListener(createPopup.Close);
         createClose.onClick.AddListener(createPopup.Close);
         createConfirm.onClick.AddListener(ConfirmCreate);
-
-        // 코드 입장
-        codeInput.onValueChanged.AddListener(OnCodeChanged);
-        codeInput.onSubmit.AddListener(_ => ConfirmJoinByCode());
-        joinCancel.onClick.AddListener(joinPopup.Close);
-        joinClose.onClick.AddListener(joinPopup.Close);
-        joinConfirm.onClick.AddListener(ConfirmJoinByCode);
     }
 
     private void Update()
@@ -452,8 +467,8 @@ public class LobbyManager : MonoBehaviour
         if (!Input.GetKeyDown(KeyCode.Escape) || Busy) return;
         if (settingsView.IsOpen) return; // 설정 창은 닫기 버튼으로만 닫는다
         if (roomSetup != null && roomSetup.IsOpen) return; // 방 안에서는 X 버튼으로만 나간다
-        if (createPopup.IsOpen) createPopup.Close();
-        else if (joinPopup.IsOpen) joinPopup.Close();
+        if (portraitPicker != null && portraitPicker.IsOpen) portraitPicker.Close();
+        else if (createPopup.IsOpen) createPopup.Close();
         else if (selectedId != null) Deselect();
     }
 
@@ -537,7 +552,7 @@ public class LobbyManager : MonoBehaviour
         if (!CanRequest || room == null || !IsHost(room) || config == null) return;
 
         // 값이 서버가 받을 수 있는 범위인지 먼저 확인한다
-        int humans = room.Players != null ? room.Players.Count : 1; // 지금 들어와 있는 사람 수
+        int humans = room.Players != null ? room.Players.Count(p => !p.bot) : 1; // 지금 들어와 있는 사람 수 (봇은 목록에 있어도 사람으로 세지 않는다)
         if (maxPlayers < 2 || maxPlayers > 4 || maxPlayers < humans)
         {
             ShowToast(maxPlayers < humans ? "지금 들어와 있는 인원보다 적게는 줄일 수 없어요" : "최대 인원은 2~4명이에요");
@@ -734,7 +749,6 @@ public class LobbyManager : MonoBehaviour
         {
             EndRequest();
             createPopup.Close();
-            joinPopup.Close();
         }
 
         if (!notify) return;
@@ -767,7 +781,7 @@ public class LobbyManager : MonoBehaviour
         mapSprites != null && mapId >= 0 && mapId < mapSprites.Length ? mapSprites[mapId] : null;
 
     // 서버 데이터에 방 이름이 없어서 방장 닉네임으로 만든다
-    private static string RoomTitle(string hostNickname) =>
+    public static string RoomTitle(string hostNickname) =>
         string.IsNullOrEmpty(hostNickname) ? "이름 없는 방" : $"{hostNickname}의 방";
 
     private static bool IsHost(RoomSnapshot room) => room.hostId == MyPlayerId;
@@ -821,7 +835,7 @@ public class LobbyManager : MonoBehaviour
         if (target != null) { RequestJoin(target.roomId); return; }
 
         Debug.Log("[Lobby] 들어갈 방이 없어 새 방을 만듭니다.");
-        RequestCreate(0, 4);
+        RequestCreate(FirstAvailableMap(), 4); // 빠른 시작으로 만드는 방도 고를 수 있는 맵으로
     }
 
     // ───────────── 방 설정 (방 안, 게임 시작 전) ─────────────
@@ -848,8 +862,7 @@ public class LobbyManager : MonoBehaviour
         roomSetup.LeaveRequested -= OnLeaveRequested;
         roomSetup.LeaveRequested += OnLeaveRequested;
 
-        // TODO: 팀 선택은 서버 데이터(PlayerSnapshot)에 팀 필드가 생기면 요청을 보낸다
-        roomSetup.Show(() => { }, () => { }, RequestStartGame);
+        roomSetup.Show(RequestStartGame);
     }
 
     /// <summary>
@@ -866,8 +879,8 @@ public class LobbyManager : MonoBehaviour
         applyingSnapshot = true;
         try
         {
-            roomSetup.SetRoomInfo(RoomTitle(host?.nickname), room.roomId, null);
-            roomSetup.SetMapChoices(Maps, mapSprites);
+            roomSetup.SetRoomInfo(RoomTitle(host?.nickname));
+            roomSetup.SetMapChoices(Maps, mapSprites, MapAvailable);
             roomSetup.SetLocalPlayer(Mathf.Max(0, local));
             roomSetup.SetHost(isHost);
 
@@ -881,24 +894,25 @@ public class LobbyManager : MonoBehaviour
                     IsEmpty = false,
                     Name = p.nickname,
                     ColorIndex = i, // 서버 데이터에 색이 없어서 자리 순서로 정한다
+                    // 초상화는 서버에 없다: 내 것은 내가 고른 그림, 다른 사람은 자리 색의 기본 그림
+                    Portrait = i == local ? PortraitLibrary.Selected : PortraitLibrary.Default(i),
                     IsHost = pHost,
-                    IsReady = pHost || p.ready,
-                    Team = RoomSetupView.Team.None,
+                    IsBot = p.bot,
+                    IsReady = pHost || p.ready || p.bot, // 봇은 항상 준비된 상태
                 });
             }
-            roomSetup.RecountTeams();
 
-            // 서버에 적용된 설정. 자리를 채운 뒤에 넣어야 사람 수를 기준으로 맞춰진다. 서버에 없는 항목(모드)은 개인전이다.
+            // 서버에 적용된 설정. 자리를 채운 뒤에 넣어야 사람 수를 기준으로 맞춰진다.
             var config = room.config;
             roomSetup.SetSettings(new RoomSetupView.Settings
             {
                 Map = MapName(room.mapId),
-                IsTeam = false, // TODO: 서버에 모드 항목이 생기면 그 값을 쓴다
                 MaxPlayers = room.maxPlayers,
                 StartMoney = config != null && config.startMoney > 0 ? config.startMoney : 500000,
                 MaxRound = config != null && config.maxRound > 0 ? config.maxRound : 30,
                 Salary = config != null && config.salaryAmount > 0 ? config.salaryAmount : 100000,
-                BotCount = room.botCount,
+                // 서버는 봇 수를 따로 주지 않고 players 목록에 봇을 넣어 보낸다. 목록의 봇을 세어 쓴다. (안 그러면 적용 뒤 0명으로 돌아간다)
+                BotCount = Mathf.Max(room.botCount, players.Count(p => p.bot)),
             }, keepDraft);
             roomSetup.SetReady(isHost || (local >= 0 && players[local].ready));
         }
@@ -914,10 +928,6 @@ public class LobbyManager : MonoBehaviour
     {
         var room = CurrentRoom;
         if (applyingSnapshot || room == null || !IsHost(room)) return;
-
-        // 서버의 요청에는 모드 항목이 없어서 팀전은 아직 적용할 수 없다. 선택은 할 수 있게 두고, 적용할 때 안내한다.
-        // 다른 설정과 섞어 일부만 적용되지 않도록 아무것도 보내지 않는다. (개인전으로 바꾸고 적용하면 나머지 설정이 전달된다)
-        if (settings.IsTeam) { ShowToast("팀전은 아직 구현되지 않은 기능이에요"); return; }
 
         // 서버가 가진 나머지 설정(세금, 무인도 턴, 제한 시간)은 지금 값을 그대로 보낸다
         var current = room.config;
@@ -1057,7 +1067,6 @@ public class LobbyManager : MonoBehaviour
             Number = Get<TMP_Text>(t, "Thumb/NumberText"),
             Name = Get<TMP_Text>(t, "NameText"),
             Info = Get<TMP_Text>(t, "InfoText"),
-            ModeChip = Get<Image>(t, "ModeChip"),
             Count = Get<TMP_Text>(t, "PlayerCountText"),
             StatusChip = Get<Image>(t, "StatusChip"),
             StatusText = Get<TMP_Text>(t, "StatusChip/Text"),
@@ -1081,7 +1090,6 @@ public class LobbyManager : MonoBehaviour
         row.Thumb.color = Color.white;
         row.ThumbStroke.color = RowStroke;
         row.Lock.SetActive(false);                 // RoomSummary에 비밀번호 정보가 없다
-        row.ModeChip.gameObject.SetActive(false);  // RoomSummary에 모드 정보가 없다
         row.Number.text = (index + 1).ToString("00");
         row.Name.text = RoomTitle(room.hostNickname);
         row.Info.text = $"{MapName(room.mapId)} · 방장 {room.hostNickname}";
@@ -1132,7 +1140,6 @@ public class LobbyManager : MonoBehaviour
 
         detailTitle.text = RoomTitle(room.hostNickname);
         detailLockChip.SetActive(false);
-        detailModeChip.gameObject.SetActive(false);
         bool full = IsFull(room);
         ApplyStatus(full, detailStatusChip, detailStatusText);
         detailMap.text = MapName(room.mapId);
@@ -1180,7 +1187,7 @@ public class LobbyManager : MonoBehaviour
 
     private void OpenCreatePopup()
     {
-        mapIndex = 0;
+        mapIndex = FirstAvailableMap();
         ShowMap();
         for (int i = 0; i < maxToggles.Length; i++) maxToggles[i].SetIsOnWithoutNotify(i == maxToggles.Length - 1);
         createPopup.Open();
@@ -1188,7 +1195,7 @@ public class LobbyManager : MonoBehaviour
 
     private void ChangeMap(int step)
     {
-        mapIndex = (mapIndex + step + Maps.Length) % Maps.Length;
+        mapIndex = NextAvailableMap(mapIndex, step); // 아직 없는 맵은 건너뛴다
         ShowMap();
     }
 
@@ -1196,6 +1203,10 @@ public class LobbyManager : MonoBehaviour
     {
         mapNameText.text = Maps[mapIndex];
         if (mapPreviewImage != null) mapPreviewImage.sprite = MapSprite(mapIndex);
+        // 고를 수 있는 맵이 하나뿐이면 화살표를 눌러도 바뀌는 게 없으므로 잠가 둔다
+        bool canChange = AvailableMapCount() > 1;
+        if (prevMapButton != null) prevMapButton.interactable = canChange;
+        if (nextMapButton != null) nextMapButton.interactable = canChange;
     }
 
     private void ConfirmCreate()
@@ -1205,39 +1216,35 @@ public class LobbyManager : MonoBehaviour
         createPopup.Close();
     }
 
-    // ───────────── 코드로 입장 ─────────────
-
-    private void OpenJoinPopup()
-    {
-        codeInput.text = "";
-        SetJoinConfirmEnabled(false);
-        joinPopup.Open();
-    }
-
-    private void OnCodeChanged(string value) => SetJoinConfirmEnabled(value.Trim().Length > 0);
-
-    private void SetJoinConfirmEnabled(bool enabled)
-    {
-        joinConfirm.interactable = enabled;
-        joinConfirmImage.color = enabled ? Mint : Neutral;
-    }
-
-    // 방 코드 = roomId. 존재 여부·인원 검증은 서버가 하고, 실패하면 OnLobbyError로 알려 준다
-    private void ConfirmJoinByCode()
-    {
-        string code = codeInput.text.Trim();
-        if (code.Length == 0) { UIFx.Shake(codeInput.transform); return; }
-        RequestJoin(code);
-        joinPopup.Close();
-    }
-
     // ───────────── 내 정보 ─────────────
+
+    private void OpenPortraitPicker()
+    {
+        if (portraitPicker == null || Busy || !CanRequest) return;
+        portraitPicker.Show(PortraitLibrary.SelectedIndex, PortraitLibrary.Select);
+    }
+
+    // 내가 초상화를 골랐다: 내 정보와 (방 안이라면) 대기방의 내 자리에 바로 보인다
+    private void HandlePortraitChanged()
+    {
+        RefreshProfilePortrait();
+        if (roomSetup != null && roomSetup.IsOpen && CurrentRoom != null) ApplyRoomSnapshot(CurrentRoom);
+    }
+
+    private void RefreshProfilePortrait()
+    {
+        if (profilePortraitImage == null) return;
+        var portrait = PortraitLibrary.Selected;
+        profilePortraitImage.sprite = portrait;
+        profilePortraitImage.color = portrait != null ? Color.white : UIPalette.PlayerColor(0);
+    }
 
     // TODO: 서버가 전적과 보유 마블을 내려 주면 채운다
     private void RefreshProfile()
     {
         recordText.text = "-";
         marbleText.text = "-";
+        RefreshProfilePortrait();
         
         string nickname = WebSocketNetwork.Instance.LocalNickname;
         if (!string.IsNullOrEmpty(nickname)) RefreshNickname(nickname);

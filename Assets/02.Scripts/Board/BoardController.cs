@@ -191,8 +191,8 @@ public class BoardController : MonoBehaviour
         switch (mode)
         {
             case TileClickMode.Inspect:
-                // 타일 정보 띄우는 함수를 호출
-                Debug.Log("타일 정보 : ~~~");
+                // 땅이면 땅 정보 창을 띄운다 (땅이 아닌 칸은 UIManager가 무시한다)
+                if (UIManager.Instance != null) UIManager.Instance.OnBoardTileClicked(tileIndex);
                 return;
             
             case TileClickMode.SelectTravel:
