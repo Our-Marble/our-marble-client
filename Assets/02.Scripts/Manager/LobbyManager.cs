@@ -513,6 +513,10 @@ public class LobbyManager : MonoBehaviour
         BeginRequest(Pending.Enter);
         Debug.Log("[Lobby] B");
         Net.SendCreateRoomRequest();
+
+        GameConfig config = new GameConfig();
+        config.mapId = mapId;
+        Net.SendRoomConfigRequest(config,  maxPlayers, 0);
     }
 
     private void RequestLeave()
