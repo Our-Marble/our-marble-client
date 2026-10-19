@@ -555,7 +555,11 @@ public class UIManager : MonoBehaviour
         long payerId = sellPayerId;
         List<int> propertyIds = AutoChosenProperties();
         ExitSellMode();
-        if (Game != null && propertyIds.Count > 0) Game.SellProperties(payerId, propertyIds);
+        if (Game != null && propertyIds.Count > 0)
+        {
+            BoardManager.Instance.ChangeToInspectMode();
+            Game.SellProperties(payerId, propertyIds);
+        }
     }
 
     // "매각 완료" 버튼
@@ -565,7 +569,11 @@ public class UIManager : MonoBehaviour
         long payerId = sellPayerId, receiverId = sellReceiverId, required = sellRequired;
         var propertyIds = new List<int>(selectedSellPropertyIds); // 칸 번호가 아니라 땅 번호
         ExitSellMode(); // 보드도 둘러보기 모드로 되돌린다
-        if (Game != null) Game.SellProperties(payerId, propertyIds);
+        if (Game != null)
+        {
+            BoardManager.Instance.ChangeToInspectMode();
+            Game.SellProperties(payerId, propertyIds);
+        }
     }
 
     // 매각 모드를 끝내고 보드도 둘러보기 모드로 되돌린다
