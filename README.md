@@ -57,6 +57,7 @@ Assets
 │  ├─ Manager/          GameManager, LobbyManager, LoginManager, UIManager, BoardManager,
 │  │                    PlayerManager, PropertyManager, EconomyManager, CardManager, SceneFlow
 │  ├─ Network/          WebSocket·HTTP 통신, 메시지 type, 요청/알림 DTO (Game, Lobby)
+│  ├─ Portrait/         플레이어 초상화 목록과 내가 고른 초상화
 │  ├─ Property/         땅 데이터, 건물 단계, 매각 자동 선택 방식
 │  ├─ State/            GameState, PlayerState, PropertyState, GameConfig, 방 스냅샷
 │  ├─ UI/               팝업·HUD View, 공통 컴포넌트, 에디터 도구
@@ -76,8 +77,10 @@ Assets
 
 ## 실행 방법
 
-1. Unity Hub에서 **Unity 6 (6000.3)** 으로 프로젝트를 엽니다.
-2. 회원가입·로그인 후 로비에서 방을 만들고 플레이합니다.
+1. 서버를 먼저 실행합니다. 로컬 실행 방법은 [서버 README](https://github.com/Our-Marble/our-marble-server)의 "실행 방법"을 따릅니다. 서버 API 문서는 서버 실행 후 `http://localhost:8080/docs.html`에서 볼 수 있습니다.
+2. Unity Hub에서 **Unity 6 (6000.3)** 으로 프로젝트를 엽니다.
+3. 접속할 서버를 정합니다. `HttpNetwork`의 `isLocal`을 켜면 `localhost:8080`에, 끄면 `EC2PublicAdress`에 적힌 배포 서버에 접속합니다. 기본값은 꺼져 있어서 **그대로 실행하면 배포 서버에 접속**하므로, 로컬 서버로 테스트할 때는 반드시 켭니다. (WebSocket 주소도 같은 값을 따릅니다)
+4. 회원가입·로그인 후 로비에서 방을 만들고 플레이합니다.
 
 ## 개발 시 주의
 
