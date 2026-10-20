@@ -89,6 +89,7 @@ public class WebSocketNetwork : Singleton<WebSocketNetwork>
 
                 LocalPlayerId = connectedResponse.playerId;
                 LocalNickname = connectedResponse.nickname;
+                if (connectedResponse.portraitId.HasValue) PortraitLibrary.ApplyFromServer(connectedResponse.portraitId.Value); // 서버에 저장된 내 초상화
 
                 LobbyNetwork.Instance.InvokeOnConnected(LocalNickname);
             }

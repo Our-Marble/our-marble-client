@@ -898,8 +898,10 @@ public class LobbyManager : MonoBehaviour
                     IsEmpty = false,
                     Name = p.nickname,
                     ColorIndex = i, // 서버 데이터에 색이 없어서 자리 순서로 정한다
-                    // 초상화는 서버에 없다: 내 것은 내가 고른 그림, 다른 사람은 자리 색의 기본 그림
-                    Portrait = i == local ? PortraitLibrary.Selected : PortraitLibrary.Default(i),
+                    // 서버가 준 초상화. 없으면(봇, 고르지 않은 사람) 내 것은 내가 고른 그림, 다른 사람은 자리 색의 기본 그림
+                    Portrait = p.bot ? PortraitLibrary.Bot // 봇은 전용 로봇 초상화
+                             : p.portraitId.HasValue ? PortraitLibrary.For(p.portraitId, i)
+                             : i == local ? PortraitLibrary.Selected : PortraitLibrary.Default(i),
                     IsHost = pHost,
                     IsBot = p.bot,
                     IsReady = pHost || p.ready || p.bot, // 봇은 항상 준비된 상태
@@ -1225,7 +1227,15 @@ public class LobbyManager : MonoBehaviour
     private void OpenPortraitPicker()
     {
         if (portraitPicker == null || Busy || !CanRequest) return;
-        portraitPicker.Show(PortraitLibrary.SelectedIndex, PortraitLibrary.Select);
+        portraitPicker.Show(PortraitLibrary.SelectedIndex, ChoosePortrait);
+    }
+
+    // 선택창에서 초상화를 골랐다: 이 기기에 적용하고 서버에 저장을 요청한다. (방 안이면 서버가 ROOM_UPDATED로 다른 사람에게도 알린다)
+    private void ChoosePortrait(int index)
+    {
+        if (index == PortraitLibrary.SelectedIndex) return;
+        PortraitLibrary.Select(index);
+        if (CanRequest) LobbyNetwork.Instance.SendSetPortraitRequest(index);
     }
 
     // 내가 초상화를 골랐다: 내 정보와 (방 안이라면) 대기방의 내 자리에 바로 보인다

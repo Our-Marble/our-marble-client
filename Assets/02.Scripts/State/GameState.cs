@@ -26,4 +26,9 @@ public class GameState
     public List<PropertyState> PropertyStates{ get; set; }
     
     public GameConfig Config { get; set; }
+
+    // 방 정보. 재접속하면 로비의 방 정보(LobbyManager.CurrentRoom)가 없으므로, 상단바는 서버가 게임 상태에 담아 준 이 값으로 채운다.
+    // 서버가 주지 않으면 없음(상단바는 플레이어 수로 대신 표시한다)
+    public long? HostId { get; set; }
+    public int? MaxPlayers { get; set; }
 }

@@ -107,16 +107,39 @@ public class UIManager : MonoBehaviour
         // 상단바: 로비에서 넘어온 방 정보 표시, 설정은 설정 창 열기/닫기, 나가기는 확인 후 로비로 돌아간다
         if (topBar != null)
         {
-            var room = LobbyManager.CurrentRoom; // 서버에서 받은 방 정보 (로비를 거치지 않고 게임 씬만 실행하면 null)
-            if (room != null)
-            {
-                var host = room.Players?.Find(p => p.playerId == room.hostId);
-                topBar.SetRoom(LobbyManager.RoomTitle(host?.nickname));
-                topBar.SetPlayerCount(room.Players != null ? room.Players.Count : 0, room.maxPlayers);
-            }
+            RefreshTopBarRoom();
             topBar.SetPassword(null); // 서버 방 정보에는 비밀번호가 없다
             topBar.SetCallbacks(settings != null ? settings.Open : (Action)null, RequestExit);
         }
+    }
+
+    /// <summary>
+    /// 상단바의 방 이름과 인원수를 맞춘다. 로비에서 들어왔으면 그 방 정보(LobbyManager.CurrentRoom)를,
+    /// 재접속해서 방 정보가 없으면 서버가 게임 상태에 담아 준 방장(HostId)·최대 인원(MaxPlayers)을 쓴다.
+    /// 둘 다 없으면 방 이름은 그대로 두고, 인원은 플레이어 수로 표시한다.
+    /// </summary>
+    private void RefreshTopBarRoom()
+    {
+        if (topBar == null) return;
+        GameState state = State;
+        var room = LobbyManager.CurrentRoom; // 로비를 거치지 않고 게임 씬만 실행하거나 재접속하면 null
+
+        if (room != null)
+        {
+            var host = room.Players?.Find(p => p.playerId == room.hostId);
+            topBar.SetRoom(LobbyManager.RoomTitle(host?.nickname));
+            topBar.SetPlayerCount(room.Players != null ? room.Players.Count : 0, room.maxPlayers);
+            return;
+        }
+
+        if (state == null || state.PlayerStates == null || state.PlayerStates.Count == 0) return;
+        if (state.HostId.HasValue)
+        {
+            PlayerState host = GetPlayer(state.HostId.Value);
+            topBar.SetRoom(LobbyManager.RoomTitle(host?.Nickname));
+        }
+        int count = state.PlayerStates.Count;
+        topBar.SetPlayerCount(count, state.MaxPlayers ?? count);
     }
 
     #region 화면 동기화 (재접속 · 지연)
@@ -158,6 +181,7 @@ public class UIManager : MonoBehaviour
         PlayerInfoView shownTurn = turnIndex >= 0 ? GetPlayerInfo(turnIndex) : null;
         if (shownTurn != null && !shownTurn.IsTurnShown) ShowTurn(state.CurrentPlayerId);
 
+        RefreshTopBarRoom(); // 재접속해서 들어온 경우에도 방 이름과 인원이 서버 상태에 맞게 보인다
         if (topBar != null) topBar.SetRound(DisplayRound(), maxRound, animate: true);
     }
 
@@ -717,9 +741,7 @@ public class UIManager : MonoBehaviour
 
         if (topBar != null)
         {
-            // 로비에서 들어온 방이면 그 방의 최대 인원으로, 아니면 카드 수(4)로 표시한다
-            var room = LobbyManager.CurrentRoom;
-            topBar.SetPlayerCount(count, room != null ? room.maxPlayers : playerInfos.Length);
+            RefreshTopBarRoom();
             topBar.SetRound(DisplayRound(), maxRound);
         }
     }
@@ -1343,10 +1365,23 @@ public class UIManager : MonoBehaviour
         return index >= 0 ? $"플레이어 {index + 1}" : $"플레이어 {playerId}";
     }
 
-    // 지정한 초상화가 없으면: 내 것은 내가 고른 그림, 다른 사람은 자리 색의 기본 그림 (서버에는 아직 초상화 정보가 없다)
+    // 지정한 초상화가 없으면: 서버가 준 번호(게임 상태, 없으면 대기방 정보), 그것도 없으면 내 것은 내가 고른 그림, 다른 사람은 자리 색의 기본 그림
     private Sprite PortraitOf(long playerId)
     {
         if (profiles.TryGetValue(playerId, out Profile profile) && profile.Portrait != null) return profile.Portrait;
+
+        // 봇은 전용 로봇 초상화 (게임 상태의 bot 값, 없으면 대기방 정보의 bot 값)
+        PlayerState player = GetPlayer(playerId);
+        PlayerSnapshot roomPlayer = LobbyManager.CurrentRoom?.Players?.Find(p => p.playerId == playerId);
+        if ((player != null && player.IsBot) || (roomPlayer != null && roomPlayer.bot))
+        {
+            Sprite bot = PortraitLibrary.Bot;
+            if (bot != null) return bot;
+        }
+
+        int? portraitId = player?.PortraitId ?? roomPlayer?.portraitId;
+        if (portraitId.HasValue) return PortraitLibrary.For(portraitId, ColorIndexOf(playerId));
+
         return playerId == LocalPlayerId ? PortraitLibrary.Selected : PortraitLibrary.Default(ColorIndexOf(playerId));
     }
 
