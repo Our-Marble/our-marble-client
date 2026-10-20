@@ -1227,15 +1227,14 @@ public class LobbyManager : MonoBehaviour
     private void OpenPortraitPicker()
     {
         if (portraitPicker == null || Busy || !CanRequest) return;
-        portraitPicker.Show(PortraitLibrary.SelectedIndex, ChoosePortrait);
+        portraitPicker.Show(PortraitLibrary.SelectedId, ChoosePortrait);
     }
 
     // 선택창에서 초상화를 골랐다: 이 기기에 적용하고 서버에 저장을 요청한다. (방 안이면 서버가 ROOM_UPDATED로 다른 사람에게도 알린다)
-    private void ChoosePortrait(int index)
+    private void ChoosePortrait(int id)
     {
-        if (index == PortraitLibrary.SelectedIndex) return;
-        PortraitLibrary.Select(index);
-        if (CanRequest) LobbyNetwork.Instance.SendSetPortraitRequest(index);
+        PortraitLibrary.Select(id);
+        if (CanRequest) LobbyNetwork.Instance.SendSetPortraitRequest(id);
     }
 
     // 내가 초상화를 골랐다: 내 정보와 (방 안이라면) 대기방의 내 자리에 바로 보인다
