@@ -1,0 +1,146 @@
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class BoardManager : Singleton<BoardManager>
+{
+    // 게임 씬 전용 매니저입니다. 씬 오브젝트(말, 타일, 보드)를 참조하므로 게임 씬이 로드될 때마다 새로 만들어지게 합니다.
+    protected override bool PersistAcrossScenes => false;
+
+    [SerializeField] private BoardController boardController;
+    [SerializeField] private BoardData boardData;
+
+    public BoardController BoardController => boardController;
+    public BoardData BoardData => boardData;
+    
+    /// <summary>보드의 전체 칸 수. (BoardData 기준)</summary>
+    public int TileCount => boardData != null ? boardData.Tiles.Count : 0;
+    
+    private Dictionary<int, TileData> tilesByIndex;
+
+    private void OnEnable() => GameManager.OnPlayerArrived += HandlePlayerArrived;
+    private void OnDisable() => GameManager.OnPlayerArrived -= HandlePlayerArrived;
+
+    private void HandlePlayerArrived(long playerId, int tileIndex)
+    {
+        if (boardController == null || tileIndex < 0 || tileIndex >= boardController.BoardTiles.Count) return;
+        boardController.BoardTiles[tileIndex]?.PlayAnimation();
+    }
+
+
+
+
+
+
+
+
+
+
+    public void RefreshBoard()
+    {
+        for (int i = 0; i < boardData.Tiles.Count; i++)
+        {
+            TileData tileData = tilesByIndex[i];
+
+            if (tileData.Type == TileType.PROPERTY)
+            {
+                int propertyId = tileData.PropertyId;
+                PropertyState propertyState = GameManager.Instance.GetPropertyState(propertyId);
+                long? ownerPlayerId = propertyState.OwnerId;
+
+                if (ownerPlayerId == null) continue;
+
+                BuildingLevel buildingLevel = propertyState.BuildingLevel;
+
+                UpdatePropertyTileColor(propertyId, ownerPlayerId);
+                UpdatePropertyBuildingVisual(propertyId, buildingLevel);
+            }
+        }
+    }
+
+    public void UpdatePropertyTileColor(int propertyId, long? playerId)
+    {
+         boardController.UpdatePropertyTileColor(propertyId, playerId);
+    }
+
+    public void UpdatePropertyBuildingVisual(int propertyId, BuildingLevel buildingLevel)
+    {
+        boardController.UpdatePropertyBuildingVisual(propertyId, buildingLevel);
+    }
+
+
+
+
+    protected override void OnAwake()
+    {
+        ChangeToInspectMode();
+        
+        if(tilesByIndex == null)
+            RebuildLookup();
+    }
+
+    private void Start()
+    {
+        boardController.InitializeBoardTiles();
+    }
+
+    private void RebuildLookup()
+    {
+        tilesByIndex = new Dictionary<int, TileData>();
+
+        if (boardData == null)
+        {
+            Debug.LogError("[BoardManager] BoardData가 연결되지 않았습니다.", this);
+            return;
+        }
+        
+        if (boardData.Tiles == null || boardData.Tiles.Count == 0)
+        {
+            Debug.LogWarning($"[BoardManager] mapId: {boardData.MapId} BoardData.Tiles 초기화 안됨", this);
+            return;
+        }
+
+        foreach (TileData data in boardData.Tiles)
+        {
+            if (data == null)
+            {
+                Debug.LogWarning($"[BoardManager] mapId: {boardData.MapId} BoardData.Tiles 원소 중 null값 존재", this);
+                continue;
+            }
+
+            if (!tilesByIndex.TryAdd(data.Index, data))
+            {
+                Debug.LogWarning($"[BoardManager] mapId: {boardData.MapId} BoardData.Tiles 에서 TileData.index 중복: {data.Index})", this);
+            }
+        }
+    }
+    
+    public TileData GetTileData(int index)
+    {
+        if (tilesByIndex == null)
+        {
+            RebuildLookup();
+        }
+
+        return tilesByIndex.TryGetValue(index, out TileData data)?  data : null;
+    }
+    
+    
+    
+    // 타일 선택 기능과 관련된 BoardController측 함수 호출
+    
+    public void ChangeToSelectTravelMode()
+    {
+        boardController.ChangeToSelectTravelMode();
+    }
+
+    public void ChangeToSelectSellMode()
+    {
+        boardController.ChangeToSelectSellMode();
+    }
+
+    public void ChangeToInspectMode()
+    {
+        boardController.ChangeToInspectMode();
+    }
+}
