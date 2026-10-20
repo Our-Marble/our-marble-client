@@ -15,16 +15,35 @@ public static class SceneFlow
     // 게임을 마치고 같은 방으로 돌아오는 중이면 true. 로비 씬이 읽고(ConsumeReopenRoomSetup) 지운다.
     private static bool reopenRoomSetup;
 
+    // 로그인 화면이 열리자마자 토스트로 보여줄 안내. (예: 연결이 끊겨 돌아온 경우) 로그인 씬이 읽고(ConsumeLoginNotice) 지운다.
+    private static string pendingLoginNotice;
+
     // 에디터에서 도메인 리로드 없이 플레이를 다시 시작해도 이전 플레이의 값이 남지 않게 한다
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    private static void ResetStatics() => reopenRoomSetup = false;
+    private static void ResetStatics()
+    {
+        reopenRoomSetup = false;
+        pendingLoginNotice = null;
+    }
 
-    /// <summary>로그인 화면으로 간다. (로비의 나가기)</summary>
-    public static bool ToLogin()
+    /// <summary>로그인 화면으로 간다. (로비의 나가기, 연결 끊김) notice를 주면 로그인 화면에서 토스트로 띄운다.</summary>
+    public static bool ToLogin(string notice = null)
     {
         WebSocketNetwork.Instance.closeWebSocketSession();
         LobbyNetwork.Instance.ClearQueue(); // 이 접속에서 쌓인 로비 메시지는 다음 접속에 넘기지 않는다
-        return Load(LoginScenePath, false);
+        pendingLoginNotice = notice;
+        if (Load(LoginScenePath, false)) return true;
+
+        pendingLoginNotice = null;
+        return false;
+    }
+
+    /// <summary>로그인 화면에 띄울 안내를 읽고 지운다. 없으면 null. 로그인 씬이 시작할 때 한 번 부른다.</summary>
+    public static string ConsumeLoginNotice()
+    {
+        string notice = pendingLoginNotice;
+        pendingLoginNotice = null;
+        return notice;
     }
 
     /// <summary>로비로 간다. 로그인 성공 후, 또는 게임에서 방을 떠날 때. 방 정보는 로비가 비운다.</summary>
