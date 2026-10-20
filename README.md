@@ -1,5 +1,7 @@
 # 우리의 마블 클라이언트 (our-marble-client)
 
+**▶ [플레이하기 (itch.io)](https://dingokim.itch.io/ourmarble)**
+
 "모두의 마블"을 모티브로 한 **2~4인 실시간 온라인 보드게임**의 Unity 클라이언트입니다.
 화면 렌더링, 말 이동, 연출을 담당하고, 서버([our-marble-server](https://github.com/Our-Marble/our-marble-server))와 WebSocket으로 통신합니다.
 주사위 난수와 모든 게임 판정은 서버가 맡고, 클라이언트는 **유저의 선택을 서버에 전달하고 결과를 연출**합니다.
@@ -76,6 +78,8 @@ Assets
 - **게임**: 주사위·말 이동 연출, 구매·건설·인수·매각 팝업, 세계여행 선택, 황금열쇠 카드, 턴 타이머, 결과 화면
 
 ## 실행 방법
+
+> 직접 빌드하지 않고 바로 플레이하려면 [itch.io 배포 페이지](https://dingokim.itch.io/ourmarble)에서 실행할 수 있습니다.
 
 1. 서버를 먼저 실행합니다. 로컬 실행 방법은 [서버 README](https://github.com/Our-Marble/our-marble-server)의 "실행 방법"을 따릅니다. 서버 API 문서는 서버 실행 후 `http://localhost:8080/docs.html`에서 볼 수 있습니다.
 2. Unity Hub에서 **Unity 6 (6000.3)** 으로 프로젝트를 엽니다.
