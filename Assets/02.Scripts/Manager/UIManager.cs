@@ -1365,10 +1365,23 @@ public class UIManager : MonoBehaviour
         return index >= 0 ? $"플레이어 {index + 1}" : $"플레이어 {playerId}";
     }
 
-    // 지정한 초상화가 없으면: 내 것은 내가 고른 그림, 다른 사람은 자리 색의 기본 그림 (서버에는 아직 초상화 정보가 없다)
+    // 지정한 초상화가 없으면: 서버가 준 번호(게임 상태, 없으면 대기방 정보), 그것도 없으면 내 것은 내가 고른 그림, 다른 사람은 자리 색의 기본 그림
     private Sprite PortraitOf(long playerId)
     {
         if (profiles.TryGetValue(playerId, out Profile profile) && profile.Portrait != null) return profile.Portrait;
+
+        // 봇은 전용 로봇 초상화 (게임 상태의 bot 값, 없으면 대기방 정보의 bot 값)
+        PlayerState player = GetPlayer(playerId);
+        PlayerSnapshot roomPlayer = LobbyManager.CurrentRoom?.Players?.Find(p => p.playerId == playerId);
+        if ((player != null && player.IsBot) || (roomPlayer != null && roomPlayer.bot))
+        {
+            Sprite bot = PortraitLibrary.Bot;
+            if (bot != null) return bot;
+        }
+
+        int? portraitId = player?.PortraitId ?? roomPlayer?.portraitId;
+        if (portraitId.HasValue) return PortraitLibrary.For(portraitId, ColorIndexOf(playerId));
+
         return playerId == LocalPlayerId ? PortraitLibrary.Selected : PortraitLibrary.Default(ColorIndexOf(playerId));
     }
 

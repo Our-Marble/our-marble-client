@@ -241,6 +241,18 @@ public class LobbyNetwork : Singleton<LobbyNetwork>
         WebSocketNetwork.Instance.SendMessage(json);
     }
     
+    public void SendSetPortraitRequest(int portraitId)
+    {
+        SetPortraitRequest message = new SetPortraitRequest
+        {
+            type = "SET_PORTRAIT",
+            portraitId = portraitId
+        };
+
+        string json = JsonConvert.SerializeObject(message);
+        WebSocketNetwork.Instance.SendMessage(json);
+    }
+
     public void SendStartGameRequest()
     {
         StartGameRequest message = new StartGameRequest
