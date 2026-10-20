@@ -56,6 +56,7 @@ public class WebSocketNetwork : Singleton<WebSocketNetwork>
         };
         
         websocket = new WebSocket(serverUrl, headers);
+        WebSocket socket = websocket; // 이 연결이 닫혔을 때, 우리가 직접 닫은 것인지 구분하는 데 쓴다
 
         websocket.OnOpen += () =>
         {
@@ -70,8 +71,14 @@ public class WebSocketNetwork : Singleton<WebSocketNetwork>
         websocket.OnClose += (closeCode) =>
         {
             Debug.Log($"WebSocket 연결 종료: {closeCode}");
-            
-            if (SceneFlow.ToLogin()) return;
+
+            // closeWebSocketSession/OnApplicationQuit으로 직접 닫은 경우 websocket을 먼저 비워 두므로 여기서 걸러진다.
+            // (로비의 나가기 → ToLogin → 닫힘 → 다시 ToLogin 되는 것과, 그때 '끊겼다' 토스트가 뜨는 것을 막는다)
+            if (websocket != socket) return;
+
+            // 의도하지 않은 끊김: 로그인 화면으로 돌아가 안내한다
+            websocket = null;
+            SceneFlow.ToLogin("연결이 끊겼습니다");
         };
 
         websocket.OnMessage += (bytes) =>

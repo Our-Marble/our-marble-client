@@ -65,6 +65,10 @@ public class LoginManager : MonoBehaviour
     {
         // 처음에는 비어 있는 칸에 바로 입력할 수 있게 한다
         (string.IsNullOrEmpty(emailInput.text) ? emailInput : passwordInput).ActivateInputField();
+
+        // 연결이 끊겨 돌아온 경우처럼, 이전 화면이 남긴 안내가 있으면 띄운다
+        string notice = SceneFlow.ConsumeLoginNotice();
+        if (!string.IsNullOrEmpty(notice)) ShowToast(notice);
     }
 
     private TMP_InputField[] englishFields = new TMP_InputField[0];
